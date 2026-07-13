@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
 import '../widgets/finance_formatters.dart';
+import '../widgets/responsive_layout.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
@@ -78,7 +79,19 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
             ),
         ],
       ),
-      body: _isEditing ? _EditBody(state: this) : _ReadOnlyBody(state: this),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: AppResponsive.isWideWeb(context)
+                ? AppResponsive.webDetailMaxWidth
+                : double.infinity,
+          ),
+          child: _isEditing
+              ? _EditBody(state: this)
+              : _ReadOnlyBody(state: this),
+        ),
+      ),
     );
   }
 
@@ -208,7 +221,9 @@ class _ReadOnlyBody extends StatelessWidget {
         : transaction.description;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: AppResponsive.isWideWeb(context)
+          ? const EdgeInsets.fromLTRB(24, 16, 24, 32)
+          : const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         Container(
           padding: const EdgeInsets.all(20),
@@ -363,7 +378,9 @@ class _EditBody extends StatelessWidget {
     return Form(
       key: state._formKey,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: AppResponsive.isWideWeb(context)
+            ? const EdgeInsets.fromLTRB(24, 16, 24, 32)
+            : const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           _LocalNotice(message: strings.localEditNotice),
           const SizedBox(height: 12),

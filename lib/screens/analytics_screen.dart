@@ -10,6 +10,7 @@ import '../models/transaction.dart';
 import '../widgets/app_states.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
+import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
 import 'transaction_detail_screen.dart';
 
@@ -31,7 +32,7 @@ class AnalyticsScreen extends StatelessWidget {
     return RefreshIndicator(
       onRefresh: controller.refresh,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: AppResponsive.pagePadding(context),
         children: [
           Row(
             children: [
@@ -69,113 +70,133 @@ class AnalyticsScreen extends StatelessWidget {
               ),
             )
           else ...[
-            _AnalyticsSummaryCard(summary: summary, strings: strings),
-            const SizedBox(height: 12),
-            _KeyInsightsCard(
-              transactions: transactions,
-              summary: summary,
-              strings: strings,
-            ),
-            const SizedBox(height: 12),
-            _CategoryRankingCard(
-              controller: controller,
-              title: strings.expenseCategoryRanking,
-              emptyLabel: strings.noCategoryData,
-              data: summary.categoryExpenseTotals,
-              color: const Color(0xFFC74949),
-              icon: Icons.payments_rounded,
-              transactionsForKey: (category) =>
-                  _transactionsForCategory(controller, category, expense: true),
-            ),
-            const SizedBox(height: 12),
-            _CategoryRankingCard(
-              controller: controller,
-              title: strings.incomeCategoryRanking,
-              emptyLabel: strings.noCategoryData,
-              data: summary.categoryIncomeTotals,
-              color: const Color(0xFF168A5B),
-              icon: Icons.savings_rounded,
-              transactionsForKey: (category) =>
-                  _transactionsForCategory(controller, category, income: true),
-            ),
-            const SizedBox(height: 12),
-            _CategoryRankingCard(
-              controller: controller,
-              title: strings.incomePaymentMethodRanking,
-              emptyLabel: strings.noPaymentMethodData,
-              data: _paymentMethodTotals(
-                transactions,
-                controller.exchangeRate,
-                strings,
-                type: TransactionType.income,
+            ResponsivePair(
+              gap: 16,
+              first: _AnalyticsSummaryCard(summary: summary, strings: strings),
+              second: _KeyInsightsCard(
+                transactions: transactions,
+                summary: summary,
+                strings: strings,
               ),
-              color: const Color(0xFF168A5B),
-              icon: Icons.credit_card_rounded,
-              transactionsForKey: (paymentMethod) =>
-                  _transactionsForPaymentMethod(
-                    controller,
-                    paymentMethod,
-                    strings,
-                    type: TransactionType.income,
-                  ),
             ),
             const SizedBox(height: 12),
-            _CategoryRankingCard(
-              controller: controller,
-              title: strings.expensePaymentMethodRanking,
-              emptyLabel: strings.noPaymentMethodData,
-              data: _paymentMethodTotals(
-                transactions,
-                controller.exchangeRate,
-                strings,
-                type: TransactionType.expense,
+            ResponsivePair(
+              gap: 16,
+              first: _CategoryRankingCard(
+                controller: controller,
+                title: strings.expenseCategoryRanking,
+                emptyLabel: strings.noCategoryData,
+                data: summary.categoryExpenseTotals,
+                color: const Color(0xFFC74949),
+                icon: Icons.payments_rounded,
+                transactionsForKey: (category) => _transactionsForCategory(
+                  controller,
+                  category,
+                  expense: true,
+                ),
               ),
-              color: const Color(0xFFC74949),
-              icon: Icons.account_balance_wallet_rounded,
-              transactionsForKey: (paymentMethod) =>
-                  _transactionsForPaymentMethod(
-                    controller,
-                    paymentMethod,
-                    strings,
-                    type: TransactionType.expense,
-                  ),
+              second: _CategoryRankingCard(
+                controller: controller,
+                title: strings.incomeCategoryRanking,
+                emptyLabel: strings.noCategoryData,
+                data: summary.categoryIncomeTotals,
+                color: const Color(0xFF168A5B),
+                icon: Icons.savings_rounded,
+                transactionsForKey: (category) => _transactionsForCategory(
+                  controller,
+                  category,
+                  income: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ResponsivePair(
+              gap: 16,
+              first: _CategoryRankingCard(
+                controller: controller,
+                title: strings.incomePaymentMethodRanking,
+                emptyLabel: strings.noPaymentMethodData,
+                data: _paymentMethodTotals(
+                  transactions,
+                  controller.exchangeRate,
+                  strings,
+                  type: TransactionType.income,
+                ),
+                color: const Color(0xFF168A5B),
+                icon: Icons.credit_card_rounded,
+                transactionsForKey: (paymentMethod) =>
+                    _transactionsForPaymentMethod(
+                      controller,
+                      paymentMethod,
+                      strings,
+                      type: TransactionType.income,
+                    ),
+              ),
+              second: _CategoryRankingCard(
+                controller: controller,
+                title: strings.expensePaymentMethodRanking,
+                emptyLabel: strings.noPaymentMethodData,
+                data: _paymentMethodTotals(
+                  transactions,
+                  controller.exchangeRate,
+                  strings,
+                  type: TransactionType.expense,
+                ),
+                color: const Color(0xFFC74949),
+                icon: Icons.account_balance_wallet_rounded,
+                transactionsForKey: (paymentMethod) =>
+                    _transactionsForPaymentMethod(
+                      controller,
+                      paymentMethod,
+                      strings,
+                      type: TransactionType.expense,
+                    ),
+              ),
             ),
             const SizedBox(height: 12),
             _BestWorstDays(summary: summary, strings: strings),
             const SizedBox(height: 12),
-            _TrendChart(summary: summary, strings: strings),
-            const SizedBox(height: 12),
-            _DailyTrendBreakdown(summary: summary, strings: strings),
-            const SizedBox(height: 12),
-            _CategoryChart(
-              title: strings.expensesByCategory,
-              noDataLabel: strings.noData,
-              data: summary.categoryExpenseTotals,
-              palette: _expensePalette,
+            ResponsivePair(
+              gap: 16,
+              first: _TrendChart(summary: summary, strings: strings),
+              second: _DailyTrendBreakdown(summary: summary, strings: strings),
+              firstFlex: 3,
+              secondFlex: 2,
             ),
             const SizedBox(height: 12),
-            _CategoryChart(
-              title: strings.incomeByCategory,
-              noDataLabel: strings.noData,
-              data: summary.categoryIncomeTotals,
-              palette: _incomePalette,
-            ),
-            const SizedBox(height: 12),
-            _GroupedSummary(
-              title: strings.weeklySummary,
-              values: _groupTransactions(
-                transactions,
-                controller.exchangeRate,
-                (date) => _weekKey(date, strings),
+            ResponsivePair(
+              gap: 16,
+              first: _CategoryChart(
+                title: strings.expensesByCategory,
+                noDataLabel: strings.noData,
+                data: summary.categoryExpenseTotals,
+                palette: _expensePalette,
+              ),
+              second: _CategoryChart(
+                title: strings.incomeByCategory,
+                noDataLabel: strings.noData,
+                data: summary.categoryIncomeTotals,
+                palette: _incomePalette,
               ),
             ),
             const SizedBox(height: 12),
-            _GroupedSummary(
-              title: strings.monthlySummary,
-              values: _groupTransactions(
-                transactions,
-                controller.exchangeRate,
-                _monthKey,
+            ResponsivePair(
+              gap: 16,
+              first: _GroupedSummary(
+                title: strings.weeklySummary,
+                values: _groupTransactions(
+                  transactions,
+                  controller.exchangeRate,
+                  (date) => _weekKey(date, strings),
+                ),
+              ),
+              second: _GroupedSummary(
+                title: strings.monthlySummary,
+                values: _groupTransactions(
+                  transactions,
+                  controller.exchangeRate,
+                  _monthKey,
+                ),
               ),
             ),
           ],

@@ -7,6 +7,7 @@ import '../widgets/app_states.dart';
 import '../widgets/filter_pill.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
+import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
 import 'transaction_detail_screen.dart';
 
@@ -106,22 +107,50 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             const SizedBox(height: 4),
           ],
           if (!controller.isLoading || controller.hasData)
-            ...transactions.map(
-              (transaction) => TransactionCard(
-                transaction: transaction,
-                exchangeRate: controller.exchangeRate,
-                strings: controller.strings,
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => TransactionDetailScreen(
-                        controller: controller,
-                        transaction: transaction,
-                      ),
-                    ),
-                  );
-                },
-              ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = AppResponsive.isWideWeb(context);
+                final outerPadding = isWide ? 24.0 : 0.0;
+                final gap = isWide ? 16.0 : 0.0;
+                final available = constraints.maxWidth - outerPadding * 2;
+                final cardWidth = isWide
+                    ? (available - gap) / 2
+                    : constraints.maxWidth;
+                return Padding(
+                  padding: EdgeInsets.symmetric(horizontal: outerPadding),
+                  child: Wrap(
+                    spacing: gap,
+                    runSpacing: 0,
+                    children: [
+                      for (final transaction in transactions)
+                        SizedBox(
+                          width: cardWidth,
+                          child: TransactionCard(
+                            transaction: transaction,
+                            exchangeRate: controller.exchangeRate,
+                            strings: controller.strings,
+                            margin: isWide
+                                ? const EdgeInsets.symmetric(vertical: 6)
+                                : const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 6,
+                                  ),
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => TransactionDetailScreen(
+                                    controller: controller,
+                                    transaction: transaction,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -220,7 +249,12 @@ class _ResultsSummary extends StatelessWidget {
     final net = income - expenses;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      padding: EdgeInsets.fromLTRB(
+        AppResponsive.isWideWeb(context) ? 24 : 16,
+        2,
+        AppResponsive.isWideWeb(context) ? 24 : 16,
+        8,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -353,7 +387,12 @@ class _Filters extends StatelessWidget {
           ..sort();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      padding: EdgeInsets.fromLTRB(
+        AppResponsive.isWideWeb(context) ? 24 : 16,
+        AppResponsive.isWideWeb(context) ? 20 : 12,
+        AppResponsive.isWideWeb(context) ? 24 : 16,
+        10,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -420,7 +459,6 @@ class _Filters extends StatelessWidget {
                 },
                 onSelected: onTypeChanged,
               ),
-              const SizedBox(height: 12),
               _SegmentedFilter<TransactionCurrencyFilter>(
                 label: strings.value,
                 values: TransactionCurrencyFilter.values,
@@ -528,7 +566,24 @@ class _FilterPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: Column(children: children),
+      child: AppResponsive.isWideWeb(context)
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var index = 0; index < children.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 16),
+                  Expanded(child: children[index]),
+                ],
+              ],
+            )
+          : Column(
+              children: [
+                for (var index = 0; index < children.length; index++) ...[
+                  if (index > 0) const SizedBox(height: 12),
+                  children[index],
+                ],
+              ],
+            ),
     );
   }
 }

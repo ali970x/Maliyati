@@ -10,6 +10,7 @@ import 'screens/dashboard_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'widgets/finance_formatters.dart';
+import 'widgets/responsive_layout.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -134,7 +135,9 @@ class _FinanceHomeState extends State<FinanceHome> {
               body: SafeArea(
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 720),
+                    constraints: BoxConstraints(
+                      maxWidth: AppResponsive.contentMaxWidth(context),
+                    ),
                     child: IndexedStack(
                       index: _selectedIndex,
                       children: screens,
@@ -145,7 +148,9 @@ class _FinanceHomeState extends State<FinanceHome> {
               bottomNavigationBar: Center(
                 heightFactor: 1,
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
+                  constraints: BoxConstraints(
+                    maxWidth: AppResponsive.contentMaxWidth(context),
+                  ),
                   child: NavigationBar(
                     selectedIndex: _selectedIndex,
                     onDestinationSelected: (index) =>

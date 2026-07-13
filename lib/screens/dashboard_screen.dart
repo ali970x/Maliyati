@@ -7,6 +7,7 @@ import '../widgets/app_states.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/metric_card.dart';
 import '../widgets/period_filter_bar.dart';
+import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -58,7 +59,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return RefreshIndicator(
       onRefresh: controller.refresh,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: AppResponsive.pagePadding(context),
         children: [
           _Header(controller: controller),
           const SizedBox(height: 14),
@@ -83,15 +84,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
             selectedType: _selectedTransactionType,
           ),
           const SizedBox(height: 12),
-          _ExpenseFocusCard(controller: controller),
+          if (AppResponsive.isWideWeb(context))
+            ResponsivePair(
+              first: _ExpenseFocusCard(controller: controller),
+              second: Card(
+                elevation: 0,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: _QuickStats(controller: controller),
+                ),
+              ),
+              firstFlex: 3,
+              secondFlex: 2,
+            )
+          else
+            _ExpenseFocusCard(controller: controller),
           if (controller.transactions.any(
             (transaction) => !transaction.hasDate,
           )) ...[
             const SizedBox(height: 12),
             _UndatedNotice(controller: controller),
           ],
-          const SizedBox(height: 12),
-          _QuickStats(controller: controller),
+          if (!AppResponsive.isWideWeb(context)) ...[
+            const SizedBox(height: 12),
+            _QuickStats(controller: controller),
+          ],
           if (controller.errorMessage != null) ...[
             const SizedBox(height: 14),
             _InlineWarning(message: controller.errorMessage!),
@@ -177,23 +194,39 @@ class _SelectedTransactionsSection extends StatelessWidget {
             ),
           )
         else
-          ...transactions.map(
-            (transaction) => TransactionCard(
-              transaction: transaction,
-              exchangeRate: controller.exchangeRate,
-              strings: strings,
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => TransactionDetailScreen(
-                      controller: controller,
-                      transaction: transaction,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = AppResponsive.isWideWeb(context);
+              final cardWidth = isWide
+                  ? (constraints.maxWidth - 16) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: isWide ? 16 : 0,
+                runSpacing: 0,
+                children: [
+                  for (final transaction in transactions)
+                    SizedBox(
+                      width: cardWidth,
+                      child: TransactionCard(
+                        transaction: transaction,
+                        exchangeRate: controller.exchangeRate,
+                        strings: strings,
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => TransactionDetailScreen(
+                                controller: controller,
+                                transaction: transaction,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
+                ],
+              );
+            },
           ),
       ],
     );
