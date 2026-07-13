@@ -13,7 +13,7 @@ import 'transaction_detail_screen.dart';
 
 enum TransactionSort { newest, oldest, highestAmount, lowestAmount }
 
-enum TransactionTypeFilter { all, income, expense }
+enum TransactionTypeFilter { all, income, expense, reserveable }
 
 enum TransactionCurrencyFilter { all, usd, lbp }
 
@@ -172,6 +172,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           if (!transaction.isExpense) {
             return false;
           }
+        case TransactionTypeFilter.reserveable:
+          if (!transaction.isReserveable) {
+            return false;
+          }
         case TransactionTypeFilter.all:
       }
 
@@ -239,12 +243,15 @@ class _ResultsSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     var income = 0.0;
     var expenses = 0.0;
+    var reserveables = 0.0;
     for (final transaction in transactions) {
       final amount = transaction.amountInUsd(exchangeRate);
       if (transaction.isIncome) {
         income += amount;
       } else if (transaction.isExpense) {
         expenses += amount;
+      } else if (transaction.isReserveable) {
+        reserveables += amount;
       }
     }
     final net = income - expenses;
@@ -256,42 +263,47 @@ class _ResultsSummary extends StatelessWidget {
         AppResponsive.isWideWeb(context) ? 24 : 16,
         8,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _SummaryPill(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final values = [
+            _SummaryPill(
               label: strings.transactionCount,
               value: '${transactions.length}',
               color: const Color(0xFF2563EB),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _SummaryPill(
+            _SummaryPill(
               label: strings.income,
               value: FinanceFormatters.compactUsd(income),
               color: const Color(0xFF168A5B),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _SummaryPill(
+            _SummaryPill(
               label: strings.expenses,
               value: FinanceFormatters.compactUsd(expenses),
               color: const Color(0xFFC74949),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _SummaryPill(
+            _SummaryPill(
+              label: strings.reserveables,
+              value: FinanceFormatters.compactUsd(reserveables),
+              color: const Color(0xFFD97706),
+            ),
+            _SummaryPill(
               label: strings.netBalance,
               value: FinanceFormatters.compactUsd(net),
               color: net >= 0
                   ? const Color(0xFF0F766E)
                   : const Color(0xFFB91C1C),
             ),
-          ),
-        ],
+          ];
+          final columns = AppResponsive.isWideWeb(context) ? 5 : 3;
+          final width = (constraints.maxWidth - 8 * (columns - 1)) / columns;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final value in values) SizedBox(width: width, child: value),
+            ],
+          );
+        },
       ),
     );
   }
@@ -452,11 +464,14 @@ class _Filters extends StatelessWidget {
                   TransactionTypeFilter.all => strings.allTypes,
                   TransactionTypeFilter.income => strings.income,
                   TransactionTypeFilter.expense => strings.expense,
+                  TransactionTypeFilter.reserveable => strings.reserveable,
                 },
                 iconFor: (value) => switch (value) {
                   TransactionTypeFilter.all => Icons.receipt_long_rounded,
                   TransactionTypeFilter.income => Icons.south_west_rounded,
                   TransactionTypeFilter.expense => Icons.north_east_rounded,
+                  TransactionTypeFilter.reserveable =>
+                    Icons.request_quote_rounded,
                 },
                 onSelected: onTypeChanged,
               ),

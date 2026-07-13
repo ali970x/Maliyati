@@ -187,6 +187,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     if (type == TransactionType.expense) {
       return strings.expense;
     }
+    if (type == TransactionType.reserveable) {
+      return strings.reserveable;
+    }
     return strings.noData;
   }
 
@@ -214,8 +217,28 @@ class _ReadOnlyBody extends StatelessWidget {
     final strings = state.widget.controller.strings;
     final exchangeRate = state.widget.controller.exchangeRate;
     final theme = Theme.of(context);
-    final isIncome = transaction.isIncome;
-    final color = isIncome ? const Color(0xFF168A5B) : const Color(0xFFC74949);
+    final (color, accent, typeIcon) = switch (transaction.type) {
+      TransactionType.income => (
+        const Color(0xFF168A5B),
+        const Color(0xFF2563EB),
+        Icons.trending_up_rounded,
+      ),
+      TransactionType.expense => (
+        const Color(0xFFC74949),
+        const Color(0xFF9333EA),
+        Icons.trending_down_rounded,
+      ),
+      TransactionType.reserveable => (
+        const Color(0xFFD97706),
+        const Color(0xFFEAB308),
+        Icons.request_quote_rounded,
+      ),
+      TransactionType.unknown => (
+        theme.colorScheme.onSurfaceVariant,
+        theme.colorScheme.secondary,
+        Icons.help_outline_rounded,
+      ),
+    };
     final description = transaction.description.isEmpty
         ? transaction.category
         : transaction.description;
@@ -230,10 +253,7 @@ class _ReadOnlyBody extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             gradient: LinearGradient(
-              colors: [
-                color,
-                isIncome ? const Color(0xFF2563EB) : const Color(0xFF9333EA),
-              ],
+              colors: [color, accent],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -250,12 +270,7 @@ class _ReadOnlyBody extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(
-                      isIncome
-                          ? Icons.trending_up_rounded
-                          : Icons.trending_down_rounded,
-                      color: Colors.white,
-                    ),
+                    child: Icon(typeIcon, color: Colors.white),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -404,6 +419,11 @@ class _EditBody extends StatelessWidget {
                         value: TransactionType.expense,
                         label: Text(strings.expense),
                         icon: const Icon(Icons.north_east_rounded),
+                      ),
+                      ButtonSegment(
+                        value: TransactionType.reserveable,
+                        label: Text(strings.reserveable),
+                        icon: const Icon(Icons.request_quote_rounded),
                       ),
                     ],
                     selected: {state._selectedType},

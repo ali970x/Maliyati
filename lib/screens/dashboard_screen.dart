@@ -145,25 +145,43 @@ class _SelectedTransactionsSection extends StatelessWidget {
             .where((transaction) => transaction.type == selectedType)
             .toList()
           ..sort((a, b) => b.date.compareTo(a.date));
-    final isIncome = selectedType == TransactionType.income;
+    final (color, icon, title, emptyMessage) = switch (selectedType!) {
+      TransactionType.income => (
+        const Color(0xFF168A5B),
+        Icons.south_west_rounded,
+        strings.showIncomeTransactions,
+        strings.noIncomeInPeriod,
+      ),
+      TransactionType.expense => (
+        const Color(0xFFC74949),
+        Icons.north_east_rounded,
+        strings.showExpenseTransactions,
+        strings.noExpensesInPeriod,
+      ),
+      TransactionType.reserveable => (
+        const Color(0xFFD97706),
+        Icons.request_quote_rounded,
+        strings.showReserveableTransactions,
+        strings.noReserveablesInPeriod,
+      ),
+      TransactionType.unknown => (
+        theme.colorScheme.onSurfaceVariant,
+        Icons.help_outline_rounded,
+        strings.transactions,
+        strings.noTransactionsYet,
+      ),
+    };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Icon(
-              isIncome ? Icons.south_west_rounded : Icons.north_east_rounded,
-              color: isIncome
-                  ? const Color(0xFF168A5B)
-                  : const Color(0xFFC74949),
-            ),
+            Icon(icon, color: color),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                isIncome
-                    ? strings.showIncomeTransactions
-                    : strings.showExpenseTransactions,
+                title,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w900,
                 ),
@@ -190,7 +208,7 @@ class _SelectedTransactionsSection extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              isIncome ? strings.noIncomeInPeriod : strings.noExpensesInPeriod,
+              emptyMessage,
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -738,9 +756,13 @@ class _SummaryGrid extends StatelessWidget {
     final expenseColor = selectedType == TransactionType.expense
         ? const Color(0xFFB91C1C)
         : const Color(0xFFC74949);
+    final reserveableColor = selectedType == TransactionType.reserveable
+        ? const Color(0xFFB45309)
+        : const Color(0xFFD97706);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final width = (constraints.maxWidth - 10) / 2;
+        final columns = AppResponsive.isWideWeb(context) ? 3 : 2;
+        final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
         final height = AppResponsive.isWideWeb(context) ? 190.0 : 150.0;
         return Wrap(
           spacing: 10,
@@ -772,6 +794,19 @@ class _SummaryGrid extends StatelessWidget {
                 onTap: () => onTypeSelected(TransactionType.expense),
               ),
             ),
+            SizedBox(
+              width: width,
+              height: height,
+              child: MetricCard(
+                title: strings.reserveables,
+                value: FinanceFormatters.usd(summary.totalReserveable),
+                subtitle:
+                    '${FinanceFormatters.compactUsd(summary.totalReserveableUsd)} + ${FinanceFormatters.lbp(summary.totalReserveableLbp)}',
+                icon: Icons.request_quote_rounded,
+                color: reserveableColor,
+                onTap: () => onTypeSelected(TransactionType.reserveable),
+              ),
+            ),
           ],
         );
       },
@@ -789,6 +824,7 @@ class _QuickStats extends StatelessWidget {
     final summary = controller.summary;
     final largestExpense = summary.largestExpense;
     final largestIncome = summary.largestIncome;
+    final largestReserveable = summary.largestReserveable;
     final strings = controller.strings;
 
     return Column(
@@ -821,6 +857,13 @@ class _QuickStats extends StatelessWidget {
               : summary.topIncomeCategory,
         ),
         _StatRow(
+          icon: Icons.request_quote_rounded,
+          title: strings.topReserveableCategory,
+          value: summary.topReserveableCategory == 'No data'
+              ? strings.noData
+              : summary.topReserveableCategory,
+        ),
+        _StatRow(
           icon: Icons.calendar_today_rounded,
           title: strings.averageDailySpend,
           value: FinanceFormatters.usd(summary.averageDailyExpense),
@@ -843,6 +886,13 @@ class _QuickStats extends StatelessWidget {
           value: largestIncome == null
               ? strings.noData
               : FinanceFormatters.amount(largestIncome),
+        ),
+        _StatRow(
+          icon: Icons.schedule_send_rounded,
+          title: strings.largestReserveable,
+          value: largestReserveable == null
+              ? strings.noData
+              : FinanceFormatters.amount(largestReserveable),
         ),
       ],
     );

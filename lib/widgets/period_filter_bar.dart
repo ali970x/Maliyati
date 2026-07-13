@@ -52,14 +52,19 @@ class PeriodFilterBar extends StatelessWidget {
                   : null,
               onTap: () async {
                 if (filter == TimeFilter.custom) {
-                  await showCustomDateFilterPicker(context, controller);
+                  await showCustomDateRangePicker(context, controller);
                 } else {
                   controller.selectTimeFilter(filter);
                 }
               },
-              onLongPress: filter == TimeFilter.last3Days
-                  ? () => _showRecentDayPicker(context)
-                  : null,
+              onLongPress: switch (filter) {
+                TimeFilter.last3Days => () => _showRecentDayPicker(context),
+                TimeFilter.custom => () => showCustomSingleDayPicker(
+                  context,
+                  controller,
+                ),
+                _ => null,
+              },
             ),
           );
         },
@@ -108,7 +113,6 @@ class PeriodFilterBar extends StatelessWidget {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final days = [
-      (day: today, label: controller.strings.timeFilterLabel('today')),
       (
         day: today.subtract(const Duration(days: 1)),
         label: controller.strings.yesterday,
@@ -116,6 +120,10 @@ class PeriodFilterBar extends StatelessWidget {
       (
         day: today.subtract(const Duration(days: 2)),
         label: controller.strings.twoDaysAgo,
+      ),
+      (
+        day: today.subtract(const Duration(days: 3)),
+        label: controller.strings.threeDaysAgo,
       ),
     ];
 

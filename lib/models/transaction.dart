@@ -1,4 +1,4 @@
-enum TransactionType { income, expense, unknown }
+enum TransactionType { income, expense, reserveable, unknown }
 
 enum CurrencyCode { usd, lbp, unknown }
 
@@ -30,6 +30,8 @@ class FinancialTransaction {
   bool get isIncome => type == TransactionType.income;
 
   bool get isExpense => type == TransactionType.expense;
+
+  bool get isReserveable => type == TransactionType.reserveable;
 
   double amountInUsd(double exchangeRate) {
     if (currency == CurrencyCode.usd) {
@@ -75,6 +77,8 @@ extension TransactionTypeLabel on TransactionType {
         return 'Income';
       case TransactionType.expense:
         return 'Expense';
+      case TransactionType.reserveable:
+        return 'Reserveable';
       case TransactionType.unknown:
         return 'Unknown';
     }

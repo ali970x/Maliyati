@@ -23,8 +23,18 @@ class TransactionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isIncome = transaction.isIncome;
-    final color = isIncome ? const Color(0xFF168A5B) : const Color(0xFFC74949);
+    final color = switch (transaction.type) {
+      TransactionType.income => const Color(0xFF168A5B),
+      TransactionType.expense => const Color(0xFFC74949),
+      TransactionType.reserveable => const Color(0xFFD97706),
+      TransactionType.unknown => theme.colorScheme.onSurfaceVariant,
+    };
+    final icon = switch (transaction.type) {
+      TransactionType.income => Icons.trending_up_rounded,
+      TransactionType.expense => Icons.trending_down_rounded,
+      TransactionType.reserveable => Icons.request_quote_rounded,
+      TransactionType.unknown => Icons.help_outline_rounded,
+    };
     final dateText = transaction.hasDate
         ? FinanceFormatters.date(transaction.date)
         : strings.noDateInSheet;
@@ -49,12 +59,7 @@ class TransactionCard extends StatelessWidget {
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  isIncome
-                      ? Icons.trending_up_rounded
-                      : Icons.trending_down_rounded,
-                  color: color,
-                ),
+                child: Icon(icon, color: color),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -180,6 +185,9 @@ class TransactionCard extends StatelessWidget {
     }
     if (type == TransactionType.expense) {
       return strings.expense;
+    }
+    if (type == TransactionType.reserveable) {
+      return strings.reserveable;
     }
     return strings.noData;
   }

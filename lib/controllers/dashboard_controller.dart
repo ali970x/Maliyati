@@ -328,21 +328,28 @@ class FinancialSummary {
     required this.totalIncomeUsd,
     required this.totalIncomeLbp,
     required this.totalIncome,
+    required this.totalReserveableUsd,
+    required this.totalReserveableLbp,
+    required this.totalReserveable,
     required this.totalNetUsd,
     required this.totalNetLbp,
     required this.totalNet,
     required this.expenseRatio,
     required this.topExpenseCategory,
     required this.topIncomeCategory,
+    required this.topReserveableCategory,
     required this.averageDailyExpense,
     required this.transactionCount,
     required this.largestExpense,
     required this.largestIncome,
+    required this.largestReserveable,
     required this.categoryExpenseTotals,
     required this.categoryIncomeTotals,
+    required this.categoryReserveableTotals,
     required this.dailyNetTotals,
     required this.dailyExpenseTotals,
     required this.dailyIncomeTotals,
+    required this.dailyReserveableTotals,
   });
 
   final double totalExpenseUsd;
@@ -351,21 +358,28 @@ class FinancialSummary {
   final double totalIncomeUsd;
   final double totalIncomeLbp;
   final double totalIncome;
+  final double totalReserveableUsd;
+  final double totalReserveableLbp;
+  final double totalReserveable;
   final double totalNetUsd;
   final double totalNetLbp;
   final double totalNet;
   final double expenseRatio;
   final String topExpenseCategory;
   final String topIncomeCategory;
+  final String topReserveableCategory;
   final double averageDailyExpense;
   final int transactionCount;
   final FinancialTransaction? largestExpense;
   final FinancialTransaction? largestIncome;
+  final FinancialTransaction? largestReserveable;
   final Map<String, double> categoryExpenseTotals;
   final Map<String, double> categoryIncomeTotals;
+  final Map<String, double> categoryReserveableTotals;
   final Map<DateTime, double> dailyNetTotals;
   final Map<DateTime, double> dailyExpenseTotals;
   final Map<DateTime, double> dailyIncomeTotals;
+  final Map<DateTime, double> dailyReserveableTotals;
 
   factory FinancialSummary.fromTransactions(
     List<FinancialTransaction> transactions, {
@@ -376,13 +390,18 @@ class FinancialSummary {
     var expenseLbp = 0.0;
     var incomeUsd = 0.0;
     var incomeLbp = 0.0;
+    var reserveableUsd = 0.0;
+    var reserveableLbp = 0.0;
     FinancialTransaction? largestExpense;
     FinancialTransaction? largestIncome;
+    FinancialTransaction? largestReserveable;
     final expenseByCategory = <String, double>{};
     final incomeByCategory = <String, double>{};
+    final reserveableByCategory = <String, double>{};
     final dailyNet = <DateTime, double>{};
     final dailyExpense = <DateTime, double>{};
     final dailyIncome = <DateTime, double>{};
+    final dailyReserveable = <DateTime, double>{};
 
     for (final transaction in transactions) {
       final amountUsd = transaction.amountInUsd(exchangeRate);
@@ -455,10 +474,37 @@ class FinancialSummary {
           largestIncome = transaction;
         }
       }
+
+      if (transaction.isReserveable) {
+        if (transaction.currency == CurrencyCode.usd) {
+          reserveableUsd += transaction.amount;
+        } else if (transaction.currency == CurrencyCode.lbp) {
+          reserveableLbp += transaction.amount;
+        }
+
+        reserveableByCategory.update(
+          transaction.category,
+          (value) => value + amountUsd,
+          ifAbsent: () => amountUsd,
+        );
+        if (day != null) {
+          dailyReserveable.update(
+            day,
+            (value) => value + amountUsd,
+            ifAbsent: () => amountUsd,
+          );
+        }
+
+        if (largestReserveable == null ||
+            amountUsd > largestReserveable.amountInUsd(exchangeRate)) {
+          largestReserveable = transaction;
+        }
+      }
     }
 
     final totalExpense = expenseUsd + expenseLbp / exchangeRate;
     final totalIncome = incomeUsd + incomeLbp / exchangeRate;
+    final totalReserveable = reserveableUsd + reserveableLbp / exchangeRate;
     final totalNetUsd = incomeUsd - expenseUsd;
     final totalNetLbp = incomeLbp - expenseLbp;
     final totalNet = totalIncome - totalExpense;
@@ -471,21 +517,28 @@ class FinancialSummary {
       totalIncomeUsd: incomeUsd,
       totalIncomeLbp: incomeLbp,
       totalIncome: totalIncome,
+      totalReserveableUsd: reserveableUsd,
+      totalReserveableLbp: reserveableLbp,
+      totalReserveable: totalReserveable,
       totalNetUsd: totalNetUsd,
       totalNetLbp: totalNetLbp,
       totalNet: totalNet,
       expenseRatio: totalIncome <= 0 ? 0 : totalExpense / totalIncome,
       topExpenseCategory: _topCategory(expenseByCategory),
       topIncomeCategory: _topCategory(incomeByCategory),
+      topReserveableCategory: _topCategory(reserveableByCategory),
       averageDailyExpense: totalExpense / dayCount,
       transactionCount: transactions.length,
       largestExpense: largestExpense,
       largestIncome: largestIncome,
+      largestReserveable: largestReserveable,
       categoryExpenseTotals: _sortMap(expenseByCategory),
       categoryIncomeTotals: _sortMap(incomeByCategory),
+      categoryReserveableTotals: _sortMap(reserveableByCategory),
       dailyNetTotals: _sortDateMap(dailyNet),
       dailyExpenseTotals: _sortDateMap(dailyExpense),
       dailyIncomeTotals: _sortDateMap(dailyIncome),
+      dailyReserveableTotals: _sortDateMap(dailyReserveable),
     );
   }
 

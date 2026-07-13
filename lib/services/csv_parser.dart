@@ -234,6 +234,12 @@ class CsvParser {
 
   TransactionType _parseType(String value) {
     final normalized = value.trim().toLowerCase();
+    if (normalized.contains('reserveable') ||
+        normalized.contains('receivable') ||
+        normalized.contains('reserved') ||
+        normalized.contains('\u0645\u0633\u062a\u062d\u0642')) {
+      return TransactionType.reserveable;
+    }
     if (normalized.contains('income') ||
         normalized.contains('\u062f\u062e\u0644')) {
       return TransactionType.income;

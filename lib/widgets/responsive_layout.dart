@@ -66,3 +66,47 @@ class ResponsivePair extends StatelessWidget {
     );
   }
 }
+
+class ResponsiveTriple extends StatelessWidget {
+  const ResponsiveTriple({
+    super.key,
+    required this.first,
+    required this.second,
+    required this.third,
+    this.gap = 16,
+    this.mobileGap = 12,
+  });
+
+  final Widget first;
+  final Widget second;
+  final Widget third;
+  final double gap;
+  final double mobileGap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!AppResponsive.isWideWeb(context)) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          first,
+          SizedBox(height: mobileGap),
+          second,
+          SizedBox(height: mobileGap),
+          third,
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: first),
+        SizedBox(width: gap),
+        Expanded(child: second),
+        SizedBox(width: gap),
+        Expanded(child: third),
+      ],
+    );
+  }
+}

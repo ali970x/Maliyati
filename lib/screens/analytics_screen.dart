@@ -80,7 +80,7 @@ class AnalyticsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            ResponsivePair(
+            ResponsiveTriple(
               gap: 16,
               first: _CategoryRankingCard(
                 controller: controller,
@@ -92,7 +92,7 @@ class AnalyticsScreen extends StatelessWidget {
                 transactionsForKey: (category) => _transactionsForCategory(
                   controller,
                   category,
-                  expense: true,
+                  type: TransactionType.expense,
                 ),
               ),
               second: _CategoryRankingCard(
@@ -105,12 +105,25 @@ class AnalyticsScreen extends StatelessWidget {
                 transactionsForKey: (category) => _transactionsForCategory(
                   controller,
                   category,
-                  income: true,
+                  type: TransactionType.income,
+                ),
+              ),
+              third: _CategoryRankingCard(
+                controller: controller,
+                title: strings.reserveableCategoryRanking,
+                emptyLabel: strings.noCategoryData,
+                data: summary.categoryReserveableTotals,
+                color: const Color(0xFFD97706),
+                icon: Icons.request_quote_rounded,
+                transactionsForKey: (category) => _transactionsForCategory(
+                  controller,
+                  category,
+                  type: TransactionType.reserveable,
                 ),
               ),
             ),
             const SizedBox(height: 12),
-            ResponsivePair(
+            ResponsiveTriple(
               gap: 16,
               first: _CategoryRankingCard(
                 controller: controller,
@@ -152,6 +165,26 @@ class AnalyticsScreen extends StatelessWidget {
                       type: TransactionType.expense,
                     ),
               ),
+              third: _CategoryRankingCard(
+                controller: controller,
+                title: strings.reserveablePaymentMethodRanking,
+                emptyLabel: strings.noPaymentMethodData,
+                data: _paymentMethodTotals(
+                  transactions,
+                  controller.exchangeRate,
+                  strings,
+                  type: TransactionType.reserveable,
+                ),
+                color: const Color(0xFFD97706),
+                icon: Icons.pending_actions_rounded,
+                transactionsForKey: (paymentMethod) =>
+                    _transactionsForPaymentMethod(
+                      controller,
+                      paymentMethod,
+                      strings,
+                      type: TransactionType.reserveable,
+                    ),
+              ),
             ),
             const SizedBox(height: 12),
             _BestWorstDays(summary: summary, strings: strings),
@@ -164,7 +197,7 @@ class AnalyticsScreen extends StatelessWidget {
               secondFlex: 2,
             ),
             const SizedBox(height: 12),
-            ResponsivePair(
+            ResponsiveTriple(
               gap: 16,
               first: _CategoryChart(
                 title: strings.expensesByCategory,
@@ -177,6 +210,12 @@ class AnalyticsScreen extends StatelessWidget {
                 noDataLabel: strings.noData,
                 data: summary.categoryIncomeTotals,
                 palette: _incomePalette,
+              ),
+              third: _CategoryChart(
+                title: strings.reserveablesByCategory,
+                noDataLabel: strings.noData,
+                data: summary.categoryReserveableTotals,
+                palette: _reserveablePalette,
               ),
             ),
             const SizedBox(height: 12),
@@ -221,6 +260,14 @@ class AnalyticsScreen extends StatelessWidget {
     Color(0xFF84CC16),
   ];
 
+  static const _reserveablePalette = [
+    Color(0xFFD97706),
+    Color(0xFFEAB308),
+    Color(0xFFF59E0B),
+    Color(0xFFCA8A04),
+    Color(0xFF84CC16),
+  ];
+
   static String _weekKey(DateTime date, dynamic strings) {
     final start = DateTime(
       date.year,
@@ -239,6 +286,9 @@ class AnalyticsScreen extends StatelessWidget {
   ) {
     final values = <String, double>{};
     for (final transaction in transactions) {
+      if (!transaction.isIncome && !transaction.isExpense) {
+        continue;
+      }
       final signed = transaction.isIncome
           ? transaction.amountInUsd(exchangeRate)
           : -transaction.amountInUsd(exchangeRate);
@@ -279,20 +329,10 @@ class AnalyticsScreen extends StatelessWidget {
   static List<FinancialTransaction> _transactionsForCategory(
     DashboardController controller,
     String category, {
-    bool income = false,
-    bool expense = false,
+    required TransactionType type,
   }) {
     return controller.periodTransactions.where((transaction) {
-      if (transaction.category != category) {
-        return false;
-      }
-      if (income && !transaction.isIncome) {
-        return false;
-      }
-      if (expense && !transaction.isExpense) {
-        return false;
-      }
-      return true;
+      return transaction.category == category && transaction.type == type;
     }).toList()..sort((a, b) => b.date.compareTo(a.date));
   }
 
@@ -666,6 +706,15 @@ class _AnalyticsSummaryCard extends StatelessWidget {
                     value: FinanceFormatters.usd(summary.totalExpense),
                     color: const Color(0xFFC74949),
                     icon: Icons.north_east_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _SummaryMetric(
+                    label: strings.reserveables,
+                    value: FinanceFormatters.usd(summary.totalReserveable),
+                    color: const Color(0xFFD97706),
+                    icon: Icons.request_quote_rounded,
                   ),
                 ),
               ],

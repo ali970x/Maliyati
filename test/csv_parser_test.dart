@@ -82,4 +82,17 @@ void main() {
       isTrue,
     );
   });
+
+  test('parses reserveable as an independent transaction type', () {
+    const csv = r'''
+"Date","Status","Title","Amount ($)","Amount (LBP )","Category","Payment Method","Notes"
+"7/13/2026","Reserveable","Pending invoice","$125.00","LBP0.00","Client debt","Bank","Awaiting payment"
+''';
+
+    final transactions = CsvParser().parse(csv);
+
+    expect(transactions, hasLength(1));
+    expect(transactions.single.type, TransactionType.reserveable);
+    expect(transactions.single.amount, 125);
+  });
 }
