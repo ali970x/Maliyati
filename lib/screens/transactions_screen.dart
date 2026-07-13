@@ -113,8 +113,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 final outerPadding = isWide ? 24.0 : 0.0;
                 final gap = isWide ? 16.0 : 0.0;
                 final available = constraints.maxWidth - outerPadding * 2;
+                final columns = isWide && available >= 1400 ? 3 : 2;
                 final cardWidth = isWide
-                    ? (available - gap) / 2
+                    ? (available - gap * (columns - 1)) / columns
                     : constraints.maxWidth;
                 return Padding(
                   padding: EdgeInsets.symmetric(horizontal: outerPadding),

@@ -65,18 +65,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 14),
           PeriodFilterBar(controller: controller),
           const SizedBox(height: 16),
-          _NetBalance(controller: controller),
-          const SizedBox(height: 12),
-          _SummaryGrid(
-            controller: controller,
-            selectedType: _selectedTransactionType,
-            onTypeSelected: (type) {
-              setState(() {
-                _selectedTransactionType = _selectedTransactionType == type
-                    ? null
-                    : type;
-              });
-            },
+          ResponsivePair(
+            firstFlex: 3,
+            secondFlex: 2,
+            first: _NetBalance(controller: controller),
+            second: _SummaryGrid(
+              controller: controller,
+              selectedType: _selectedTransactionType,
+              onTypeSelected: (type) {
+                setState(() {
+                  _selectedTransactionType = _selectedTransactionType == type
+                      ? null
+                      : type;
+                });
+              },
+            ),
           ),
           const SizedBox(height: 12),
           _SelectedTransactionsSection(
@@ -197,8 +200,9 @@ class _SelectedTransactionsSection extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = AppResponsive.isWideWeb(context);
+              final columns = isWide && constraints.maxWidth >= 1400 ? 3 : 2;
               final cardWidth = isWide
-                  ? (constraints.maxWidth - 16) / 2
+                  ? (constraints.maxWidth - 16 * (columns - 1)) / columns
                   : constraints.maxWidth;
               return Wrap(
                 spacing: isWide ? 16 : 0,
@@ -737,13 +741,14 @@ class _SummaryGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = (constraints.maxWidth - 10) / 2;
+        final height = AppResponsive.isWideWeb(context) ? 190.0 : 150.0;
         return Wrap(
           spacing: 10,
           runSpacing: 10,
           children: [
             SizedBox(
               width: width,
-              height: 150,
+              height: height,
               child: MetricCard(
                 title: strings.income,
                 value: FinanceFormatters.usd(summary.totalIncome),
@@ -756,7 +761,7 @@ class _SummaryGrid extends StatelessWidget {
             ),
             SizedBox(
               width: width,
-              height: 150,
+              height: height,
               child: MetricCard(
                 title: strings.expenses,
                 value: FinanceFormatters.usd(summary.totalExpense),

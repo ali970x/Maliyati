@@ -55,7 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: AppResponsive.isWideWeb(context)
-                    ? 880
+                    ? 1200
                     : double.infinity,
               ),
               child: Column(

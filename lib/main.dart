@@ -124,6 +124,37 @@ class _FinanceHomeState extends State<FinanceHome> {
         ];
         final strings = _controller.strings;
         FinanceFormatters.localeCode = _controller.language.code;
+        final indexedScreens = IndexedStack(
+          index: _selectedIndex,
+          children: screens,
+        );
+        final navigationBar = NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) =>
+              setState(() => _selectedIndex = index),
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.dashboard_outlined),
+              selectedIcon: const Icon(Icons.dashboard_rounded),
+              label: strings.dashboard,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.receipt_long_outlined),
+              selectedIcon: const Icon(Icons.receipt_long_rounded),
+              label: strings.transactions,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.insights_outlined),
+              selectedIcon: const Icon(Icons.insights_rounded),
+              label: strings.analytics,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.settings_outlined),
+              selectedIcon: const Icon(Icons.settings_rounded),
+              label: strings.settings,
+            ),
+          ],
+        );
 
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.dark,
@@ -133,53 +164,28 @@ class _FinanceHomeState extends State<FinanceHome> {
                 : TextDirection.ltr,
             child: Scaffold(
               body: SafeArea(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: AppResponsive.contentMaxWidth(context),
-                    ),
-                    child: IndexedStack(
-                      index: _selectedIndex,
-                      children: screens,
-                    ),
-                  ),
-                ),
+                child: AppResponsive.isWeb
+                    ? indexedScreens
+                    : Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: AppResponsive.contentMaxWidth(context),
+                          ),
+                          child: indexedScreens,
+                        ),
+                      ),
               ),
-              bottomNavigationBar: Center(
-                heightFactor: 1,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: AppResponsive.contentMaxWidth(context),
-                  ),
-                  child: NavigationBar(
-                    selectedIndex: _selectedIndex,
-                    onDestinationSelected: (index) =>
-                        setState(() => _selectedIndex = index),
-                    destinations: [
-                      NavigationDestination(
-                        icon: const Icon(Icons.dashboard_outlined),
-                        selectedIcon: const Icon(Icons.dashboard_rounded),
-                        label: strings.dashboard,
+              bottomNavigationBar: AppResponsive.isWeb
+                  ? navigationBar
+                  : Center(
+                      heightFactor: 1,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: AppResponsive.contentMaxWidth(context),
+                        ),
+                        child: navigationBar,
                       ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.receipt_long_outlined),
-                        selectedIcon: const Icon(Icons.receipt_long_rounded),
-                        label: strings.transactions,
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.insights_outlined),
-                        selectedIcon: const Icon(Icons.insights_rounded),
-                        label: strings.analytics,
-                      ),
-                      NavigationDestination(
-                        icon: const Icon(Icons.settings_outlined),
-                        selectedIcon: const Icon(Icons.settings_rounded),
-                        label: strings.settings,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
             ),
           ),
         );

@@ -8,6 +8,8 @@ class AppResponsive {
   static const double webContentMaxWidth = 1200;
   static const double webDetailMaxWidth = 920;
 
+  static bool get isWeb => kIsWeb;
+
   static bool isWideWeb(BuildContext context) {
     return kIsWeb && MediaQuery.sizeOf(context).width >= webBreakpoint;
   }

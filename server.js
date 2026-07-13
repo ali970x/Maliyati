@@ -102,8 +102,17 @@ function staticFileFor(pathname) {
 
 function serveFile(filePath, request, response) {
   const extension = path.extname(filePath).toLowerCase();
-  const cacheControl = filePath.endsWith('index.html')
-    ? 'no-cache'
+  const fileName = path.basename(filePath);
+  const revalidateFiles = new Set([
+    '.last_build_id',
+    'flutter_bootstrap.js',
+    'flutter_service_worker.js',
+    'index.html',
+    'main.dart.js',
+    'version.json',
+  ]);
+  const cacheControl = revalidateFiles.has(fileName)
+    ? 'no-store, no-cache, must-revalidate'
     : 'public, max-age=3600';
   response.writeHead(200, {
     'Content-Type': contentTypes[extension] || 'application/octet-stream',
