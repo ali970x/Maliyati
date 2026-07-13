@@ -2,6 +2,7 @@ import 'package:finance_tracker/controllers/dashboard_controller.dart';
 import 'package:finance_tracker/models/transaction.dart';
 import 'package:finance_tracker/services/google_sheet_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -43,6 +44,20 @@ void main() {
 
     await controller.updateCalculationStartMonth(null);
     expect(controller.calculationTransactions, hasLength(2));
+  });
+
+  test('dark theme preference is restored on the next controller', () async {
+    SharedPreferences.setMockInitialValues({});
+    final first = DashboardController(service: _FakeSheetService(const []));
+    await first.initialize();
+    await first.updateThemeMode(ThemeMode.dark);
+    first.dispose();
+
+    final second = DashboardController(service: _FakeSheetService(const []));
+    addTearDown(second.dispose);
+    await second.initialize();
+
+    expect(second.themeMode, ThemeMode.dark);
   });
 }
 

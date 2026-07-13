@@ -16,6 +16,14 @@ String periodFilterLabel(
   if (filter == TimeFilter.thisMonth && controller.selectedMonth != null) {
     return FinanceFormatters.monthYear(controller.selectedMonth!);
   }
+  if (filter == TimeFilter.allTime && controller.referenceMonth != null) {
+    return FinanceFormatters.monthYear(controller.referenceMonth!);
+  }
+  if (filter == TimeFilter.thisWeek && controller.selectedMonthWeek != null) {
+    return controller.selectedMonthWeek == 4
+        ? controller.strings.restOfMonth
+        : controller.strings.weekNumber(controller.selectedMonthWeek! + 1);
+  }
   if (filter == TimeFilter.custom &&
       controller.customStart != null &&
       controller.customEnd != null) {
@@ -67,6 +75,8 @@ class PeriodFilterBar extends StatelessWidget {
                   controller,
                 ),
                 TimeFilter.thisMonth => () => _showMonthPicker(context),
+                TimeFilter.thisWeek => () => _showMonthWeekPicker(context),
+                TimeFilter.allTime => () => _showReferenceMonthPicker(context),
                 _ => null,
               },
             ),
@@ -85,6 +95,9 @@ class PeriodFilterBar extends StatelessWidget {
           : 164;
     }
     if (filter == TimeFilter.thisMonth && controller.selectedMonth != null) {
+      return 132;
+    }
+    if (filter == TimeFilter.allTime && controller.referenceMonth != null) {
       return 132;
     }
     return switch (filter) {
@@ -108,6 +121,82 @@ class PeriodFilterBar extends StatelessWidget {
     }
   }
 
+  Future<void> _showReferenceMonthPicker(BuildContext context) async {
+    final month = await showAppMonthPicker(
+      context,
+      controller,
+      initialMonth: controller.referenceMonth ?? DateTime.now(),
+    );
+    if (month != null) {
+      controller.selectReferenceMonth(month);
+    }
+  }
+
+  Future<void> _showMonthWeekPicker(BuildContext context) async {
+    final month = controller.referenceMonth ?? DateTime.now();
+    final monthStart = DateTime(month.year, month.month);
+    final monthEnd = DateTime(month.year, month.month + 1);
+    final weeks = <({int index, DateTime start, DateTime end})>[];
+    for (var index = 0; index < 5; index++) {
+      final start = monthStart.add(Duration(days: index * 7));
+      if (!start.isBefore(monthEnd)) {
+        break;
+      }
+      final candidateEnd = start.add(const Duration(days: 6));
+      weeks.add((
+        index: index,
+        start: start,
+        end: candidateEnd.isBefore(monthEnd)
+            ? candidateEnd
+            : monthEnd.subtract(const Duration(days: 1)),
+      ));
+    }
+
+    final selected = await showModalBottomSheet<int>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+              child: Text(
+                controller.strings.chooseWeek(
+                  FinanceFormatters.monthYear(monthStart),
+                ),
+                style: Theme.of(
+                  sheetContext,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+            ),
+            for (final week in weeks)
+              ListTile(
+                leading: const Icon(Icons.view_week_rounded),
+                title: Text(
+                  week.index == 4
+                      ? controller.strings.restOfMonth
+                      : controller.strings.weekNumber(week.index + 1),
+                ),
+                subtitle: Text(
+                  '${FinanceFormatters.shortDate(week.start)} - '
+                  '${FinanceFormatters.shortDate(week.end)}',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.pop(sheetContext, week.index),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null) {
+      controller.selectMonthWeek(selected);
+    }
+  }
+
   IconData _icon(TimeFilter filter) {
     return switch (filter) {
       TimeFilter.today => Icons.today_rounded,
@@ -128,9 +217,8 @@ class PeriodFilterBar extends StatelessWidget {
   }
 
   Future<void> _showRecentDayPicker(BuildContext context) async {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final days = [
+    final today = controller.referenceDate;
+    final candidateDays = [
       (
         day: today.subtract(const Duration(days: 1)),
         label: controller.strings.yesterday,
@@ -144,6 +232,17 @@ class PeriodFilterBar extends StatelessWidget {
         label: controller.strings.threeDaysAgo,
       ),
     ];
+    final monthStart = controller.referenceMonth == null
+        ? null
+        : DateTime(
+            controller.referenceMonth!.year,
+            controller.referenceMonth!.month,
+          );
+    final days = monthStart == null
+        ? candidateDays
+        : candidateDays
+              .where((item) => !item.day.isBefore(monthStart))
+              .toList();
 
     final selected = await showModalBottomSheet<DateTime>(
       context: context,

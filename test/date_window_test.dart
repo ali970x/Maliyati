@@ -76,6 +76,49 @@ void main() {
     expect(controller.selectedMonth, isNull);
   });
 
+  test('all time long-press month acts as a persistent month reference', () {
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+
+    controller.selectReferenceMonth(DateTime(2026, 2));
+
+    expect(controller.timeFilter, TimeFilter.allTime);
+    expect(controller.referenceMonth, DateTime(2026, 2));
+    expect(controller.currentWindow.contains(DateTime(2026, 2, 1)), isTrue);
+    expect(controller.currentWindow.contains(DateTime(2026, 2, 28)), isTrue);
+    expect(controller.currentWindow.contains(DateTime(2026, 3, 1)), isFalse);
+
+    controller.selectTimeFilter(TimeFilter.today);
+    expect(controller.referenceMonth, DateTime(2026, 2));
+    expect(controller.currentWindow.start!.month, 2);
+    expect(controller.currentWindow.endExclusive!.month, anyOf(2, 3));
+  });
+
+  test('tapping all time clears its persistent month reference', () {
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+
+    controller.selectReferenceMonth(DateTime(2026, 2));
+    controller.selectTimeFilter(TimeFilter.allTime);
+
+    expect(controller.referenceMonth, isNull);
+    expect(controller.currentWindow.start, isNull);
+    expect(controller.currentWindow.endExclusive, isNull);
+  });
+
+  test('month week five contains only the remaining days after day 28', () {
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+
+    controller.selectReferenceMonth(DateTime(2026, 7));
+    controller.selectMonthWeek(4);
+
+    expect(controller.currentWindow.contains(DateTime(2026, 7, 28)), isFalse);
+    expect(controller.currentWindow.contains(DateTime(2026, 7, 29)), isTrue);
+    expect(controller.currentWindow.contains(DateTime(2026, 7, 31)), isTrue);
+    expect(controller.currentWindow.contains(DateTime(2026, 8, 1)), isFalse);
+  });
+
   test('this week includes today and the previous six days', () {
     final window = DateWindow.forFilter(
       TimeFilter.thisWeek,

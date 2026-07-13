@@ -203,6 +203,9 @@ class AppStrings {
       ? 'تم حفظ الإعدادات وتحديث البيانات.'
       : 'Settings saved and refreshed.';
   String get languageTitle => isArabic ? 'اللغة' : 'Language';
+  String get appearance => isArabic ? 'المظهر' : 'Appearance';
+  String get lightTheme => isArabic ? 'فاتح' : 'Light';
+  String get darkTheme => isArabic ? 'داكن' : 'Dark';
   String get english => isArabic ? 'الإنجليزية' : 'English';
   String get arabic => isArabic ? 'العربية' : 'Arabic';
   String get transactionDetails =>
@@ -224,6 +227,11 @@ class AppStrings {
   String get yesterday => isArabic ? 'البارح' : 'Yesterday';
   String get twoDaysAgo => isArabic ? 'قبل يومين' : '2 days ago';
   String get threeDaysAgo => isArabic ? 'قبل 3 أيام' : '3 days ago';
+  String chooseWeek(String month) =>
+      isArabic ? 'اختر أسبوعاً من $month' : 'Choose a week in $month';
+  String weekNumber(int number) =>
+      isArabic ? 'الأسبوع $number' : 'Week $number';
+  String get restOfMonth => isArabic ? 'باقي الشهر' : 'Rest of month';
   String get amount => isArabic ? 'المبلغ' : 'Amount';
   String get hasDate => isArabic ? 'يوجد تاريخ' : 'Has date';
   String get overview => isArabic ? 'نظرة عامة' : 'Overview';

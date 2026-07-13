@@ -34,6 +34,7 @@ class DashboardController extends ChangeNotifier {
   static const _sheetUrlKey = 'sheet_url';
   static const _exchangeRateKey = 'exchange_rate';
   static const _languageKey = 'language';
+  static const _themeModeKey = 'theme_mode';
   static const _calculationStartMonthKey = 'calculation_start_month';
 
   final GoogleSheetService _service;
@@ -42,9 +43,12 @@ class DashboardController extends ChangeNotifier {
   String _sheetUrl = AppConfig.defaultGoogleSheetUrl;
   double _exchangeRate = AppConfig.defaultExchangeRate;
   AppLanguage _language = AppLanguage.english;
+  ThemeMode _themeMode = ThemeMode.light;
   TimeFilter _timeFilter = TimeFilter.thisMonth;
   DateTime? _selectedRecentDay;
   DateTime? _selectedMonth;
+  DateTime? _referenceMonth;
+  int? _selectedMonthWeek;
   DateTime? _customStart;
   DateTime? _customEnd;
   DateTime? _calculationStartMonth;
@@ -61,6 +65,8 @@ class DashboardController extends ChangeNotifier {
 
   AppLanguage get language => _language;
 
+  ThemeMode get themeMode => _themeMode;
+
   AppStrings get strings => AppStrings(_language);
 
   TimeFilter get timeFilter => _timeFilter;
@@ -68,6 +74,20 @@ class DashboardController extends ChangeNotifier {
   DateTime? get selectedRecentDay => _selectedRecentDay;
 
   DateTime? get selectedMonth => _selectedMonth;
+
+  DateTime? get referenceMonth => _referenceMonth;
+
+  int? get selectedMonthWeek => _selectedMonthWeek;
+
+  DateTime get referenceDate {
+    final now = DateTime.now();
+    final month = _referenceMonth;
+    if (month == null) {
+      return DateTime(now.year, now.month, now.day);
+    }
+    final lastDay = DateTime(month.year, month.month + 1, 0).day;
+    return DateTime(month.year, month.month, now.day.clamp(1, lastDay));
+  }
 
   DateTime? get customStart => _customStart;
 
@@ -120,9 +140,23 @@ class DashboardController extends ChangeNotifier {
         _selectedRecentDay!.month,
         _selectedRecentDay!.day,
       );
-      return DateWindow(
+      final window = DateWindow(
         start: day,
         endExclusive: day.add(const Duration(days: 1)),
+      );
+      return _referenceMonth == null
+          ? window
+          : window.intersect(DateWindow.forMonth(_referenceMonth!));
+    }
+    if (_timeFilter == TimeFilter.thisWeek && _selectedMonthWeek != null) {
+      final month = _referenceMonth ?? DateTime.now();
+      final monthStart = DateTime(month.year, month.month);
+      final monthEnd = DateTime(month.year, month.month + 1);
+      final start = monthStart.add(Duration(days: _selectedMonthWeek! * 7));
+      final proposedEnd = start.add(const Duration(days: 7));
+      return DateWindow(
+        start: start,
+        endExclusive: proposedEnd.isBefore(monthEnd) ? proposedEnd : monthEnd,
       );
     }
     if (_timeFilter == TimeFilter.thisMonth && _selectedMonth != null) {
@@ -140,11 +174,24 @@ class DashboardController extends ChangeNotifier {
             : DateTime(start.year, start.month + 1),
       );
     }
-    return DateWindow.forFilter(
+    if (_timeFilter == TimeFilter.allTime && _referenceMonth != null) {
+      return DateWindow.forMonth(_referenceMonth!);
+    }
+    var window = DateWindow.forFilter(
       _timeFilter,
       customStart: _customStart,
       customEnd: _customEnd,
+      now: referenceDate,
     );
+    if (_referenceMonth != null &&
+        _timeFilter != TimeFilter.custom &&
+        _timeFilter != TimeFilter.allTime) {
+      if (_timeFilter == TimeFilter.thisMonth) {
+        return DateWindow.forMonth(_referenceMonth!);
+      }
+      window = window.intersect(DateWindow.forMonth(_referenceMonth!));
+    }
+    return window;
   }
 
   DateWindow? get previousWindow => currentWindow.previous;
@@ -176,6 +223,9 @@ class DashboardController extends ChangeNotifier {
     _exchangeRate =
         prefs.getDouble(_exchangeRateKey) ?? AppConfig.defaultExchangeRate;
     _language = AppLanguage.fromCode(prefs.getString(_languageKey));
+    _themeMode = prefs.getString(_themeModeKey) == ThemeMode.dark.name
+        ? ThemeMode.dark
+        : ThemeMode.light;
     _calculationStartMonth = _monthFromStorage(
       prefs.getString(_calculationStartMonthKey),
     );
@@ -221,6 +271,13 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_themeModeKey, mode.name);
+    notifyListeners();
+  }
+
   Future<void> updateCalculationStartMonth(DateTime? month) async {
     _calculationStartMonth = month == null
         ? null
@@ -240,6 +297,10 @@ class DashboardController extends ChangeNotifier {
   void selectTimeFilter(TimeFilter filter) {
     _selectedRecentDay = null;
     _selectedMonth = null;
+    _selectedMonthWeek = null;
+    if (filter == TimeFilter.allTime) {
+      _referenceMonth = null;
+    }
     _timeFilter = filter;
     notifyListeners();
   }
@@ -253,13 +314,32 @@ class DashboardController extends ChangeNotifier {
   void selectMonth(DateTime month) {
     _selectedRecentDay = null;
     _selectedMonth = DateTime(month.year, month.month);
+    _selectedMonthWeek = null;
     _timeFilter = TimeFilter.thisMonth;
+    notifyListeners();
+  }
+
+  void selectReferenceMonth(DateTime month) {
+    _selectedRecentDay = null;
+    _selectedMonth = null;
+    _selectedMonthWeek = null;
+    _referenceMonth = DateTime(month.year, month.month);
+    _timeFilter = TimeFilter.allTime;
+    notifyListeners();
+  }
+
+  void selectMonthWeek(int index) {
+    _selectedRecentDay = null;
+    _selectedMonth = null;
+    _selectedMonthWeek = index;
+    _timeFilter = TimeFilter.thisWeek;
     notifyListeners();
   }
 
   void setCustomRange(DateTimeRange range) {
     _selectedRecentDay = null;
     _selectedMonth = null;
+    _selectedMonthWeek = null;
     _customStart = DateTime(
       range.start.year,
       range.start.month,
@@ -314,6 +394,13 @@ class DateWindow {
 
   final DateTime? start;
   final DateTime? endExclusive;
+
+  factory DateWindow.forMonth(DateTime month) {
+    return DateWindow(
+      start: DateTime(month.year, month.month),
+      endExclusive: DateTime(month.year, month.month + 1),
+    );
+  }
 
   static DateWindow forFilter(
     TimeFilter filter, {
@@ -375,6 +462,20 @@ class DateWindow {
       return false;
     }
     return true;
+  }
+
+  DateWindow intersect(DateWindow other) {
+    final nextStart = switch ((start, other.start)) {
+      (null, final value) => value,
+      (final value, null) => value,
+      (final first?, final second?) => first.isAfter(second) ? first : second,
+    };
+    final nextEnd = switch ((endExclusive, other.endExclusive)) {
+      (null, final value) => value,
+      (final value, null) => value,
+      (final first?, final second?) => first.isBefore(second) ? first : second,
+    };
+    return DateWindow(start: nextStart, endExclusive: nextEnd);
   }
 
   DateWindow? get previous {

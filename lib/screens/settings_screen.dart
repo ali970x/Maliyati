@@ -171,6 +171,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(
+                            strings.appearance,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SegmentedButton<ThemeMode>(
+                            segments: [
+                              ButtonSegment(
+                                value: ThemeMode.light,
+                                label: Text(strings.lightTheme),
+                                icon: const Icon(Icons.light_mode_rounded),
+                              ),
+                              ButtonSegment(
+                                value: ThemeMode.dark,
+                                label: Text(strings.darkTheme),
+                                icon: const Icon(Icons.dark_mode_rounded),
+                              ),
+                            ],
+                            selected: {controller.themeMode},
+                            onSelectionChanged: (selection) {
+                              controller.updateThemeMode(selection.first);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Row(
                             children: [
                               Icon(
