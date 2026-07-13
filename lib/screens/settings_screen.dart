@@ -5,6 +5,7 @@ import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
 import '../services/google_sheet_service.dart';
 import '../widgets/finance_formatters.dart';
+import '../widgets/date_filter_picker.dart';
 import '../widgets/responsive_layout.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -170,6 +171,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.restart_alt_rounded,
+                                color: theme.colorScheme.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  strings.calculationStartMonth,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            strings.calculationStartDescription,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_month_rounded),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    controller.calculationStartMonth == null
+                                        ? strings.allHistory
+                                        : strings.startingFrom(
+                                            FinanceFormatters.monthYear(
+                                              controller.calculationStartMonth!,
+                                            ),
+                                          ),
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                if (controller.calculationStartMonth != null)
+                                  IconButton(
+                                    onPressed: () => controller
+                                        .updateCalculationStartMonth(null),
+                                    tooltip: strings.clearStartMonth,
+                                    icon: const Icon(Icons.close_rounded),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.tonalIcon(
+                            onPressed: _chooseCalculationStartMonth,
+                            icon: const Icon(Icons.edit_calendar_rounded),
+                            label: Text(strings.chooseStartMonth),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
                             strings.languageTitle,
                             style: theme.textTheme.titleMedium?.copyWith(
@@ -280,6 +364,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(widget.controller.strings.settingsSaved)),
     );
+  }
+
+  Future<void> _chooseCalculationStartMonth() async {
+    final month = await showAppMonthPicker(
+      context,
+      widget.controller,
+      initialMonth: widget.controller.calculationStartMonth ?? DateTime.now(),
+    );
+    if (month != null) {
+      await widget.controller.updateCalculationStartMonth(month);
+    }
   }
 }
 

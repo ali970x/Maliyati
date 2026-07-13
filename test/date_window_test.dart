@@ -51,6 +51,31 @@ void main() {
     expect(window.dayCount, 7);
   });
 
+  test('a selected past month includes that complete calendar month', () {
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+
+    controller.selectMonth(DateTime(2025, 2));
+
+    expect(controller.timeFilter, TimeFilter.thisMonth);
+    expect(controller.selectedMonth, DateTime(2025, 2));
+    expect(controller.currentWindow.contains(DateTime(2025, 1, 31)), isFalse);
+    expect(controller.currentWindow.contains(DateTime(2025, 2, 1)), isTrue);
+    expect(controller.currentWindow.contains(DateTime(2025, 2, 28)), isTrue);
+    expect(controller.currentWindow.contains(DateTime(2025, 3, 1)), isFalse);
+    expect(controller.currentWindow.dayCount, 28);
+  });
+
+  test('tapping this month clears a previously selected month', () {
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+
+    controller.selectMonth(DateTime(2025, 2));
+    controller.selectTimeFilter(TimeFilter.thisMonth);
+
+    expect(controller.selectedMonth, isNull);
+  });
+
   test('this week includes today and the previous six days', () {
     final window = DateWindow.forFilter(
       TimeFilter.thisWeek,

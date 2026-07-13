@@ -34,6 +34,7 @@ class DashboardController extends ChangeNotifier {
   static const _sheetUrlKey = 'sheet_url';
   static const _exchangeRateKey = 'exchange_rate';
   static const _languageKey = 'language';
+  static const _calculationStartMonthKey = 'calculation_start_month';
 
   final GoogleSheetService _service;
 
@@ -43,8 +44,10 @@ class DashboardController extends ChangeNotifier {
   AppLanguage _language = AppLanguage.english;
   TimeFilter _timeFilter = TimeFilter.thisMonth;
   DateTime? _selectedRecentDay;
+  DateTime? _selectedMonth;
   DateTime? _customStart;
   DateTime? _customEnd;
+  DateTime? _calculationStartMonth;
   DateTime? _lastUpdated;
   String? _errorMessage;
   bool _isLoading = false;
@@ -64,9 +67,13 @@ class DashboardController extends ChangeNotifier {
 
   DateTime? get selectedRecentDay => _selectedRecentDay;
 
+  DateTime? get selectedMonth => _selectedMonth;
+
   DateTime? get customStart => _customStart;
 
   DateTime? get customEnd => _customEnd;
+
+  DateTime? get calculationStartMonth => _calculationStartMonth;
 
   DateTime? get lastUpdated => _lastUpdated;
 
@@ -76,8 +83,26 @@ class DashboardController extends ChangeNotifier {
 
   bool get hasData => _transactions.isNotEmpty;
 
+  List<FinancialTransaction> get calculationTransactions {
+    final start = _calculationStartMonth;
+    if (start == null) {
+      return List.unmodifiable(_transactions);
+    }
+    return _transactions.where((transaction) {
+      if (!transaction.hasDate) {
+        return false;
+      }
+      final day = DateTime(
+        transaction.date.year,
+        transaction.date.month,
+        transaction.date.day,
+      );
+      return !day.isBefore(start);
+    }).toList();
+  }
+
   List<FinancialTransaction> get periodTransactions {
-    return _applyWindow(_transactions, currentWindow);
+    return _applyWindow(calculationTransactions, currentWindow);
   }
 
   List<FinancialTransaction> get previousPeriodTransactions {
@@ -85,7 +110,7 @@ class DashboardController extends ChangeNotifier {
     if (previous == null) {
       return const [];
     }
-    return _applyWindow(_transactions, previous);
+    return _applyWindow(calculationTransactions, previous);
   }
 
   DateWindow get currentWindow {
@@ -98,6 +123,21 @@ class DashboardController extends ChangeNotifier {
       return DateWindow(
         start: day,
         endExclusive: day.add(const Duration(days: 1)),
+      );
+    }
+    if (_timeFilter == TimeFilter.thisMonth && _selectedMonth != null) {
+      final start = DateTime(_selectedMonth!.year, _selectedMonth!.month);
+      final now = DateTime.now();
+      final isCurrentMonth = start.year == now.year && start.month == now.month;
+      return DateWindow(
+        start: start,
+        endExclusive: isCurrentMonth
+            ? DateTime(
+                now.year,
+                now.month,
+                now.day,
+              ).add(const Duration(days: 1))
+            : DateTime(start.year, start.month + 1),
       );
     }
     return DateWindow.forFilter(
@@ -136,6 +176,9 @@ class DashboardController extends ChangeNotifier {
     _exchangeRate =
         prefs.getDouble(_exchangeRateKey) ?? AppConfig.defaultExchangeRate;
     _language = AppLanguage.fromCode(prefs.getString(_languageKey));
+    _calculationStartMonth = _monthFromStorage(
+      prefs.getString(_calculationStartMonthKey),
+    );
     await refresh();
   }
 
@@ -178,8 +221,25 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateCalculationStartMonth(DateTime? month) async {
+    _calculationStartMonth = month == null
+        ? null
+        : DateTime(month.year, month.month);
+    final prefs = await SharedPreferences.getInstance();
+    if (_calculationStartMonth == null) {
+      await prefs.remove(_calculationStartMonthKey);
+    } else {
+      await prefs.setString(
+        _calculationStartMonthKey,
+        _calculationStartMonth!.toIso8601String(),
+      );
+    }
+    notifyListeners();
+  }
+
   void selectTimeFilter(TimeFilter filter) {
     _selectedRecentDay = null;
+    _selectedMonth = null;
     _timeFilter = filter;
     notifyListeners();
   }
@@ -190,8 +250,16 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void selectMonth(DateTime month) {
+    _selectedRecentDay = null;
+    _selectedMonth = DateTime(month.year, month.month);
+    _timeFilter = TimeFilter.thisMonth;
+    notifyListeners();
+  }
+
   void setCustomRange(DateTimeRange range) {
     _selectedRecentDay = null;
+    _selectedMonth = null;
     _customStart = DateTime(
       range.start.year,
       range.start.month,
@@ -200,6 +268,11 @@ class DashboardController extends ChangeNotifier {
     _customEnd = DateTime(range.end.year, range.end.month, range.end.day);
     _timeFilter = TimeFilter.custom;
     notifyListeners();
+  }
+
+  DateTime? _monthFromStorage(String? value) {
+    final parsed = DateTime.tryParse(value ?? '');
+    return parsed == null ? null : DateTime(parsed.year, parsed.month);
   }
 
   void updateTransactionLocally(

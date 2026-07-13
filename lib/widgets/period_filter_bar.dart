@@ -13,6 +13,9 @@ String periodFilterLabel(
   if (filter == TimeFilter.last3Days && controller.selectedRecentDay != null) {
     return FinanceFormatters.shortDate(controller.selectedRecentDay!);
   }
+  if (filter == TimeFilter.thisMonth && controller.selectedMonth != null) {
+    return FinanceFormatters.monthYear(controller.selectedMonth!);
+  }
   if (filter == TimeFilter.custom &&
       controller.customStart != null &&
       controller.customEnd != null) {
@@ -63,6 +66,7 @@ class PeriodFilterBar extends StatelessWidget {
                   context,
                   controller,
                 ),
+                TimeFilter.thisMonth => () => _showMonthPicker(context),
                 _ => null,
               },
             ),
@@ -80,6 +84,9 @@ class PeriodFilterBar extends StatelessWidget {
           ? 148
           : 164;
     }
+    if (filter == TimeFilter.thisMonth && controller.selectedMonth != null) {
+      return 132;
+    }
     return switch (filter) {
       TimeFilter.today => 92,
       TimeFilter.last3Days => 126,
@@ -88,6 +95,17 @@ class PeriodFilterBar extends StatelessWidget {
       TimeFilter.custom => 98,
       TimeFilter.allTime => 102,
     };
+  }
+
+  Future<void> _showMonthPicker(BuildContext context) async {
+    final month = await showAppMonthPicker(
+      context,
+      controller,
+      initialMonth: controller.selectedMonth ?? DateTime.now(),
+    );
+    if (month != null) {
+      controller.selectMonth(month);
+    }
   }
 
   IconData _icon(TimeFilter filter) {

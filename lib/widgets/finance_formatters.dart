@@ -27,6 +27,9 @@ class FinanceFormatters {
   static String shortDate(DateTime value) =>
       DateFormat('MMM d', localeCode).format(value);
 
+  static String monthYear(DateTime value) =>
+      DateFormat('MMM yyyy', localeCode).format(value);
+
   static String dateTime(DateTime value) =>
       DateFormat('MMM d, yyyy - h:mm a', localeCode).format(value);
 

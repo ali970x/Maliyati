@@ -186,6 +186,19 @@ class AppStrings {
       isArabic ? '$count عملية' : '$count transactions';
   String get restoreDefaults =>
       isArabic ? 'استعادة الافتراضي' : 'Restore defaults';
+  String get chooseMonth => isArabic ? 'اختر الشهر' : 'Choose month';
+  String get calculationStartMonth =>
+      isArabic ? 'بداية الحسابات' : 'Calculation start month';
+  String get calculationStartDescription => isArabic
+      ? 'اختر شهراً لتبدأ كل الحسابات منه. تبقى العمليات الأقدم محفوظة في Google Sheet ولن تظهر في حسابات التطبيق.'
+      : 'Choose the month where all calculations should begin. Older transactions stay in Google Sheet but are excluded from the app totals.';
+  String get allHistory => isArabic ? 'كل السجل' : 'All history';
+  String startingFrom(String value) =>
+      isArabic ? 'ابتداءً من $value' : 'Starting from $value';
+  String get chooseStartMonth =>
+      isArabic ? 'اختيار شهر البداية' : 'Choose start month';
+  String get clearStartMonth =>
+      isArabic ? 'إلغاء شهر البداية' : 'Clear start month';
   String get settingsSaved => isArabic
       ? 'تم حفظ الإعدادات وتحديث البيانات.'
       : 'Settings saved and refreshed.';
