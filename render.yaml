@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: maliyati-finance
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    autoDeployTrigger: commit
+    healthCheckPath: /

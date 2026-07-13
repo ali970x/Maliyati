@@ -1,0 +1,12 @@
+{
+  "name": "maliyati-render-host",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Render host and Google Sheets proxy for the Maliyati Flutter web app.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
