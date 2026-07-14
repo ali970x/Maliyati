@@ -39,6 +39,10 @@ class TransactionCard extends StatelessWidget {
         ? FinanceFormatters.date(transaction.date)
         : strings.noDateInSheet;
     final sheetAmount = _sheetAmountText(transaction);
+    final convertedAmount = FinanceFormatters.convertedAmount(
+      transaction,
+      exchangeRate,
+    );
 
     return Card(
       elevation: 0,
@@ -155,21 +159,48 @@ class TransactionCard extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Container(
-                constraints: const BoxConstraints(maxWidth: 84),
+                constraints: const BoxConstraints(minWidth: 86, maxWidth: 108),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    sheetAmount,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w900,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    SizedBox(
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: Text(
+                          sheetAmount,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: color,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (convertedAmount.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerEnd,
+                          child: Text(
+                            '≈ $convertedAmount',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ],

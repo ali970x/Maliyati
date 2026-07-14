@@ -242,6 +242,13 @@ class _ReadOnlyBody extends StatelessWidget {
     final description = transaction.description.isEmpty
         ? transaction.category
         : transaction.description;
+    final convertedAmount = FinanceFormatters.convertedAmount(
+      transaction,
+      exchangeRate,
+    );
+    final convertedLabel = transaction.currency == CurrencyCode.usd
+        ? strings.convertedLbp
+        : strings.convertedUsd;
 
     return ListView(
       padding: AppResponsive.isWideWeb(context)
@@ -292,7 +299,25 @@ class _ReadOnlyBody extends StatelessWidget {
                   fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 14),
+              Text(
+                FinanceFormatters.amount(transaction),
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (convertedAmount.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(
+                  '≈ $convertedAmount',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.78),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -302,12 +327,6 @@ class _ReadOnlyBody extends StatelessWidget {
                     value: transaction.hasDate
                         ? FinanceFormatters.date(transaction.date)
                         : strings.noDateInSheet,
-                  ),
-                  _HeaderChip(
-                    label: strings.convertedUsd,
-                    value: FinanceFormatters.usd(
-                      transaction.amountInUsd(exchangeRate),
-                    ),
                   ),
                 ],
               ),
@@ -352,12 +371,7 @@ class _ReadOnlyBody extends StatelessWidget {
                   : strings.amountUsd,
               value: FinanceFormatters.amount(transaction),
             ),
-            _DetailRow(
-              label: strings.convertedUsd,
-              value: FinanceFormatters.usd(
-                transaction.amountInUsd(exchangeRate),
-              ),
-            ),
+            _DetailRow(label: convertedLabel, value: convertedAmount),
             _DetailRow(
               label: strings.exchangeRate,
               value: '${exchangeRate.toStringAsFixed(0)} LBP = 1 USD',

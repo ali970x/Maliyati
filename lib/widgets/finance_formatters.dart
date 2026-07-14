@@ -39,4 +39,17 @@ class FinanceFormatters {
     }
     return usd(transaction.amount);
   }
+
+  static String convertedAmount(
+    FinancialTransaction transaction,
+    double exchangeRate,
+  ) {
+    if (transaction.currency == CurrencyCode.usd) {
+      return lbp(transaction.amount * exchangeRate);
+    }
+    if (transaction.currency == CurrencyCode.lbp) {
+      return usd(transaction.amount / exchangeRate);
+    }
+    return '';
+  }
 }

@@ -246,6 +246,8 @@ class AppStrings {
   String get amountLbp => isArabic ? 'المبلغ بالليرة' : 'Amount LBP';
   String get convertedUsd =>
       isArabic ? 'القيمة المحولة للدولار' : 'Converted USD';
+  String get convertedLbp =>
+      isArabic ? 'القيمة المحولة لليرة' : 'Converted LBP';
   String get sheetColumn => isArabic ? 'عمود الجدول' : 'Sheet column';
   String get value => isArabic ? 'القيمة' : 'Value';
 
