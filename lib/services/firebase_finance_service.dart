@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/transaction.dart';
@@ -110,6 +111,16 @@ class FirebaseFinanceService {
   }
 
   Future<FinanceUser?> signInWithGoogle() async {
+    if (kIsWeb) {
+      try {
+        final result = await _auth.signInWithPopup(GoogleAuthProvider());
+        await _ensureUserProfile(result.user);
+        return _toFinanceUser(result.user, includeProfile: true);
+      } on FirebaseAuthException catch (error) {
+        throw FirebaseFinanceException(_googleWebErrorMessage(error));
+      }
+    }
+
     final googleAccount = await _googleSignIn.signIn();
     if (googleAccount == null) {
       return currentUser;
@@ -122,6 +133,23 @@ class FirebaseFinanceService {
     final result = await _auth.signInWithCredential(credential);
     await _ensureUserProfile(result.user);
     return _toFinanceUser(result.user, includeProfile: true);
+  }
+
+  String _googleWebErrorMessage(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'unauthorized-domain':
+        return 'This website is not yet allowed by Firebase. Add maliyati-finance.onrender.com under Firebase Authentication > Settings > Authorized domains.';
+      case 'operation-not-allowed':
+        return 'Google sign-in is not enabled in Firebase Authentication.';
+      case 'popup-blocked':
+        return 'Your browser blocked the Google sign-in window. Allow popups, then try again.';
+      case 'popup-closed-by-user':
+      case 'cancelled-popup-request':
+        return 'Google sign-in was cancelled.';
+      default:
+        return error.message ??
+            'Google sign-in could not be completed. Please try again.';
+    }
   }
 
   Future<void> signOut() async {
