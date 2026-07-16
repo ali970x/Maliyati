@@ -328,9 +328,22 @@ class DashboardController extends ChangeNotifier {
       );
       _useFirestore = _isFirebaseConfigured;
       if (_isFirebaseConfigured && !_usesInjectedSheetService) {
-        _user = await _firebase.waitForStoredUser();
+        try {
+          _user = await _firebase.waitForStoredUser();
+        } catch (_) {
+          // A damaged browser session must never block the sign-in screen.
+          _user = null;
+          try {
+            await _firebase.signOut();
+          } catch (_) {}
+        }
       }
-      await refresh();
+      await refresh(silentWhenSignedOut: true);
+    } catch (_) {
+      _isFirebaseConfigured = false;
+      _useFirestore = false;
+      _user = null;
+      _transactions = const [];
     } finally {
       _isInitialized = true;
       notifyListeners();
@@ -345,7 +358,7 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh({bool silentWhenSignedOut = false}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -373,11 +386,24 @@ class DashboardController extends ChangeNotifier {
       await _saveSequentialIdsIfNeeded();
       _lastUpdated = DateTime.now();
     } catch (error) {
-      _errorMessage = error.toString();
+      if (silentWhenSignedOut && _user == null) {
+        _transactions = const [];
+        _lastUpdated = DateTime.now();
+      } else {
+        _errorMessage = _friendlyErrorMessage(error);
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  String _friendlyErrorMessage(Object error) {
+    final message = error.toString();
+    if (message.contains('Null check operator used on a null value')) {
+      return 'Could not restore the saved session. Please sign in again.';
+    }
+    return message;
   }
 
   Future<void> updateSettings({
