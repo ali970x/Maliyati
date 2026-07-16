@@ -5,8 +5,8 @@ class AppResponsive {
   const AppResponsive._();
 
   static const double webBreakpoint = 960;
-  static const double webContentMaxWidth = 1200;
-  static const double webDetailMaxWidth = 920;
+  static const double webContentMaxWidth = 1360;
+  static const double webDetailMaxWidth = 980;
 
   static bool get isWeb => kIsWeb;
 
@@ -20,7 +20,7 @@ class AppResponsive {
 
   static EdgeInsets pagePadding(BuildContext context) {
     return isWideWeb(context)
-        ? const EdgeInsets.fromLTRB(24, 20, 24, 32)
+        ? const EdgeInsets.fromLTRB(32, 26, 32, 40)
         : const EdgeInsets.fromLTRB(16, 12, 16, 24);
   }
 }

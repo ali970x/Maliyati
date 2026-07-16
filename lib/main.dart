@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
@@ -86,7 +87,7 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0F766E),
+      seedColor: kIsWeb ? const Color(0xFF2563EB) : const Color(0xFF0F766E),
       brightness: brightness,
     );
     final surface = isDark ? const Color(0xFF171C20) : Colors.white;
@@ -108,6 +109,8 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: isDark
           ? const Color(0xFF0E1215)
+          : kIsWeb
+          ? const Color(0xFFF6F8FC)
           : const Color(0xFFF5F7FA),
       cardTheme: CardThemeData(
         color: surface,
@@ -347,26 +350,25 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
                   children: [
                     _GlobalTopBar(
                       onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                      selectedIndex: _selectedIndex,
+                      onDestinationSelected: (index) =>
+                          setState(() => _selectedIndex = index),
                     ),
                     Expanded(
-                      child: AppResponsive.isWeb
-                          ? indexedScreens
-                          : Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: AppResponsive.contentMaxWidth(
-                                    context,
-                                  ),
-                                ),
-                                child: indexedScreens,
-                              ),
-                            ),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: AppResponsive.contentMaxWidth(context),
+                          ),
+                          child: indexedScreens,
+                        ),
+                      ),
                     ),
                   ],
                 ),
               ),
               bottomNavigationBar: AppResponsive.isWeb
-                  ? navigationBar
+                  ? null
                   : Center(
                       heightFactor: 1,
                       child: ConstrainedBox(
@@ -385,9 +387,15 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
 }
 
 class _GlobalTopBar extends StatelessWidget {
-  const _GlobalTopBar({required this.onOpenMenu});
+  const _GlobalTopBar({
+    required this.onOpenMenu,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
 
   final VoidCallback onOpenMenu;
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -397,7 +405,7 @@ class _GlobalTopBar extends StatelessWidget {
       child: Material(
         color: theme.colorScheme.surface,
         child: Container(
-          height: 58,
+          height: AppResponsive.isWideWeb(context) ? 68 : 58,
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
@@ -438,9 +446,123 @@ class _GlobalTopBar extends StatelessWidget {
                       letterSpacing: 0,
                     ),
                   ),
-                  const Spacer(),
+                  if (AppResponsive.isWideWeb(context)) ...[
+                    const SizedBox(width: 28),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _WebNavItem(
+                              index: 0,
+                              selectedIndex: selectedIndex,
+                              icon: Icons.dashboard_outlined,
+                              selectedIcon: Icons.dashboard_rounded,
+                              label: 'Dashboard',
+                              onSelected: onDestinationSelected,
+                            ),
+                            _WebNavItem(
+                              index: 1,
+                              selectedIndex: selectedIndex,
+                              icon: Icons.receipt_long_outlined,
+                              selectedIcon: Icons.receipt_long_rounded,
+                              label: 'Transactions',
+                              onSelected: onDestinationSelected,
+                            ),
+                            _WebNavItem(
+                              index: 2,
+                              selectedIndex: selectedIndex,
+                              icon: Icons.add_circle_outline_rounded,
+                              selectedIcon: Icons.add_circle_rounded,
+                              label: 'Add',
+                              onSelected: onDestinationSelected,
+                            ),
+                            _WebNavItem(
+                              index: 3,
+                              selectedIndex: selectedIndex,
+                              icon: Icons.insights_outlined,
+                              selectedIcon: Icons.insights_rounded,
+                              label: 'Analytics',
+                              onSelected: onDestinationSelected,
+                            ),
+                            _WebNavItem(
+                              index: 4,
+                              selectedIndex: selectedIndex,
+                              icon: Icons.notifications_active_outlined,
+                              selectedIcon: Icons.notifications_active_rounded,
+                              label: 'Alerts',
+                              onSelected: onDestinationSelected,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else
+                    const Spacer(),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WebNavItem extends StatelessWidget {
+  const _WebNavItem({
+    required this.index,
+    required this.selectedIndex,
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    required this.onSelected,
+  });
+
+  final int index;
+  final int selectedIndex;
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = index == selectedIndex;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Material(
+        color: selected
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.72)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => onSelected(index),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  selected ? selectedIcon : icon,
+                  size: 20,
+                  color: selected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: selected
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
