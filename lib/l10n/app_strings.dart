@@ -210,12 +210,13 @@ class AppStrings {
   String get arabic => isArabic ? 'العربية' : 'Arabic';
   String get transactionDetails =>
       isArabic ? 'تفاصيل العملية' : 'Transaction details';
-  String get editLocally => isArabic ? 'تعديل محلي' : 'Edit locally';
+  String get editLocally => isArabic ? 'تعديل' : 'Edit';
   String get localEditNotice => isArabic
-      ? 'هذا التعديل مؤقت داخل التطبيق فقط. عند تحديث البيانات من Google Sheet سيعود السجل كما هو في الجدول.'
-      : 'This edit is temporary inside the app only. Refreshing from Google Sheet will restore the sheet version.';
-  String get localChangesSaved =>
-      isArabic ? 'تم حفظ التعديل محلياً.' : 'Local changes saved.';
+      ? 'أي تعديل تحفظه هنا ينحفظ مباشرة على قاعدة البيانات ويظهر بالتطبيق.'
+      : 'Changes saved here go directly to the database and update the app.';
+  String get localChangesSaved => isArabic
+      ? 'تم حفظ التعديل على قاعدة البيانات.'
+      : 'Changes saved to the database.';
   String get save => isArabic ? 'حفظ' : 'Save';
   String get cancel => isArabic ? 'إلغاء' : 'Cancel';
   String get chooseDateFilter =>

@@ -2,8 +2,13 @@ enum TransactionType { income, expense, reserveable, unknown }
 
 enum CurrencyCode { usd, lbp, unknown }
 
+enum TransactionSource { application, googleSheet, script }
+
 class FinancialTransaction {
   const FinancialTransaction({
+    this.id,
+    this.createdAt,
+    this.source = TransactionSource.application,
     required this.date,
     required this.hasDate,
     required this.type,
@@ -16,6 +21,9 @@ class FinancialTransaction {
     required this.raw,
   });
 
+  final String? id;
+  final DateTime? createdAt;
+  final TransactionSource source;
   final DateTime date;
   final bool hasDate;
   final TransactionType type;
@@ -44,6 +52,9 @@ class FinancialTransaction {
   }
 
   FinancialTransaction copyWith({
+    String? id,
+    DateTime? createdAt,
+    TransactionSource? source,
     DateTime? date,
     bool? hasDate,
     TransactionType? type,
@@ -56,6 +67,9 @@ class FinancialTransaction {
     Map<String, String>? raw,
   }) {
     return FinancialTransaction(
+      id: id ?? this.id,
+      createdAt: createdAt ?? this.createdAt,
+      source: source ?? this.source,
       date: date ?? this.date,
       hasDate: hasDate ?? this.hasDate,
       type: type ?? this.type,
@@ -67,6 +81,19 @@ class FinancialTransaction {
       notes: notes ?? this.notes,
       raw: raw ?? this.raw,
     );
+  }
+}
+
+extension TransactionSourceLabel on TransactionSource {
+  String get label {
+    switch (this) {
+      case TransactionSource.application:
+        return 'application';
+      case TransactionSource.googleSheet:
+        return 'Google Sheet';
+      case TransactionSource.script:
+        return 'script';
+    }
   }
 }
 

@@ -1,19 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/services.dart';
+import 'package:share_handler/share_handler.dart';
 
 import 'config/app_config.dart';
 import 'controllers/dashboard_controller.dart';
 import 'l10n/app_strings.dart';
+import 'screens/add_transaction_screen.dart';
 import 'screens/analytics_screen.dart';
+import 'screens/spending_alerts_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'widgets/finance_formatters.dart';
 import 'widgets/responsive_layout.dart';
+import 'services/firebase_bootstrap.dart';
+import 'services/smart_clipboard_service.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await FirebaseBootstrap.initializeIfConfigured();
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
@@ -65,7 +74,11 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
         themeMode: _controller.themeMode,
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
-        home: FinanceHome(controller: _controller),
+        home: !_controller.isInitialized
+            ? const _SessionLoadingScreen()
+            : _controller.isSignedIn
+            ? FinanceHome(controller: _controller)
+            : LoginScreen(controller: _controller),
       ),
     );
   }
@@ -132,6 +145,55 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
   }
 }
 
+class _SessionLoadingScreen extends StatelessWidget {
+  const _SessionLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: [
+                  BoxShadow(
+                    color: theme.colorScheme.shadow.withValues(alpha: 0.14),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Image.asset(
+                  'assets/branding/maliyati_app_icon.png',
+                  width: 74,
+                  height: 74,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.6,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class FinanceHome extends StatefulWidget {
   const FinanceHome({super.key, required this.controller});
 
@@ -141,8 +203,64 @@ class FinanceHome extends StatefulWidget {
   State<FinanceHome> createState() => _FinanceHomeState();
 }
 
-class _FinanceHomeState extends State<FinanceHome> {
+class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _selectedIndex = 0;
+  int _smartInputRequest = 0;
+  String? _smartInputScript;
+  bool _smartInputAutoRun = false;
+  final _smartClipboard = SmartClipboardService.instance;
+  StreamSubscription<SharedMedia>? _shareSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _smartClipboard.initialize(onOpenSmartInput: _openSmartInput);
+    _initializeShareHandler();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _shareSubscription?.cancel();
+    _smartClipboard.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _smartClipboard.updateLifecycle(state);
+  }
+
+  void _openSmartInput(String script, {bool autoRun = true}) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedIndex = 2;
+      _smartInputScript = script;
+      _smartInputAutoRun = autoRun;
+      _smartInputRequest += 1;
+    });
+  }
+
+  Future<void> _initializeShareHandler() async {
+    final handler = ShareHandler.instance;
+    _shareSubscription = handler.sharedMediaStream.listen(_handleSharedMedia);
+    final initialMedia = await handler.getInitialSharedMedia();
+    if (initialMedia != null) {
+      _handleSharedMedia(initialMedia);
+    }
+  }
+
+  void _handleSharedMedia(SharedMedia media) {
+    final text = media.content?.trim() ?? '';
+    if (text.isEmpty) {
+      return;
+    }
+    _openSmartInput(text, autoRun: false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,8 +271,14 @@ class _FinanceHomeState extends State<FinanceHome> {
         final screens = [
           DashboardScreen(controller: controller),
           TransactionsScreen(controller: controller),
+          AddTransactionScreen(
+            key: ValueKey('smart-input-$_smartInputRequest'),
+            controller: controller,
+            initialScript: _smartInputScript,
+            autoRunInitialScript: _smartInputAutoRun,
+          ),
           AnalyticsScreen(controller: controller),
-          SettingsScreen(controller: controller),
+          SpendingAlertsScreen(controller: controller),
         ];
         final strings = controller.strings;
         FinanceFormatters.localeCode = controller.language.code;
@@ -178,14 +302,19 @@ class _FinanceHomeState extends State<FinanceHome> {
               label: strings.transactions,
             ),
             NavigationDestination(
+              icon: const _AddNavIcon(selected: false),
+              selectedIcon: const _AddNavIcon(selected: true),
+              label: 'Add',
+            ),
+            NavigationDestination(
               icon: const Icon(Icons.insights_outlined),
               selectedIcon: const Icon(Icons.insights_rounded),
               label: strings.analytics,
             ),
-            NavigationDestination(
-              icon: const Icon(Icons.settings_outlined),
-              selectedIcon: const Icon(Icons.settings_rounded),
-              label: strings.settings,
+            const NavigationDestination(
+              icon: Icon(Icons.notifications_active_outlined),
+              selectedIcon: Icon(Icons.notifications_active_rounded),
+              label: 'Alerts',
             ),
           ],
         );
@@ -209,17 +338,32 @@ class _FinanceHomeState extends State<FinanceHome> {
                 ? TextDirection.rtl
                 : TextDirection.ltr,
             child: Scaffold(
+              key: _scaffoldKey,
+              drawerEdgeDragWidth: 28,
+              drawerScrimColor: Colors.black.withValues(alpha: 0.42),
+              drawer: SettingsDrawer(controller: controller),
               body: SafeArea(
-                child: AppResponsive.isWeb
-                    ? indexedScreens
-                    : Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: AppResponsive.contentMaxWidth(context),
-                          ),
-                          child: indexedScreens,
-                        ),
-                      ),
+                child: Column(
+                  children: [
+                    _GlobalTopBar(
+                      onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                    ),
+                    Expanded(
+                      child: AppResponsive.isWeb
+                          ? indexedScreens
+                          : Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: AppResponsive.contentMaxWidth(
+                                    context,
+                                  ),
+                                ),
+                                child: indexedScreens,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
               ),
               bottomNavigationBar: AppResponsive.isWeb
                   ? navigationBar
@@ -236,6 +380,98 @@ class _FinanceHomeState extends State<FinanceHome> {
           ),
         );
       },
+    );
+  }
+}
+
+class _GlobalTopBar extends StatelessWidget {
+  const _GlobalTopBar({required this.onOpenMenu});
+
+  final VoidCallback onOpenMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Material(
+        color: theme.colorScheme.surface,
+        child: Container(
+          height: 58,
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.72),
+              ),
+            ),
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: AppResponsive.contentMaxWidth(context),
+              ),
+              child: Row(
+                children: [
+                  Tooltip(
+                    message: 'Open settings',
+                    child: IconButton(
+                      onPressed: onOpenMenu,
+                      icon: const Icon(Icons.menu_rounded, size: 30),
+                      splashRadius: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: Image.asset(
+                      'assets/branding/maliyati_app_icon.png',
+                      width: 29,
+                      height: 29,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Text(
+                    AppConfig.appName,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0,
+                    ),
+                  ),
+                  const Spacer(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddNavIcon extends StatelessWidget {
+  const _AddNavIcon({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: selected ? 40 : 34,
+      height: selected ? 40 : 34,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected
+            ? theme.colorScheme.primary
+            : theme.colorScheme.primaryContainer,
+      ),
+      child: Icon(
+        Icons.add_rounded,
+        color: selected
+            ? theme.colorScheme.onPrimary
+            : theme.colorScheme.onPrimaryContainer,
+      ),
     );
   }
 }

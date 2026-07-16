@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/transaction.dart';
 import 'finance_formatters.dart';
 import '../l10n/app_strings.dart';
+import 'transaction_identity.dart';
 
 class TransactionCard extends StatelessWidget {
   const TransactionCard({
@@ -43,6 +44,7 @@ class TransactionCard extends StatelessWidget {
       transaction,
       exchangeRate,
     );
+    final transactionId = TransactionIdentity.shortId(transaction);
 
     return Card(
       elevation: 0,
@@ -88,6 +90,28 @@ class TransactionCard extends StatelessWidget {
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
+                    ),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.tag_rounded,
+                          size: 14,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'ID: $transactionId',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     if (transaction.category.isNotEmpty) ...[
                       const SizedBox(height: 5),

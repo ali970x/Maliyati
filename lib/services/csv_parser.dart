@@ -31,6 +31,15 @@ class CsvParser {
       }
 
       final parsedDate = _parseDate(_value(map, 'date'));
+      final createdAt = _parseDateTime(
+        _valueAny(map, const [
+          'created_at',
+          'created',
+          'created_at_time',
+          'createdat',
+        ]),
+      );
+      final source = _parseSource(_valueAny(map, const ['source', 'origin']));
       final date = parsedDate ?? _today();
       final hasDate = parsedDate != null;
       final type = _parseType(
@@ -87,6 +96,9 @@ class CsvParser {
             paymentMethod: paymentMethod,
             notes: notes,
             raw: map,
+            id: _valueAny(map, const ['id', 'transaction_id']),
+            createdAt: createdAt,
+            source: source,
           ),
         );
         continue;
@@ -108,6 +120,9 @@ class CsvParser {
             paymentMethod: paymentMethod,
             notes: notes,
             raw: map,
+            id: _valueAny(map, const ['id', 'transaction_id']),
+            createdAt: createdAt,
+            source: source,
           ),
         );
       }
@@ -125,6 +140,9 @@ class CsvParser {
             paymentMethod: paymentMethod,
             notes: notes,
             raw: map,
+            id: _valueAny(map, const ['id', 'transaction_id']),
+            createdAt: createdAt,
+            source: source,
           ),
         );
       }
@@ -217,8 +235,14 @@ class CsvParser {
     required String paymentMethod,
     required String notes,
     required Map<String, String> raw,
+    String? id,
+    DateTime? createdAt,
+    TransactionSource source = TransactionSource.googleSheet,
   }) {
     return FinancialTransaction(
+      id: id == null || id.trim().isEmpty ? null : id.trim(),
+      createdAt: createdAt,
+      source: source,
       date: date,
       hasDate: hasDate,
       type: type,
@@ -230,6 +254,19 @@ class CsvParser {
       notes: notes,
       raw: raw,
     );
+  }
+
+  TransactionSource _parseSource(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'application' || normalized == 'app') {
+      return TransactionSource.application;
+    }
+    if (normalized == 'script' ||
+        normalized == 'gemini' ||
+        normalized == 'manual') {
+      return TransactionSource.script;
+    }
+    return TransactionSource.googleSheet;
   }
 
   TransactionType _parseType(String value) {
@@ -321,5 +358,19 @@ class CsvParser {
     }
 
     return null;
+  }
+
+  DateTime? _parseDateTime(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final parsed =
+        DateTime.tryParse(trimmed.replaceFirst(' ', 'T')) ??
+        _parseDate(trimmed);
+    if (parsed == null || parsed.year < 2000) {
+      return null;
+    }
+    return parsed;
   }
 }

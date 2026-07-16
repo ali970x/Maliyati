@@ -9,6 +9,7 @@ import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
+import '../widgets/transaction_identity.dart';
 import 'transaction_detail_screen.dart';
 
 enum TransactionSort { newest, oldest, highestAmount, lowestAmount }
@@ -196,15 +197,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       if (query.isEmpty) {
         return true;
       }
-      final searchable = [
-        transaction.category,
-        transaction.description,
-        transaction.paymentMethod,
-        transaction.notes,
-        transaction.type.label,
-        transaction.currency.label,
-      ].join(' ').toLowerCase();
-      return searchable.contains(query);
+      return TransactionIdentity.searchableText(transaction).contains(query);
     }).toList();
 
     results.sort((a, b) {

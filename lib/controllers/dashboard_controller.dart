@@ -4,9 +4,33 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
+import '../services/firebase_finance_service.dart';
+import '../services/firebase_bootstrap.dart';
+import '../services/gemini_transaction_parser.dart';
 import '../services/google_sheet_service.dart';
+import '../services/sheet_export_service.dart';
 
 enum TimeFilter { today, last3Days, thisWeek, thisMonth, custom, allTime }
+
+class SmartActionExecutionSummary {
+  const SmartActionExecutionSummary({
+    required this.total,
+    required this.added,
+    required this.edited,
+    required this.deleted,
+    required this.failures,
+  });
+
+  final int total;
+  final int added;
+  final int edited;
+  final int deleted;
+  final List<String> failures;
+
+  int get succeeded => added + edited + deleted;
+
+  bool get hasFailures => failures.isNotEmpty;
+}
 
 extension TimeFilterLabel on TimeFilter {
   String get label {
@@ -28,19 +52,37 @@ extension TimeFilterLabel on TimeFilter {
 }
 
 class DashboardController extends ChangeNotifier {
-  DashboardController({GoogleSheetService? service})
-    : _service = service ?? GoogleSheetService();
+  DashboardController({
+    GoogleSheetService? service,
+    FirebaseFinanceService? firebaseService,
+    SheetExportService? sheetExportService,
+    GeminiTransactionParser? geminiParser,
+  }) : _usesInjectedSheetService = service != null,
+       _service = service ?? GoogleSheetService(),
+       _sheetExportService = sheetExportService ?? SheetExportService(),
+       _geminiParser = geminiParser ?? GeminiTransactionParser() {
+    _firebaseService = firebaseService;
+  }
 
   static const _sheetUrlKey = 'sheet_url';
   static const _exchangeRateKey = 'exchange_rate';
   static const _languageKey = 'language';
   static const _themeModeKey = 'theme_mode';
   static const _calculationStartMonthKey = 'calculation_start_month';
+  static const _firestoreEnabledKey = 'firestore_enabled';
+  static const _sheetExportEndpointKey = 'sheet_export_endpoint';
+  static const _sheetExportSecretKey = 'sheet_export_secret';
 
   final GoogleSheetService _service;
+  final bool _usesInjectedSheetService;
+  FirebaseFinanceService? _firebaseService;
+  final SheetExportService _sheetExportService;
+  final GeminiTransactionParser _geminiParser;
 
   List<FinancialTransaction> _transactions = [];
   String _sheetUrl = AppConfig.defaultGoogleSheetUrl;
+  String _sheetExportEndpoint = AppConfig.sheetExportEndpoint;
+  String _sheetExportSecret = AppConfig.sheetExportSecret;
   double _exchangeRate = AppConfig.defaultExchangeRate;
   AppLanguage _language = AppLanguage.english;
   ThemeMode _themeMode = ThemeMode.light;
@@ -55,11 +97,19 @@ class DashboardController extends ChangeNotifier {
   DateTime? _lastUpdated;
   String? _errorMessage;
   bool _isLoading = false;
+  bool _isInitialized = false;
+  bool _isFirebaseConfigured = false;
+  bool _useFirestore = false;
+  FinanceUser? _user;
 
   List<FinancialTransaction> get transactions =>
       List.unmodifiable(_transactions);
 
   String get sheetUrl => _sheetUrl;
+
+  String get sheetExportEndpoint => _sheetExportEndpoint;
+
+  String get sheetExportSecret => _sheetExportSecret;
 
   double get exchangeRate => _exchangeRate;
 
@@ -101,7 +151,47 @@ class DashboardController extends ChangeNotifier {
 
   bool get isLoading => _isLoading;
 
+  bool get isInitialized => _isInitialized;
+
   bool get hasData => _transactions.isNotEmpty;
+
+  bool get isFirebaseConfigured => _isFirebaseConfigured;
+
+  bool get useFirestore => _useFirestore;
+
+  bool get isSignedIn => _user != null;
+
+  FinanceUser? get user => _user;
+
+  List<String> get categoryOptions {
+    final values =
+        _transactions
+            .map((transaction) => transaction.category.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return values;
+  }
+
+  List<String> get paymentMethodOptions {
+    final values =
+        _transactions
+            .map((transaction) => transaction.paymentMethod.trim())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    return values;
+  }
+
+  bool get isSheetExportConfigured => _sheetExportService.isConfigured(
+    endpoint: _sheetExportEndpoint,
+    secret: _sheetExportSecret,
+  );
+
+  FirebaseFinanceService get _firebase =>
+      _firebaseService ??= FirebaseFinanceService();
 
   List<FinancialTransaction> get calculationTransactions {
     final start = _calculationStartMonth;
@@ -217,19 +307,42 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
-    _sheetUrl =
-        prefs.getString(_sheetUrlKey) ?? AppConfig.defaultGoogleSheetUrl;
-    _exchangeRate =
-        prefs.getDouble(_exchangeRateKey) ?? AppConfig.defaultExchangeRate;
-    _language = AppLanguage.fromCode(prefs.getString(_languageKey));
-    _themeMode = prefs.getString(_themeModeKey) == ThemeMode.dark.name
-        ? ThemeMode.dark
-        : ThemeMode.light;
-    _calculationStartMonth = _monthFromStorage(
-      prefs.getString(_calculationStartMonthKey),
-    );
-    await refresh();
+    try {
+      _isFirebaseConfigured = await FirebaseBootstrap.initializeIfConfigured();
+      final prefs = await SharedPreferences.getInstance();
+      _sheetUrl =
+          prefs.getString(_sheetUrlKey) ?? AppConfig.defaultGoogleSheetUrl;
+      _sheetExportEndpoint =
+          prefs.getString(_sheetExportEndpointKey) ??
+          AppConfig.sheetExportEndpoint;
+      _sheetExportSecret =
+          prefs.getString(_sheetExportSecretKey) ?? AppConfig.sheetExportSecret;
+      _exchangeRate =
+          prefs.getDouble(_exchangeRateKey) ?? AppConfig.defaultExchangeRate;
+      _language = AppLanguage.fromCode(prefs.getString(_languageKey));
+      _themeMode = prefs.getString(_themeModeKey) == ThemeMode.dark.name
+          ? ThemeMode.dark
+          : ThemeMode.light;
+      _calculationStartMonth = _monthFromStorage(
+        prefs.getString(_calculationStartMonthKey),
+      );
+      _useFirestore = _isFirebaseConfigured;
+      if (_isFirebaseConfigured && !_usesInjectedSheetService) {
+        _user = await _firebase.waitForStoredUser();
+      }
+      await refresh();
+    } finally {
+      _isInitialized = true;
+      notifyListeners();
+    }
+  }
+
+  void clearError() {
+    if (_errorMessage == null) {
+      return;
+    }
+    _errorMessage = null;
+    notifyListeners();
   }
 
   Future<void> refresh() async {
@@ -238,7 +351,26 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _transactions = await _service.fetchTransactions(_sheetUrl);
+      if (_usesInjectedSheetService) {
+        _transactions = await _service.fetchTransactions(_sheetUrl);
+        _lastUpdated = DateTime.now();
+        return;
+      }
+      if (!_isFirebaseConfigured) {
+        throw const FirebaseFinanceException(
+          'Firebase is not configured. Check firebase_options.dart and google-services.json.',
+        );
+      }
+      final basicUser = _firebase.currentUser;
+      if (basicUser == null) {
+        _user = null;
+        _transactions = const [];
+        _lastUpdated = DateTime.now();
+        return;
+      }
+      _user = await _firebase.loadCurrentUser() ?? basicUser;
+      _transactions = await _firebase.fetchTransactions();
+      await _saveSequentialIdsIfNeeded();
       _lastUpdated = DateTime.now();
     } catch (error) {
       _errorMessage = error.toString();
@@ -249,19 +381,489 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> updateSettings({
-    required String sheetUrl,
+    String? sheetUrl,
+    required String sheetExportEndpoint,
+    required String sheetExportSecret,
     required double exchangeRate,
   }) async {
-    _sheetUrl = sheetUrl.trim();
+    _sheetUrl = sheetUrl?.trim().isNotEmpty == true
+        ? sheetUrl!.trim()
+        : _sheetUrl;
+    _sheetExportEndpoint = sheetExportEndpoint.trim();
+    _sheetExportSecret = sheetExportSecret.trim().isEmpty
+        ? AppConfig.defaultSheetExportSecret
+        : sheetExportSecret.trim();
     _exchangeRate = exchangeRate <= 0
         ? AppConfig.defaultExchangeRate
         : exchangeRate;
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sheetUrlKey, _sheetUrl);
+    await prefs.setString(_sheetExportEndpointKey, _sheetExportEndpoint);
+    await prefs.setString(_sheetExportSecretKey, _sheetExportSecret);
     await prefs.setDouble(_exchangeRateKey, _exchangeRate);
+    await _saveSheetIntegrationSettings();
 
     notifyListeners();
+  }
+
+  Future<int> exportCurrentTransactionsToSheet({
+    void Function(int completed, int total, String label)? onProgress,
+  }) async {
+    if (!isSheetExportConfigured) {
+      throw const FirebaseFinanceException(
+        'Google Sheet export is not configured yet. Firestore remains the only live database.',
+      );
+    }
+    onProgress?.call(0, 0, 'Checking IDs');
+    final normalized = await _saveSequentialIdsIfNeeded();
+    final total = normalized.length;
+    onProgress?.call(0, total, 'Preparing smart sync');
+    await _sheetExportService.syncTransactions(
+      normalized,
+      endpoint: _sheetExportEndpoint,
+      secret: _sheetExportSecret,
+      onProgress: onProgress,
+    );
+    onProgress?.call(total, total, 'Google Sheet synced');
+    notifyListeners();
+    return total;
+  }
+
+  Future<int> repairTransactionIds({
+    void Function(int completed, int total, String label)? onProgress,
+  }) async {
+    final normalized = await _saveSequentialIdsIfNeeded(onProgress: onProgress);
+    return normalized.length;
+  }
+
+  Future<int> importGoogleSheetToFirestore({
+    void Function(int completed, int total, String label)? onProgress,
+  }) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    if (_firebase.currentUser == null) {
+      throw const FirebaseFinanceException('Sign in first.');
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      onProgress?.call(0, 0, 'Reading Google Sheet');
+      final sheetTransactions = await _service.fetchTransactions(_sheetUrl);
+      onProgress?.call(0, sheetTransactions.length, 'Saving to database');
+      final preparedTransactions = _assignMissingSequentialIds(
+        sheetTransactions
+            .map(
+              (transaction) =>
+                  transaction.copyWith(source: TransactionSource.googleSheet),
+            )
+            .toList(growable: false),
+      );
+      final imported = await _firebase.replaceTransactions(
+        preparedTransactions,
+      );
+      _transactions = imported;
+      _lastUpdated = DateTime.now();
+      onProgress?.call(imported.length, imported.length, 'Import complete');
+      return imported.length;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateUseFirestore(bool value) async {
+    _useFirestore = value && _isFirebaseConfigured;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_firestoreEnabledKey, _useFirestore);
+    notifyListeners();
+    await refresh();
+  }
+
+  Future<void> signInWithGoogle() async {
+    if (!_isFirebaseConfigured) {
+      _errorMessage =
+          'Firebase is not configured yet. Check firebase_options.dart.';
+      notifyListeners();
+      return;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await _firebase.signInWithGoogle();
+      _useFirestore = true;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_firestoreEnabledKey, true);
+      await _loadSheetIntegrationSettings();
+      await refresh();
+    } catch (error) {
+      _errorMessage = error.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    return _runAuthAction(
+      () => _firebase.signInWithEmail(email: email, password: password),
+    );
+  }
+
+  Future<bool> createAccountWithEmail({
+    required String name,
+    required String email,
+    required String password,
+    required String accountId,
+  }) async {
+    return _runAuthAction(
+      () => _firebase.createAccountWithEmail(
+        name: name,
+        email: email,
+        password: password,
+        accountId: accountId,
+      ),
+    );
+  }
+
+  Future<bool> isAccountIdAvailable(String accountId) async {
+    if (!_isFirebaseConfigured) {
+      return false;
+    }
+    return _firebase.isAccountIdAvailable(accountId);
+  }
+
+  Future<bool> _runAuthAction(Future<FinanceUser?> Function() action) async {
+    if (!_isFirebaseConfigured) {
+      _errorMessage =
+          'Firebase is not configured yet. Check firebase_options.dart.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      _user = await action();
+      _useFirestore = true;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_firestoreEnabledKey, true);
+      await _loadSheetIntegrationSettings();
+      await refresh();
+      return _user != null;
+    } catch (error) {
+      _errorMessage = error.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> signOut() async {
+    if (_isFirebaseConfigured) {
+      await _firebase.signOut();
+    }
+    _user = null;
+    _useFirestore = false;
+    _transactions = const [];
+    _errorMessage = null;
+    _lastUpdated = DateTime.now();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_firestoreEnabledKey, false);
+    notifyListeners();
+  }
+
+  Future<int> addTransactionsFromGeminiScript(
+    String script, {
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final result = await executeSmartTransactionScript(
+      script,
+      onProgress: onProgress,
+    );
+    if (result.hasFailures) {
+      throw FirebaseFinanceException(result.failures.join('\n'));
+    }
+    return result.succeeded;
+  }
+
+  Future<SmartActionExecutionSummary> executeSmartTransactionScript(
+    String script, {
+    void Function(int completed, int total)? onProgress,
+  }) async {
+    final actions = _geminiParser.parseActions(script);
+    final total = actions.length;
+    var added = 0;
+    var edited = 0;
+    var deleted = 0;
+    final failures = <String>[];
+
+    for (var index = 0; index < actions.length; index += 1) {
+      final action = actions[index];
+      try {
+        await applySmartTransactionAction(action);
+        switch (action.type) {
+          case SmartTransactionActionType.add:
+            added += 1;
+          case SmartTransactionActionType.edit:
+            edited += 1;
+          case SmartTransactionActionType.delete:
+            deleted += 1;
+        }
+      } catch (error) {
+        failures.add('${action.label} #${index + 1}: $error');
+      }
+      onProgress?.call(index + 1, total);
+    }
+
+    return SmartActionExecutionSummary(
+      total: total,
+      added: added,
+      edited: edited,
+      deleted: deleted,
+      failures: failures,
+    );
+  }
+
+  Future<void> applySmartTransactionAction(
+    SmartTransactionAction action,
+  ) async {
+    switch (action.type) {
+      case SmartTransactionActionType.add:
+        final transaction = action.transaction;
+        if (transaction == null) {
+          throw const FirebaseFinanceException(
+            'Add action has no transaction.',
+          );
+        }
+        await addTransaction(transaction);
+      case SmartTransactionActionType.edit:
+        final updated = action.transaction;
+        if (updated == null) {
+          throw const FirebaseFinanceException(
+            'Edit action has no transaction.',
+          );
+        }
+        final current = _findSmartTarget(action);
+        if (current == null) {
+          throw FirebaseFinanceException(
+            'Could not find transaction to edit: ${action.targetId ?? action.targetTitle ?? updated.description}',
+          );
+        }
+        await updateTransaction(
+          current,
+          updated.copyWith(id: current.id, source: TransactionSource.script),
+        );
+      case SmartTransactionActionType.delete:
+        final current = _findSmartTarget(action);
+        if (current == null) {
+          throw FirebaseFinanceException(
+            'Could not find transaction to delete: ${action.targetId ?? action.targetTitle ?? ''}',
+          );
+        }
+        await deleteTransaction(current);
+    }
+  }
+
+  FinancialTransaction? _findSmartTarget(SmartTransactionAction action) {
+    final targetId = action.targetId?.trim();
+    if (targetId != null && targetId.isNotEmpty) {
+      for (final transaction in _transactions) {
+        if ((transaction.id ?? '').trim() == targetId) {
+          return transaction;
+        }
+      }
+    }
+
+    final targetTitle =
+        action.targetTitle?.trim().toLowerCase() ??
+        action.transaction?.description.trim().toLowerCase() ??
+        '';
+    if (targetTitle.isEmpty) {
+      return null;
+    }
+    for (final transaction in _transactions) {
+      if (transaction.description.trim().toLowerCase() == targetTitle) {
+        return transaction;
+      }
+    }
+    return null;
+  }
+
+  Future<void> addTransaction(FinancialTransaction transaction) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    if (_firebase.currentUser == null) {
+      throw const FirebaseFinanceException('Sign in first.');
+    }
+    final ready = _assignMissingId(transaction);
+    final saved = await _firebase.addTransaction(ready);
+    _transactions = [saved, ..._transactions]
+      ..sort((a, b) => b.date.compareTo(a.date));
+    _lastUpdated = DateTime.now();
+    notifyListeners();
+  }
+
+  FinancialTransaction _assignMissingId(FinancialTransaction transaction) {
+    final current = transaction.id?.trim() ?? '';
+    if (current.isNotEmpty) {
+      return transaction;
+    }
+    final id = _nextSequentialId(_transactions);
+    return transaction.copyWith(id: id, raw: _rawWithId(transaction.raw, id));
+  }
+
+  List<FinancialTransaction> _assignMissingSequentialIds(
+    List<FinancialTransaction> transactions,
+  ) {
+    final assigned = <FinancialTransaction>[];
+    for (final transaction in transactions) {
+      final current = transaction.id?.trim() ?? '';
+      if (current.isNotEmpty) {
+        assigned.add(
+          transaction.copyWith(raw: _rawWithId(transaction.raw, current)),
+        );
+        continue;
+      }
+      final id = _nextSequentialId([..._transactions, ...assigned]);
+      assigned.add(
+        transaction.copyWith(id: id, raw: _rawWithId(transaction.raw, id)),
+      );
+    }
+    return assigned;
+  }
+
+  List<FinancialTransaction> _normalizeSequentialIds(
+    List<FinancialTransaction> transactions,
+  ) {
+    final sorted = _sortForSequentialIds(transactions);
+    final accountId = _currentAccountIdPrefix();
+
+    return [
+      for (var index = 0; index < sorted.length; index += 1)
+        sorted[index].copyWith(
+          id: '$accountId-${index + 1}',
+          raw: _rawWithId(sorted[index].raw, '$accountId-${index + 1}'),
+        ),
+    ];
+  }
+
+  Future<List<FinancialTransaction>> _saveSequentialIdsIfNeeded({
+    void Function(int completed, int total, String label)? onProgress,
+  }) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    if (_firebase.currentUser == null) {
+      throw const FirebaseFinanceException('Sign in first.');
+    }
+
+    final normalized = _normalizeSequentialIds(_transactions);
+    final total = normalized.length;
+    if (!_needsSequentialIdRepair()) {
+      _transactions = normalized..sort((a, b) => b.date.compareTo(a.date));
+      onProgress?.call(total, total, 'IDs already ready');
+      notifyListeners();
+      return _transactions;
+    }
+
+    onProgress?.call(0, total, 'Saving clean IDs');
+    final saved = await _firebase.replaceTransactions(normalized);
+    _transactions = saved..sort((a, b) => b.date.compareTo(a.date));
+    _lastUpdated = DateTime.now();
+    onProgress?.call(total, total, 'IDs saved');
+    notifyListeners();
+    return _transactions;
+  }
+
+  bool _needsSequentialIdRepair() {
+    final sorted = _sortForSequentialIds(_transactions);
+    final accountId = _currentAccountIdPrefix();
+    for (var index = 0; index < sorted.length; index += 1) {
+      if ((sorted[index].id?.trim() ?? '') != '$accountId-${index + 1}') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  List<FinancialTransaction> _sortForSequentialIds(
+    List<FinancialTransaction> transactions,
+  ) {
+    return [...transactions]..sort((a, b) {
+      final dateCompare = a.date.compareTo(b.date);
+      if (dateCompare != 0) {
+        return dateCompare;
+      }
+      final createdA = a.createdAt;
+      final createdB = b.createdAt;
+      if (createdA != null && createdB != null) {
+        final createdCompare = createdA.compareTo(createdB);
+        if (createdCompare != 0) {
+          return createdCompare;
+        }
+      } else if (createdA != null) {
+        return -1;
+      } else if (createdB != null) {
+        return 1;
+      }
+      return a.description.trim().toLowerCase().compareTo(
+        b.description.trim().toLowerCase(),
+      );
+    });
+  }
+
+  Map<String, String> _rawWithId(Map<String, String> raw, String id) {
+    return {...raw, 'ID': id, 'Transaction ID': id};
+  }
+
+  String _nextSequentialId(List<FinancialTransaction> source) {
+    var maxNumber = 0;
+    for (final transaction in source) {
+      final number = _idNumber(transaction.id);
+      if (number == null) {
+        continue;
+      }
+      if (number > maxNumber) {
+        maxNumber = number;
+      }
+    }
+    return '${_currentAccountIdPrefix()}-${maxNumber + 1}';
+  }
+
+  int? _idNumber(String? id) {
+    final value = id?.trim() ?? '';
+    final match = RegExp(r'(\d+)$', caseSensitive: false).firstMatch(value);
+    if (match == null) {
+      return null;
+    }
+    return int.tryParse(match.group(1) ?? '');
+  }
+
+  String _currentAccountIdPrefix() {
+    final accountId = _user?.accountId?.trim() ?? '';
+    if (accountId.isNotEmpty) {
+      return accountId;
+    }
+    final emailPrefix = (_user?.email ?? '').split('@').first;
+    final normalized = FirebaseFinanceService.normalizeAccountId(emailPrefix);
+    if (normalized.isNotEmpty) {
+      return normalized;
+    }
+    final uid = _user?.uid ?? 'user';
+    final normalizedUid = FirebaseFinanceService.normalizeAccountId(uid);
+    return normalizedUid.isEmpty ? 'user' : normalizedUid;
   }
 
   Future<void> updateLanguage(AppLanguage language) async {
@@ -355,19 +957,74 @@ class DashboardController extends ChangeNotifier {
     return parsed == null ? null : DateTime(parsed.year, parsed.month);
   }
 
-  void updateTransactionLocally(
+  Future<void> _loadSheetIntegrationSettings() async {
+    if (!_isFirebaseConfigured || _user == null) {
+      return;
+    }
+
+    final settings = await _firebase.fetchSheetIntegrationSettings();
+    if (settings == null) {
+      await _saveSheetIntegrationSettings();
+      return;
+    }
+
+    if (settings.exportEndpoint.isNotEmpty) {
+      _sheetExportEndpoint = settings.exportEndpoint;
+    }
+    if (settings.exportSecret.isNotEmpty) {
+      _sheetExportSecret = settings.exportSecret;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sheetExportEndpointKey, _sheetExportEndpoint);
+    await prefs.setString(_sheetExportSecretKey, _sheetExportSecret);
+  }
+
+  Future<void> _saveSheetIntegrationSettings() async {
+    if (!_isFirebaseConfigured || _user == null) {
+      return;
+    }
+
+    await _firebase.saveSheetIntegrationSettings(
+      SheetIntegrationSettings(
+        exportEndpoint: _sheetExportEndpoint,
+        exportSecret: _sheetExportSecret,
+      ),
+    );
+  }
+
+  Future<void> updateTransaction(
     FinancialTransaction current,
     FinancialTransaction updated,
-  ) {
+  ) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
     final index = _transactions.indexOf(current);
     if (index == -1) {
       return;
     }
+    final updatedWithId = await _firebase.updateTransaction(updated);
     _transactions = [
       ..._transactions.take(index),
-      updated,
+      updatedWithId,
       ..._transactions.skip(index + 1),
     ];
+    notifyListeners();
+  }
+
+  Future<void> deleteTransaction(FinancialTransaction transaction) async {
+    final id = transaction.id?.trim() ?? '';
+    if (id.isEmpty) {
+      return;
+    }
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    await _firebase.deleteTransaction(id);
+    _transactions = _transactions
+        .where((item) => item.id?.trim() != id)
+        .toList(growable: false);
     notifyListeners();
   }
 

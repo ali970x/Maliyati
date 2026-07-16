@@ -95,4 +95,18 @@ void main() {
     expect(transactions.single.type, TransactionType.reserveable);
     expect(transactions.single.amount, 125);
   });
+
+  test('parses ID and Created At columns from Google Sheet', () {
+    const csv = r'''
+"Date","Status","Title","Amount ($)","Amount (LBP )","Category","Payment Method","Notes","Created At","Source","ID"
+"2026-07-15","Expense","Tomatoes","$0.00","LBP450000","Masrouf bayt","Cash","Voice entry","2026-07-15 18:30:25","script","txn_123"
+''';
+
+    final transactions = CsvParser().parse(csv);
+
+    expect(transactions, hasLength(1));
+    expect(transactions.single.id, 'txn_123');
+    expect(transactions.single.createdAt, DateTime(2026, 7, 15, 18, 30, 25));
+    expect(transactions.single.source, TransactionSource.script);
+  });
 }

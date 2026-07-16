@@ -10,6 +10,7 @@ class MetricCard extends StatelessWidget {
     this.color,
     this.isWide = false,
     this.onTap,
+    this.onLongPress,
   });
 
   final String title;
@@ -19,6 +20,7 @@ class MetricCard extends StatelessWidget {
   final Color? color;
   final bool isWide;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +93,9 @@ class MetricCard extends StatelessWidget {
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.72),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: onTap == null ? content : InkWell(onTap: onTap, child: content),
+      child: onTap == null && onLongPress == null
+          ? content
+          : InkWell(onTap: onTap, onLongPress: onLongPress, child: content),
     );
   }
 }

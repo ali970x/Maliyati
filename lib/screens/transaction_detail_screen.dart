@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
+import '../widgets/transaction_identity.dart';
 
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
@@ -30,9 +32,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late final TextEditingController _notesController;
   late TransactionType _selectedType;
   late CurrencyCode _selectedCurrency;
+  late TransactionSource _selectedSource;
   late DateTime _selectedDate;
   late bool _hasDate;
   bool _isEditing = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -66,8 +70,18 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
         actions: [
+          if (!_isEditing)
+            IconButton(
+              tooltip: 'Delete',
+              onPressed: _isSaving ? null : _confirmDelete,
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
           TextButton.icon(
-            onPressed: _isEditing ? _saveLocalChanges : _startEditing,
+            onPressed: _isSaving
+                ? null
+                : _isEditing
+                ? _saveChanges
+                : _startEditing,
             icon: Icon(_isEditing ? Icons.check_rounded : Icons.edit_rounded),
             label: Text(_isEditing ? strings.save : strings.editLocally),
           ),
@@ -112,6 +126,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _selectedCurrency = transaction.currency == CurrencyCode.unknown
         ? CurrencyCode.usd
         : transaction.currency;
+    _selectedSource = transaction.source;
     _selectedDate = transaction.date;
     _hasDate = transaction.hasDate;
     _descriptionController.text = transaction.description;
@@ -125,7 +140,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _notesController.text = transaction.notes;
   }
 
-  void _saveLocalChanges() {
+  Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -137,6 +152,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       amount: _parseAmount(_amountController.text),
       paymentMethod: _paymentMethodController.text.trim(),
       notes: _notesController.text.trim(),
+      source: _selectedSource,
       date: DateTime(
         _selectedDate.year,
         _selectedDate.month,
@@ -144,14 +160,24 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ),
       hasDate: _hasDate,
     );
-    widget.controller.updateTransactionLocally(_transaction, updated);
-    setState(() {
-      _transaction = updated;
-      _isEditing = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(widget.controller.strings.localChangesSaved)),
-    );
+    setState(() => _isSaving = true);
+    try {
+      await widget.controller.updateTransaction(_transaction, updated);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _transaction = updated;
+        _isEditing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.controller.strings.localChangesSaved)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   void _updateType(TransactionType type) {
@@ -162,12 +188,51 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     setState(() => _selectedCurrency = currency);
   }
 
+  void _updateSource(TransactionSource source) {
+    setState(() => _selectedSource = source);
+  }
+
   void _updateHasDate(bool hasDate) {
     setState(() => _hasDate = hasDate);
   }
 
   void _updateDate(DateTime date) {
     setState(() => _selectedDate = date);
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: const Text('This removes it from the app database.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(widget.controller.strings.cancel),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.delete_rounded),
+            label: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    setState(() => _isSaving = true);
+    try {
+      await widget.controller.deleteTransaction(_transaction);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   double _parseAmount(String value) {
@@ -242,6 +307,7 @@ class _ReadOnlyBody extends StatelessWidget {
     final description = transaction.description.isEmpty
         ? transaction.category
         : transaction.description;
+    final transactionId = TransactionIdentity.fullId(transaction);
     final convertedAmount = FinanceFormatters.convertedAmount(
       transaction,
       exchangeRate,
@@ -328,17 +394,24 @@ class _ReadOnlyBody extends StatelessWidget {
                         ? FinanceFormatters.date(transaction.date)
                         : strings.noDateInSheet,
                   ),
+                  _HeaderChip(label: 'Source', value: transaction.source.label),
+                  _HeaderChip(
+                    label: 'ID',
+                    value: TransactionIdentity.shortId(transaction),
+                  ),
                 ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 12),
-        _LocalNotice(message: strings.localEditNotice),
-        const SizedBox(height: 12),
         _SectionCard(
           title: strings.overview,
           children: [
+            _CopyableDetailRow(
+              label: 'Transaction ID',
+              value: transactionId.isEmpty ? '-' : transactionId,
+            ),
             _DetailRow(
               label: strings.type,
               value: state._typeLabel(transaction.type),
@@ -351,6 +424,13 @@ class _ReadOnlyBody extends StatelessWidget {
                   ? FinanceFormatters.date(transaction.date)
                   : strings.noDateInSheet,
             ),
+            _DetailRow(
+              label: 'Created at',
+              value: transaction.createdAt == null
+                  ? '-'
+                  : FinanceFormatters.dateTime(transaction.createdAt!),
+            ),
+            _DetailRow(label: 'Source', value: transaction.source.label),
             _DetailRow(
               label: strings.paymentMethod,
               value: state._emptyFallback(transaction.paymentMethod),
@@ -411,8 +491,6 @@ class _EditBody extends StatelessWidget {
             ? const EdgeInsets.fromLTRB(24, 16, 24, 32)
             : const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
-          _LocalNotice(message: strings.localEditNotice),
-          const SizedBox(height: 12),
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -422,30 +500,60 @@ class _EditBody extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  SegmentedButton<TransactionType>(
-                    segments: [
-                      ButtonSegment(
+                  DropdownButtonFormField<TransactionType>(
+                    initialValue: state._selectedType,
+                    decoration: InputDecoration(
+                      labelText: strings.type,
+                      prefixIcon: const Icon(Icons.label_rounded),
+                    ),
+                    items: [
+                      DropdownMenuItem(
                         value: TransactionType.income,
-                        label: Text(strings.income),
-                        icon: const Icon(Icons.south_west_rounded),
+                        child: Text(strings.income),
                       ),
-                      ButtonSegment(
+                      DropdownMenuItem(
                         value: TransactionType.expense,
-                        label: Text(strings.expense),
-                        icon: const Icon(Icons.north_east_rounded),
+                        child: Text(strings.expense),
                       ),
-                      ButtonSegment(
+                      DropdownMenuItem(
                         value: TransactionType.reserveable,
-                        label: Text(strings.reserveable),
-                        icon: const Icon(Icons.request_quote_rounded),
+                        child: Text(strings.reserveable),
                       ),
                     ],
-                    selected: {state._selectedType},
-                    onSelectionChanged: (value) {
-                      state._updateType(value.first);
+                    onChanged: (value) {
+                      if (value != null) {
+                        state._updateType(value);
+                      }
                     },
                   ),
                   const SizedBox(height: 14),
+                  DropdownButtonFormField<TransactionSource>(
+                    initialValue: state._selectedSource,
+                    decoration: const InputDecoration(
+                      labelText: 'Source',
+                      prefixIcon: Icon(Icons.source_rounded),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: TransactionSource.application,
+                        child: Text('application'),
+                      ),
+                      DropdownMenuItem(
+                        value: TransactionSource.googleSheet,
+                        child: Text('Google Sheet'),
+                      ),
+                      DropdownMenuItem(
+                        value: TransactionSource.script,
+                        child: Text('script'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        state._updateSource(value);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   TextFormField(
                     controller: state._descriptionController,
                     decoration: InputDecoration(
@@ -454,12 +562,17 @@ class _EditBody extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextFormField(
+                  _OptionTextField(
                     controller: state._categoryController,
-                    decoration: InputDecoration(
-                      labelText: strings.category,
-                      prefixIcon: const Icon(Icons.category_rounded),
-                    ),
+                    label: strings.category,
+                    icon: Icons.category_rounded,
+                    options: state.widget.controller.categoryOptions,
+                    fallbackOptions: const [
+                      'Masrouf bayt',
+                      'Transportation',
+                      'Income internet',
+                      'Dyefe',
+                    ],
                     validator: (value) => value == null || value.trim().isEmpty
                         ? strings.category
                         : null,
@@ -550,12 +663,12 @@ class _EditBody extends StatelessWidget {
                       },
                     ),
                   const SizedBox(height: 12),
-                  TextFormField(
+                  _OptionTextField(
                     controller: state._paymentMethodController,
-                    decoration: InputDecoration(
-                      labelText: strings.paymentMethod,
-                      prefixIcon: const Icon(Icons.credit_card_rounded),
-                    ),
+                    label: strings.paymentMethod,
+                    icon: Icons.credit_card_rounded,
+                    options: state.widget.controller.paymentMethodOptions,
+                    fallbackOptions: const ['Cash', 'Whish money', 'Paid'],
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -573,7 +686,7 @@ class _EditBody extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: state._saveLocalChanges,
+            onPressed: state._saveChanges,
             icon: const Icon(Icons.check_rounded),
             label: Text(strings.save),
           ),
@@ -583,38 +696,41 @@ class _EditBody extends StatelessWidget {
   }
 }
 
-class _LocalNotice extends StatelessWidget {
-  const _LocalNotice({required this.message});
+class _OptionTextField extends StatelessWidget {
+  const _OptionTextField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    required this.options,
+    required this.fallbackOptions,
+    this.validator,
+  });
 
-  final String message;
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final List<String> options;
+  final List<String> fallbackOptions;
+  final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: theme.colorScheme.onSecondaryContainer,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSecondaryContainer,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+    final values = {...options, ...fallbackOptions}.toList()..sort();
+    return TextFormField(
+      controller: controller,
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon),
+        suffixIcon: PopupMenuButton<String>(
+          tooltip: 'Choose $label',
+          icon: const Icon(Icons.arrow_drop_down_rounded),
+          onSelected: (value) => controller.text = value,
+          itemBuilder: (context) => [
+            for (final value in values)
+              PopupMenuItem(value: value, child: Text(value)),
+          ],
+        ),
       ),
     );
   }
@@ -724,6 +840,68 @@ class _DetailRow extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w800,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CopyableDetailRow extends StatelessWidget {
+  const _CopyableDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 4,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 6,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: SelectableText(
+                    value,
+                    textAlign: TextAlign.end,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                if (value != '-') ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Copy ID',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: value));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Transaction ID copied.')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

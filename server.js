@@ -2,6 +2,7 @@ const http = require('node:http');
 const dns = require('node:dns');
 const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -108,22 +109,45 @@ function serveFile(filePath, request, response) {
     'flutter_bootstrap.js',
     'flutter_service_worker.js',
     'index.html',
-    'main.dart.js',
     'version.json',
   ]);
   const cacheControl = revalidateFiles.has(fileName)
     ? 'no-store, no-cache, must-revalidate'
-    : 'public, max-age=3600';
-  response.writeHead(200, {
+    : fileName === 'main.dart.js' || filePath.includes(`${path.sep}canvaskit${path.sep}`)
+      ? 'public, max-age=31536000, immutable'
+      : 'public, max-age=3600';
+  const acceptsBrotli = /\bbr\b/.test(request.headers['accept-encoding'] || '');
+  const acceptsGzip = /\bgzip\b/.test(request.headers['accept-encoding'] || '');
+  const canCompress = new Set(['.css', '.html', '.js', '.json', '.svg']).has(extension);
+  const contentEncoding = canCompress && acceptsBrotli
+    ? 'br'
+    : canCompress && acceptsGzip
+      ? 'gzip'
+      : null;
+  const headers = {
     'Content-Type': contentTypes[extension] || 'application/octet-stream',
     'Cache-Control': cacheControl,
     'X-Content-Type-Options': 'nosniff',
-  });
+  };
+  if (contentEncoding) {
+    headers['Content-Encoding'] = contentEncoding;
+    headers.Vary = 'Accept-Encoding';
+  }
+  response.writeHead(200, headers);
   if (request.method === 'HEAD') {
     response.end();
     return;
   }
-  fs.createReadStream(filePath).pipe(response);
+  const fileStream = fs.createReadStream(filePath);
+  if (contentEncoding === 'br') {
+    fileStream.pipe(zlib.createBrotliCompress()).pipe(response);
+    return;
+  }
+  if (contentEncoding === 'gzip') {
+    fileStream.pipe(zlib.createGzip()).pipe(response);
+    return;
+  }
+  fileStream.pipe(response);
 }
 
 const server = http.createServer(async (request, response) => {

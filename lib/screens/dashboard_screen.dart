@@ -21,6 +21,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   TransactionType? _selectedTransactionType;
+  bool _showSelectedAsCategories = true;
+  String? _selectedCategory;
 
   @override
   Widget build(BuildContext context) {
@@ -74,9 +76,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selectedType: _selectedTransactionType,
               onTypeSelected: (type) {
                 setState(() {
-                  _selectedTransactionType = _selectedTransactionType == type
-                      ? null
-                      : type;
+                  if (_selectedTransactionType == type &&
+                      _showSelectedAsCategories) {
+                    _selectedTransactionType = null;
+                    _selectedCategory = null;
+                  } else {
+                    _selectedTransactionType = type;
+                    _selectedCategory = null;
+                    _showSelectedAsCategories = true;
+                  }
+                });
+              },
+              onTypeLongPressed: (type) {
+                setState(() {
+                  _selectedTransactionType = type;
+                  _selectedCategory = null;
+                  _showSelectedAsCategories = false;
                 });
               },
             ),
@@ -85,6 +100,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _SelectedTransactionsSection(
             controller: controller,
             selectedType: _selectedTransactionType,
+            showCategories: _showSelectedAsCategories,
+            selectedCategory: _selectedCategory,
+            onCategorySelected: (category) {
+              setState(() => _selectedCategory = category);
+            },
           ),
           const SizedBox(height: 12),
           if (AppResponsive.isWideWeb(context))
@@ -126,10 +146,16 @@ class _SelectedTransactionsSection extends StatelessWidget {
   const _SelectedTransactionsSection({
     required this.controller,
     required this.selectedType,
+    required this.showCategories,
+    required this.selectedCategory,
+    required this.onCategorySelected,
   });
 
   final DashboardController controller;
   final TransactionType? selectedType;
+  final bool showCategories;
+  final String? selectedCategory;
+  final ValueChanged<String> onCategorySelected;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +166,7 @@ class _SelectedTransactionsSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final transactions =
+    var transactions =
         controller.periodTransactions
             .where((transaction) => transaction.type == selectedType)
             .toList()
@@ -172,6 +198,23 @@ class _SelectedTransactionsSection extends StatelessWidget {
       ),
     };
 
+    final categoryTotals = <String, double>{};
+    for (final transaction in transactions) {
+      categoryTotals.update(
+        transaction.category.isEmpty ? 'Uncategorized' : transaction.category,
+        (value) => value + transaction.amountInUsd(controller.exchangeRate),
+        ifAbsent: () => transaction.amountInUsd(controller.exchangeRate),
+      );
+    }
+    final categories = categoryTotals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final maxCategoryValue = categories.isEmpty ? 1.0 : categories.first.value;
+    if (showCategories && selectedCategory != null) {
+      transactions = transactions
+          .where((transaction) => transaction.category == selectedCategory)
+          .toList();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -197,7 +240,24 @@ class _SelectedTransactionsSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (transactions.isEmpty)
+        if (showCategories && selectedCategory == null && categories.isNotEmpty)
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final entry in categories)
+                _CategoryDrillCard(
+                  label: entry.key,
+                  value: FinanceFormatters.usd(entry.value),
+                  fraction: maxCategoryValue <= 0
+                      ? 0
+                      : entry.value / maxCategoryValue,
+                  color: color,
+                  onTap: () => onCategorySelected(entry.key),
+                ),
+            ],
+          )
+        else if (transactions.isEmpty)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
@@ -392,6 +452,86 @@ class _ExpenseFocusCard extends StatelessWidget {
 
     final rows = totals.values.toList()..sort((a, b) => b.day.compareTo(a.day));
     return rows;
+  }
+}
+
+class _CategoryDrillCard extends StatelessWidget {
+  const _CategoryDrillCard({
+    required this.label,
+    required this.value,
+    required this.fraction,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final double fraction;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final width = AppResponsive.isWideWeb(context)
+        ? 430.0
+        : MediaQuery.sizeOf(context).width - 32;
+    return SizedBox(
+      width: width,
+      child: Card(
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.category_rounded, size: 18, color: color),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      value,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    value: fraction.clamp(0.0, 1.0),
+                    minHeight: 9,
+                    color: color,
+                    backgroundColor: color.withValues(alpha: 0.12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -740,11 +880,13 @@ class _SummaryGrid extends StatelessWidget {
     required this.controller,
     required this.selectedType,
     required this.onTypeSelected,
+    required this.onTypeLongPressed,
   });
 
   final DashboardController controller;
   final TransactionType? selectedType;
   final ValueChanged<TransactionType> onTypeSelected;
+  final ValueChanged<TransactionType> onTypeLongPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -779,6 +921,7 @@ class _SummaryGrid extends StatelessWidget {
                 icon: Icons.south_west_rounded,
                 color: incomeColor,
                 onTap: () => onTypeSelected(TransactionType.income),
+                onLongPress: () => onTypeLongPressed(TransactionType.income),
               ),
             ),
             SizedBox(
@@ -792,6 +935,7 @@ class _SummaryGrid extends StatelessWidget {
                 icon: Icons.north_east_rounded,
                 color: expenseColor,
                 onTap: () => onTypeSelected(TransactionType.expense),
+                onLongPress: () => onTypeLongPressed(TransactionType.expense),
               ),
             ),
             SizedBox(
@@ -805,6 +949,8 @@ class _SummaryGrid extends StatelessWidget {
                 icon: Icons.request_quote_rounded,
                 color: reserveableColor,
                 onTap: () => onTypeSelected(TransactionType.reserveable),
+                onLongPress: () =>
+                    onTypeLongPressed(TransactionType.reserveable),
               ),
             ),
           ],
