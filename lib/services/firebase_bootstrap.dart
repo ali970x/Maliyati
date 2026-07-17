@@ -44,5 +44,8 @@ class FirebaseBootstrap {
     }
   }
 
-  static bool get supportsGoogleSignIn => !kIsWeb;
+  static bool get supportsGoogleSignIn =>
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
 }

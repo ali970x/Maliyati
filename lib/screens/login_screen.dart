@@ -1,8 +1,8 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
 import '../controllers/dashboard_controller.dart';
+import '../services/firebase_bootstrap.dart';
 import '../services/firebase_finance_service.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -319,8 +319,33 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                           if (!_isCreatingAccount) ...[
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                side: BorderSide(
+                                  color: theme.colorScheme.primary.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                ),
+                              ),
+                              onPressed: controller.isLoading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _isCreatingAccount = true;
+                                        _isUserIdAvailable = null;
+                                        _userIdMessage = '';
+                                      });
+                                      _checkUserId();
+                                    },
+                              icon: const Icon(Icons.person_add_alt_1_rounded),
+                              label: const Text('Create new account'),
+                            ),
                             const SizedBox(height: 14),
-                            if (!kIsWeb) ...[
+                            if (FirebaseBootstrap.supportsGoogleSignIn) ...[
                               Row(
                                 children: [
                                   Expanded(
@@ -367,20 +392,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 label: const Text('Continue with Google'),
                               ),
                             ],
-                            const SizedBox(height: 10),
-                            TextButton(
-                              onPressed: controller.isLoading
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _isCreatingAccount = true;
-                                        _isUserIdAvailable = null;
-                                        _userIdMessage = '';
-                                      });
-                                      _checkUserId();
-                                    },
-                              child: const Text('Registration'),
-                            ),
                           ] else ...[
                             const SizedBox(height: 10),
                             TextButton(

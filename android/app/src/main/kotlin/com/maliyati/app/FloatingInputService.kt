@@ -1,4 +1,4 @@
-package com.codex.finance.finance_tracker
+package com.maliyati.app
 
 import android.animation.ValueAnimator
 import android.app.Notification
@@ -323,9 +323,9 @@ class FloatingInputService : Service() {
     }
 
     companion object {
-        const val ACTION_SHOW = "com.codex.finance.finance_tracker.SHOW_FLOATING_INPUT"
-        const val ACTION_HIDE = "com.codex.finance.finance_tracker.HIDE_FLOATING_INPUT"
-        const val ACTION_OPEN_INPUT = "com.codex.finance.finance_tracker.OPEN_SMART_INPUT"
+        const val ACTION_SHOW = "com.maliyati.app.SHOW_FLOATING_INPUT"
+        const val ACTION_HIDE = "com.maliyati.app.HIDE_FLOATING_INPUT"
+        const val ACTION_OPEN_INPUT = "com.maliyati.app.OPEN_SMART_INPUT"
         private const val CHANNEL_ID = "maliyati_quick_input"
         private const val NOTIFICATION_ID = 4501
     }

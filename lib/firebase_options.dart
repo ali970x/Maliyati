@@ -41,46 +41,44 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBYMbkENozN23b0Tmg8j7rR0y-BPBXopHI',
-    appId: '1:1087733691593:web:49522ca7e5e8ec38864918',
-    messagingSenderId: '1087733691593',
-    projectId: 'mobilestorefirebase',
-    authDomain: 'mobilestorefirebase.firebaseapp.com',
-    storageBucket: 'mobilestorefirebase.firebasestorage.app',
+    apiKey: 'AIzaSyB5rYyiS6COnG6tqgWXbnlJMYE3_pYfGXQ',
+    appId: '1:34788182639:web:63c98e6986e771c3d75b9a',
+    messagingSenderId: '34788182639',
+    projectId: 'maliyati-app-2026',
+    authDomain: 'maliyati-app-2026.firebaseapp.com',
+    storageBucket: 'maliyati-app-2026.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCcBfI7-vNsuUnMX0YswN7XVfPVSnRX8xo',
-    appId: '1:1087733691593:android:4b6228da0e763caf864918',
-    messagingSenderId: '1087733691593',
-    projectId: 'mobilestorefirebase',
-    storageBucket: 'mobilestorefirebase.firebasestorage.app',
+    apiKey: 'AIzaSyDAeWKBMOK93Y2xcrji0pwTt0358DIUvn4',
+    appId: '1:34788182639:android:033205b23cc63d31d75b9a',
+    messagingSenderId: '34788182639',
+    projectId: 'maliyati-app-2026',
+    storageBucket: 'maliyati-app-2026.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyB_FpnLRdghRXEtDSnmtlkNGruF8G5hWvU',
-    appId: '1:1087733691593:ios:0216276a1025a4b8864918',
-    messagingSenderId: '1087733691593',
-    projectId: 'mobilestorefirebase',
-    storageBucket: 'mobilestorefirebase.firebasestorage.app',
+    apiKey: 'AIzaSyCz5DWyGsoofu7bsTs9aqDlb3sXWbOYbvE',
+    appId: '1:34788182639:ios:57002760caf5c608d75b9a',
+    messagingSenderId: '34788182639',
+    projectId: 'maliyati-app-2026',
+    storageBucket: 'maliyati-app-2026.firebasestorage.app',
     iosBundleId: 'com.codex.finance.financeTracker',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyB_FpnLRdghRXEtDSnmtlkNGruF8G5hWvU',
-    appId: '1:1087733691593:ios:0216276a1025a4b8864918',
-    messagingSenderId: '1087733691593',
-    projectId: 'mobilestorefirebase',
-    storageBucket: 'mobilestorefirebase.firebasestorage.app',
+    apiKey: 'AIzaSyCz5DWyGsoofu7bsTs9aqDlb3sXWbOYbvE',
+    appId: '1:34788182639:ios:57002760caf5c608d75b9a',
+    messagingSenderId: '34788182639',
+    projectId: 'maliyati-app-2026',
+    storageBucket: 'maliyati-app-2026.firebasestorage.app',
     iosBundleId: 'com.codex.finance.financeTracker',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyBYMbkENozN23b0Tmg8j7rR0y-BPBXopHI',
-    appId: '1:1087733691593:web:74ad05550fbf20c8864918',
-    messagingSenderId: '1087733691593',
-    projectId: 'mobilestorefirebase',
-    authDomain: 'mobilestorefirebase.firebaseapp.com',
-    storageBucket: 'mobilestorefirebase.firebasestorage.app',
+    apiKey: 'AIzaSyB5rYyiS6COnG6tqgWXbnlJMYE3_pYfGXQ',
+    appId: '1:34788182639:web:5c0e88a83404b54ed75b9a',
+    messagingSenderId: '34788182639',
+    projectId: 'maliyati-app-2026',
+    authDomain: 'maliyati-app-2026.firebaseapp.com',
+    storageBucket: 'maliyati-app-2026.firebasestorage.app',
   );
 }

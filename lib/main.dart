@@ -227,7 +227,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     // These integrations are Android-only. Starting platform channels on the
     // browser immediately after Google authentication can crash the web view.
-    if (!kIsWeb) {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       _smartClipboard.initialize(onOpenSmartInput: _openSmartInput);
       _initializeShareHandler();
     }

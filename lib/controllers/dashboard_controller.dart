@@ -432,6 +432,20 @@ class DashboardController extends ChangeNotifier {
     if (message.contains('Null check operator used on a null value')) {
       return 'Could not restore the saved session. Please sign in again.';
     }
+    if (message.contains('invalid-credential') ||
+        message.contains('wrong-password') ||
+        message.contains('user-not-found')) {
+      return 'Email or password is not correct. If this is the new Firebase project, create a new account first or use Forgot password.';
+    }
+    if (message.contains('email-already-in-use')) {
+      return 'This email already has an account. Sign in instead, or use Forgot password.';
+    }
+    if (message.contains('weak-password')) {
+      return 'Use a stronger password with at least 6 characters.';
+    }
+    if (message.contains('operation-not-allowed')) {
+      return 'Email and password login is not enabled in Firebase. Enable Authentication > Sign-in method > Email/Password.';
+    }
     return message;
   }
 

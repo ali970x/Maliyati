@@ -1,4 +1,4 @@
-package com.codex.finance.finance_tracker
+package com.maliyati.app
 
 import android.content.Intent
 import android.net.Uri
