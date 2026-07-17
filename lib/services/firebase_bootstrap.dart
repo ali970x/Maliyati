@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
 import '../firebase_options.dart';
+import 'firebase_web_plugin_registrar.dart';
 
 class FirebaseBootstrap {
   const FirebaseBootstrap._();
@@ -22,6 +23,7 @@ class FirebaseBootstrap {
 
     try {
       WidgetsFlutterBinding.ensureInitialized();
+      registerFirebaseWebPlugins();
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );

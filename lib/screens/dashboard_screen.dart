@@ -167,10 +167,11 @@ class _SelectedTransactionsSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    var transactions = controller.periodTransactions
-        .where((transaction) => _matchesFocus(transaction, selectedFocus!))
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+    var transactions =
+        controller.periodTransactions
+            .where((transaction) => _matchesFocus(transaction, selectedFocus!))
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
     final (color, icon, title, emptyMessage) = switch (selectedFocus!) {
       DashboardFocus.income => (
         const Color(0xFF168A5B),
@@ -314,10 +315,7 @@ class _SelectedTransactionsSection extends StatelessWidget {
     );
   }
 
-  bool _matchesFocus(
-    FinancialTransaction transaction,
-    DashboardFocus focus,
-  ) {
+  bool _matchesFocus(FinancialTransaction transaction, DashboardFocus focus) {
     return switch (focus) {
       DashboardFocus.income => transaction.type == TransactionType.income,
       DashboardFocus.expense => transaction.type == TransactionType.expense,
@@ -329,13 +327,7 @@ class _SelectedTransactionsSection extends StatelessWidget {
 }
 
 bool _isDebitTransaction(FinancialTransaction transaction) {
-  final value = transaction.category.trim().toLowerCase();
-  return value.contains('dyoun') ||
-      value.contains('dyoune') ||
-      value.contains('debit') ||
-      value.contains('debt') ||
-      value.contains('دين') ||
-      value.contains('ديون');
+  return transaction.paymentMethod.trim().toLowerCase() == 'debit';
 }
 
 class _ExpenseFocusCard extends StatelessWidget {

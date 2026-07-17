@@ -58,7 +58,7 @@ packages:
     source: hosted
     version: "8.0.5"
   cloud_firestore_web:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: cloud_firestore_web
       sha256: cb237b3bf3cff4778ec962a8a9449ae79e831d7b4369e0ad9f5a2b6dfbd84569
@@ -138,7 +138,7 @@ packages:
     source: hosted
     version: "9.0.5"
   firebase_auth_web:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: firebase_auth_web
       sha256: "8daa9f7665f76c6e23a2e68cabaa7f6693e1949eef3ee678712544b3835ce437"
@@ -162,7 +162,7 @@ packages:
     source: hosted
     version: "8.0.0"
   firebase_core_web:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: firebase_core_web
       sha256: ddab99d709b8c27dd47576eb05a1e719e07a2aa45c009a49ae92ac4d2a8ca555
@@ -201,7 +201,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_web_plugins:
-    dependency: transitive
+    dependency: "direct main"
     description: flutter
     source: sdk
     version: "0.0.0"
