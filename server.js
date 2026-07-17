@@ -118,7 +118,10 @@ function serveFile(filePath, request, response) {
       : 'public, max-age=3600';
   const acceptsBrotli = /\bbr\b/.test(request.headers['accept-encoding'] || '');
   const acceptsGzip = /\bgzip\b/.test(request.headers['accept-encoding'] || '');
-  const canCompress = new Set(['.css', '.html', '.js', '.json', '.svg']).has(extension);
+  const shouldSkipDynamicCompression = fileName === 'main.dart.js';
+  const canCompress =
+    !shouldSkipDynamicCompression &&
+    new Set(['.css', '.html', '.js', '.json', '.svg']).has(extension);
   const contentEncoding = canCompress && acceptsBrotli
     ? 'br'
     : canCompress && acceptsGzip

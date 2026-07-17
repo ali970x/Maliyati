@@ -2,6 +2,15 @@
 {{flutter_build_config}}
 
 (async () => {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+    } catch (_) {
+      // A stale service worker should never block the app from opening.
+    }
+  }
+
   let buildId = 'latest';
   try {
     const response = await fetch('/.last_build_id', { cache: 'no-store' });
@@ -25,4 +34,3 @@
     },
   });
 })();
-
