@@ -396,12 +396,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: const Text('Back to login'),
                             ),
                           ],
-                          if (!controller.isFirebaseConfigured) ...[
+                          if (controller.firebaseSetupMessage != null) ...[
                             const SizedBox(height: 16),
                             _MessageBox(
                               icon: Icons.settings_rounded,
-                              message:
-                                  'Firebase is not ready yet. Check the Firebase setup files.',
+                              message: controller.firebaseSetupMessage!,
                             ),
                           ],
                           if (controller.errorMessage != null) ...[

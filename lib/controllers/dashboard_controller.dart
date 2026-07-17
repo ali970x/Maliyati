@@ -161,6 +161,17 @@ class DashboardController extends ChangeNotifier {
 
   bool get isSignedIn => _user != null;
 
+  String? get firebaseSetupMessage {
+    if (_isFirebaseConfigured) {
+      return null;
+    }
+    final error = FirebaseBootstrap.lastError;
+    if (error == null) {
+      return 'Firebase is starting. Try signing in.';
+    }
+    return _firebaseBootstrapErrorMessage(error);
+  }
+
   FinanceUser? get user => _user;
 
   List<String> get categoryOptions {
@@ -410,6 +421,40 @@ class DashboardController extends ChangeNotifier {
     return message;
   }
 
+  String _firebaseBootstrapErrorMessage(Object error) {
+    final message = error.toString();
+    if (message.contains('api-key-not-valid')) {
+      return 'Firebase web API key is not valid for this project.';
+    }
+    if (message.contains('auth/invalid-api-key')) {
+      return 'Firebase Auth rejected the web API key.';
+    }
+    if (message.contains('duplicate-app')) {
+      return 'Firebase is already open. Try signing in again.';
+    }
+    return 'Firebase setup error: $message';
+  }
+
+  Future<bool> _ensureFirebaseReady() async {
+    if (_isFirebaseConfigured || FirebaseBootstrap.isInitialized) {
+      _isFirebaseConfigured = true;
+      return true;
+    }
+
+    _isFirebaseConfigured = await FirebaseBootstrap.initializeIfConfigured();
+    _isFirebaseConfigured =
+        _isFirebaseConfigured || FirebaseBootstrap.isInitialized;
+    if (!_isFirebaseConfigured) {
+      final error = FirebaseBootstrap.lastError;
+      _errorMessage = error == null
+          ? 'Firebase is not ready yet. Try again.'
+          : _firebaseBootstrapErrorMessage(error);
+      notifyListeners();
+      return false;
+    }
+    return true;
+  }
+
   Future<void> updateSettings({
     String? sheetUrl,
     required String sheetExportEndpoint,
@@ -514,10 +559,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> signInWithGoogle() async {
-    if (!_isFirebaseConfigured) {
-      _errorMessage =
-          'Firebase is not configured yet. Check firebase_options.dart.';
-      notifyListeners();
+    if (!await _ensureFirebaseReady()) {
       return;
     }
 
@@ -557,10 +599,7 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<bool> sendPasswordResetEmail(String email) async {
-    if (!_isFirebaseConfigured) {
-      _errorMessage =
-          'Firebase is not configured yet. Check firebase_options.dart.';
-      notifyListeners();
+    if (!await _ensureFirebaseReady()) {
       return false;
     }
     _isLoading = true;
@@ -595,17 +634,14 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<bool> isAccountIdAvailable(String accountId) async {
-    if (!_isFirebaseConfigured) {
+    if (!await _ensureFirebaseReady()) {
       return false;
     }
     return _firebase.isAccountIdAvailable(accountId);
   }
 
   Future<bool> _runAuthAction(Future<FinanceUser?> Function() action) async {
-    if (!_isFirebaseConfigured) {
-      _errorMessage =
-          'Firebase is not configured yet. Check firebase_options.dart.';
-      notifyListeners();
+    if (!await _ensureFirebaseReady()) {
       return false;
     }
 
