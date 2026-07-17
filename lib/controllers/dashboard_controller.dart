@@ -522,13 +522,21 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
     try {
       _user = await _firebase.signInWithGoogle();
+      if (_user == null) {
+        throw const FirebaseFinanceException(
+          'Google did not return an account. Please try again.',
+        );
+      }
       _useFirestore = true;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
-      await _loadSheetIntegrationSettings();
+      // Sheet settings are optional. They must not block a successful login.
+      try {
+        await _loadSheetIntegrationSettings();
+      } catch (_) {}
       await refresh();
     } catch (error) {
-      _errorMessage = error.toString();
+      _errorMessage = _friendlyErrorMessage(error);
     } finally {
       _isLoading = false;
       notifyListeners();

@@ -48,11 +48,14 @@ class FirebaseFinanceService {
 
   Future<FinanceUser?> waitForStoredUser() async {
     final user = await _auth.authStateChanges().first;
-    return _toFinanceUser(user, includeProfile: true);
+    // Authentication must be able to restore independently of Firestore.
+    // A missing profile document should never prevent the login screen from
+    // opening, especially on the web after a Google redirect/popup.
+    return _toBasicFinanceUser(user);
   }
 
   Future<FinanceUser?> loadCurrentUser() async {
-    return _toFinanceUser(_auth.currentUser, includeProfile: true);
+    return _toBasicFinanceUser(_auth.currentUser);
   }
 
   Future<bool> isAccountIdAvailable(String accountId) async {
@@ -114,10 +117,30 @@ class FirebaseFinanceService {
     if (kIsWeb) {
       try {
         final result = await _auth.signInWithPopup(GoogleAuthProvider());
-        await _ensureUserProfile(result.user);
-        return _toFinanceUser(result.user, includeProfile: true);
+        final user = result.user ?? _auth.currentUser;
+        if (user == null) {
+          throw const FirebaseFinanceException(
+            'Google did not return an account. Please try again.',
+          );
+        }
+
+        // The account is authenticated at this point. Profile creation is
+        // intentionally best-effort, so a Firestore setup/rules issue cannot
+        // turn a successful Google login into a null-check web error.
+        try {
+          await _ensureUserProfile(user);
+        } catch (_) {}
+        return _toBasicFinanceUser(user);
       } on FirebaseAuthException catch (error) {
         throw FirebaseFinanceException(_googleWebErrorMessage(error));
+      } on FirebaseFinanceException {
+        rethrow;
+      } catch (error) {
+        final existingUser = _auth.currentUser;
+        if (existingUser != null) {
+          return _toBasicFinanceUser(existingUser);
+        }
+        throw FirebaseFinanceException(_googleUnexpectedWebError(error));
       }
     }
 
@@ -150,6 +173,14 @@ class FirebaseFinanceService {
         return error.message ??
             'Google sign-in could not be completed. Please try again.';
     }
+  }
+
+  String _googleUnexpectedWebError(Object error) {
+    final message = error.toString();
+    if (message.contains('Null check operator used on a null value')) {
+      return 'Google signed in, but the web session could not be completed. Please refresh this page once and try again.';
+    }
+    return 'Google sign-in could not be completed. Please try again.';
   }
 
   Future<void> signOut() async {
