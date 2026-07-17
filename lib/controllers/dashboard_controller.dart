@@ -309,6 +309,10 @@ class DashboardController extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       _isFirebaseConfigured = await FirebaseBootstrap.initializeIfConfigured();
+      // If the first bootstrap attempt failed in a browser but Firebase was
+      // already initialized by main(), keep the login flow available.
+      _isFirebaseConfigured =
+          _isFirebaseConfigured || FirebaseBootstrap.isInitialized;
       final prefs = await SharedPreferences.getInstance();
       _sheetUrl =
           prefs.getString(_sheetUrlKey) ?? AppConfig.defaultGoogleSheetUrl;
@@ -340,7 +344,7 @@ class DashboardController extends ChangeNotifier {
       }
       await refresh(silentWhenSignedOut: true);
     } catch (_) {
-      _isFirebaseConfigured = false;
+      _isFirebaseConfigured = FirebaseBootstrap.isInitialized;
       _useFirestore = false;
       _user = null;
       _transactions = const [];

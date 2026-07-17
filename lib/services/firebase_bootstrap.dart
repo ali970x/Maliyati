@@ -3,14 +3,20 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../config/app_config.dart';
 import '../firebase_options.dart';
 
 class FirebaseBootstrap {
   const FirebaseBootstrap._();
 
+  static Object? _lastError;
+
+  static Object? get lastError => _lastError;
+
+  static bool get isInitialized => Firebase.apps.isNotEmpty;
+
   static Future<bool> initializeIfConfigured() async {
     if (Firebase.apps.isNotEmpty) {
+      _lastError = null;
       return true;
     }
 
@@ -19,14 +25,22 @@ class FirebaseBootstrap {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+      _lastError = null;
       return true;
-    } on UnsupportedError {
+    } on UnsupportedError catch (error) {
+      _lastError = error;
       return false;
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      _lastError = error;
+      return false;
+    } on FirebaseException catch (error) {
+      _lastError = error;
+      return false;
+    } catch (error) {
+      _lastError = error;
       return false;
     }
   }
 
-  static bool get supportsGoogleSignIn =>
-      !kIsWeb || AppConfig.firebaseAuthDomain.isNotEmpty;
+  static bool get supportsGoogleSignIn => !kIsWeb;
 }
