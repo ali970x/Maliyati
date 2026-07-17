@@ -21,6 +21,13 @@ class FinanceUser {
   final String? photoUrl;
 }
 
+class AdminUserSnapshot {
+  const AdminUserSnapshot({required this.user, required this.transactions});
+
+  final FinanceUser user;
+  final List<FinancialTransaction> transactions;
+}
+
 class SheetIntegrationSettings {
   const SheetIntegrationSettings({
     required this.exportEndpoint,
@@ -32,6 +39,8 @@ class SheetIntegrationSettings {
 }
 
 class FirebaseFinanceService {
+  static const adminEmail = 'labdev99@gmail.com';
+
   FirebaseFinanceService({
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
@@ -45,6 +54,9 @@ class FirebaseFinanceService {
   final GoogleSignIn _googleSignIn;
 
   FinanceUser? get currentUser => _toBasicFinanceUser(_auth.currentUser);
+
+  bool get isCurrentUserAdmin =>
+      (_auth.currentUser?.email ?? '').trim().toLowerCase() == adminEmail;
 
   Future<FinanceUser?> waitForStoredUser() async {
     final user = await _auth.authStateChanges().first;
@@ -196,6 +208,121 @@ class FirebaseFinanceService {
     await _googleSignIn.signOut();
   }
 
+  Future<List<AdminUserSnapshot>> fetchAdminUserSnapshots() async {
+    _requireAdmin();
+    final users = await _firestore.collection('users').get();
+    final snapshots = <AdminUserSnapshot>[];
+    for (final userDoc in users.docs) {
+      final data = userDoc.data();
+      final transactions = await _transactions(
+        userDoc.id,
+      ).orderBy('date', descending: true).get();
+      snapshots.add(
+        AdminUserSnapshot(
+          user: FinanceUser(
+            uid: userDoc.id,
+            accountId: '${data['accountId'] ?? ''}'.trim(),
+            email: '${data['email'] ?? ''}'.trim(),
+            displayName: '${data['displayName'] ?? ''}'.trim(),
+            photoUrl: '${data['photoUrl'] ?? ''}'.trim(),
+          ),
+          transactions: transactions.docs
+              .map((doc) => _fromFirestore(doc.data(), fallbackId: doc.id))
+              .toList(growable: false),
+        ),
+      );
+    }
+    snapshots.sort((a, b) {
+      final left = a.user.email ?? a.user.accountId ?? a.user.uid;
+      final right = b.user.email ?? b.user.accountId ?? b.user.uid;
+      return left.compareTo(right);
+    });
+    return snapshots;
+  }
+
+  Future<void> saveAdminUserProfile(FinanceUser user) async {
+    _requireAdmin();
+    final accountId = normalizeAccountId(user.accountId ?? '');
+    if (user.uid.trim().isEmpty || accountId.isEmpty) {
+      throw const FirebaseFinanceException(
+        'User UID and User ID are required.',
+      );
+    }
+    final batch = _firestore.batch();
+    batch.set(_firestore.collection('user_ids').doc(accountId), {
+      'uid': user.uid.trim(),
+      'email': user.email ?? '',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    batch.set(_firestore.collection('users').doc(user.uid.trim()), {
+      'accountId': accountId,
+      'email': user.email ?? '',
+      'displayName': user.displayName ?? '',
+      'photoUrl': user.photoUrl ?? '',
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+    await batch.commit();
+  }
+
+  Future<void> deleteAdminUserData(String uid) async {
+    _requireAdmin();
+    final userDoc = _firestore.collection('users').doc(uid);
+    final userSnapshot = await userDoc.get();
+    final accountId = '${userSnapshot.data()?['accountId'] ?? ''}'.trim();
+    final txs = await _transactions(uid).get();
+    final batch = _firestore.batch();
+    for (final doc in txs.docs) {
+      batch.delete(doc.reference);
+    }
+    batch.delete(userDoc);
+    if (accountId.isNotEmpty) {
+      batch.delete(_firestore.collection('user_ids').doc(accountId));
+    }
+    await batch.commit();
+  }
+
+  Future<void> saveAdminTransaction({
+    required String uid,
+    required FinancialTransaction transaction,
+  }) async {
+    _requireAdmin();
+    final id = _requireTransactionId(transaction);
+    await _transactions(
+      uid,
+    ).doc(id).set(_toFirestore(transaction), SetOptions(merge: true));
+  }
+
+  Future<void> deleteAdminTransaction({
+    required String uid,
+    required String transactionId,
+  }) async {
+    _requireAdmin();
+    await _transactions(uid).doc(transactionId).delete();
+  }
+
+  Future<List<FinancialTransaction>> replaceAdminTransactions({
+    required String uid,
+    required List<FinancialTransaction> transactions,
+  }) async {
+    _requireAdmin();
+    final existing = await _transactions(uid).get();
+    final deleteBatch = _firestore.batch();
+    for (final doc in existing.docs) {
+      deleteBatch.delete(doc.reference);
+    }
+    await deleteBatch.commit();
+    if (transactions.isEmpty) {
+      return const [];
+    }
+    final writeBatch = _firestore.batch();
+    for (final transaction in transactions) {
+      final id = _requireTransactionId(transaction);
+      writeBatch.set(_transactions(uid).doc(id), _toFirestore(transaction));
+    }
+    await writeBatch.commit();
+    return transactions;
+  }
+
   Future<List<FinancialTransaction>> fetchTransactions() async {
     final user = _requireUser();
     final snapshot = await _transactions(
@@ -320,6 +447,14 @@ class FirebaseFinanceService {
     final user = _auth.currentUser;
     if (user == null) {
       throw const FirebaseFinanceException('Sign in with Google first.');
+    }
+    return user;
+  }
+
+  User _requireAdmin() {
+    final user = _requireUser();
+    if ((user.email ?? '').trim().toLowerCase() != adminEmail) {
+      throw const FirebaseFinanceException('Admin access is required.');
     }
     return user;
   }

@@ -10,6 +10,7 @@ import 'config/app_config.dart';
 import 'controllers/dashboard_controller.dart';
 import 'l10n/app_strings.dart';
 import 'screens/add_transaction_screen.dart';
+import 'screens/admin_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/spending_alerts_screen.dart';
 import 'screens/dashboard_screen.dart';
@@ -298,15 +299,19 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
           ),
           AnalyticsScreen(controller: controller),
           SpendingAlertsScreen(controller: controller),
+          if (controller.isAdmin) AdminScreen(controller: controller),
         ];
+        final activeIndex = _selectedIndex >= screens.length
+            ? screens.length - 1
+            : _selectedIndex;
         final strings = controller.strings;
         FinanceFormatters.localeCode = controller.language.code;
         final indexedScreens = IndexedStack(
-          index: _selectedIndex,
+          index: activeIndex,
           children: screens,
         );
         final navigationBar = NavigationBar(
-          selectedIndex: _selectedIndex,
+          selectedIndex: activeIndex,
           onDestinationSelected: (index) =>
               setState(() => _selectedIndex = index),
           destinations: [
@@ -335,6 +340,12 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
               selectedIcon: Icon(Icons.notifications_active_rounded),
               label: 'Alerts',
             ),
+            if (controller.isAdmin)
+              const NavigationDestination(
+                icon: Icon(Icons.admin_panel_settings_outlined),
+                selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+                label: 'Admin',
+              ),
           ],
         );
 
@@ -366,7 +377,8 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
                   children: [
                     _GlobalTopBar(
                       onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                      selectedIndex: _selectedIndex,
+                      selectedIndex: activeIndex,
+                      isAdmin: controller.isAdmin,
                       onDestinationSelected: (index) =>
                           setState(() => _selectedIndex = index),
                     ),
@@ -406,11 +418,13 @@ class _GlobalTopBar extends StatelessWidget {
   const _GlobalTopBar({
     required this.onOpenMenu,
     required this.selectedIndex,
+    required this.isAdmin,
     required this.onDestinationSelected,
   });
 
   final VoidCallback onOpenMenu;
   final int selectedIndex;
+  final bool isAdmin;
   final ValueChanged<int> onDestinationSelected;
 
   @override
@@ -509,6 +523,16 @@ class _GlobalTopBar extends StatelessWidget {
                               label: 'Alerts',
                               onSelected: onDestinationSelected,
                             ),
+                            if (isAdmin)
+                              _WebNavItem(
+                                index: 5,
+                                selectedIndex: selectedIndex,
+                                icon: Icons.admin_panel_settings_outlined,
+                                selectedIcon:
+                                    Icons.admin_panel_settings_rounded,
+                                label: 'Admin',
+                                onSelected: onDestinationSelected,
+                              ),
                           ],
                         ),
                       ),

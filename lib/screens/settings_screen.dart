@@ -507,6 +507,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         onSave: _saveExchangeRate,
       ),
       _SettingsPane.languageTheme => _AppearanceSection(controller: controller),
+      _SettingsPane.backupRestore => _BackupRestoreSection(
+        controller: controller,
+      ),
       _SettingsPane.about => const _AboutSection(),
     };
   }
@@ -1138,6 +1141,9 @@ class _SheetSideSettingsState extends State<_SheetSideSettings> {
         onSave: _saveExchangeRate,
       ),
       _SettingsPane.languageTheme => _AppearanceSection(controller: controller),
+      _SettingsPane.backupRestore => _BackupRestoreSection(
+        controller: controller,
+      ),
       _SettingsPane.about => const _AboutSection(),
     };
   }
@@ -1148,6 +1154,7 @@ enum _SettingsPane {
   floatingInput,
   exchangeRate,
   languageTheme,
+  backupRestore,
   about,
 }
 
@@ -1201,6 +1208,13 @@ class _SettingsSideMenu extends StatelessWidget {
           selected: selected,
           icon: Icons.tune_rounded,
           label: 'Language / theme',
+          onSelected: onSelected,
+        ),
+        _SettingsMenuTile(
+          pane: _SettingsPane.backupRestore,
+          selected: selected,
+          icon: Icons.backup_rounded,
+          label: 'Backup / restore',
           onSelected: onSelected,
         ),
         _SettingsMenuTile(
@@ -1306,6 +1320,123 @@ class _AccountSection extends StatelessWidget {
           icon: const Icon(Icons.logout_rounded),
           label: const Text('Logout'),
         ),
+      ],
+    );
+  }
+}
+
+class _BackupRestoreSection extends StatefulWidget {
+  const _BackupRestoreSection({required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  State<_BackupRestoreSection> createState() => _BackupRestoreSectionState();
+}
+
+class _BackupRestoreSectionState extends State<_BackupRestoreSection> {
+  List<Map<String, dynamic>> _backups = const [];
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final backups = await widget.controller.localBackups();
+    if (mounted) {
+      setState(() => _backups = backups);
+    }
+  }
+
+  Future<void> _backup() async {
+    setState(() => _busy = true);
+    try {
+      await widget.controller.createLocalBackup();
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Local backup created.')));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _restore(String id) async {
+    setState(() => _busy = true);
+    try {
+      final count = await widget.controller.restoreLocalBackup(id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Restored $count transactions.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _SettingsPanel(
+      icon: Icons.backup_rounded,
+      title: 'Backup / restore',
+      subtitle: 'Local device backups. Google Drive needs secure Drive access.',
+      children: [
+        FilledButton.icon(
+          onPressed: _busy ? null : _backup,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_alt_rounded),
+          label: const Text('Create local backup'),
+        ),
+        const SizedBox(height: 12),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListTile(
+            leading: const Icon(Icons.cloud_upload_outlined),
+            title: const Text('Google Drive backup'),
+            subtitle: const Text('Needs Drive OAuth scope / backend support.'),
+            trailing: const Text('Next'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_backups.isEmpty)
+          Text(
+            'No local backups yet.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          )
+        else
+          for (final backup in _backups)
+            ListTile(
+              leading: const Icon(Icons.history_rounded),
+              title: Text('${backup['label'] ?? 'Backup'}'),
+              subtitle: Text(
+                '${backup['savedAt'] ?? ''} • ${(backup['transactions'] as List?)?.length ?? 0} rows',
+              ),
+              trailing: TextButton(
+                onPressed: _busy ? null : () => _restore('${backup['id']}'),
+                child: const Text('Restore'),
+              ),
+            ),
       ],
     );
   }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -72,6 +74,7 @@ class DashboardController extends ChangeNotifier {
   static const _firestoreEnabledKey = 'firestore_enabled';
   static const _sheetExportEndpointKey = 'sheet_export_endpoint';
   static const _sheetExportSecretKey = 'sheet_export_secret';
+  static const _localBackupsKey = 'local_transaction_backups';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
@@ -101,6 +104,8 @@ class DashboardController extends ChangeNotifier {
   bool _isFirebaseConfigured = false;
   bool _useFirestore = false;
   FinanceUser? _user;
+  List<AdminUserSnapshot> _adminUsers = const [];
+  bool _isAdminLoading = false;
 
   List<FinancialTransaction> get transactions =>
       List.unmodifiable(_transactions);
@@ -160,6 +165,12 @@ class DashboardController extends ChangeNotifier {
   bool get useFirestore => _useFirestore;
 
   bool get isSignedIn => _user != null;
+
+  bool get isAdmin => _firebaseService?.isCurrentUserAdmin ?? false;
+
+  List<AdminUserSnapshot> get adminUsers => List.unmodifiable(_adminUsers);
+
+  bool get isAdminLoading => _isAdminLoading;
 
   String? get firebaseSetupMessage {
     if (_isFirebaseConfigured) {
@@ -398,6 +409,9 @@ class DashboardController extends ChangeNotifier {
       }
       _user = await _firebase.loadCurrentUser() ?? basicUser;
       _transactions = await _firebase.fetchTransactions();
+      if (isAdmin) {
+        await refreshAdminUsers(silent: true);
+      }
       await _saveSequentialIdsIfNeeded();
       _lastUpdated = DateTime.now();
     } catch (error) {
@@ -672,11 +686,211 @@ class DashboardController extends ChangeNotifier {
     _user = null;
     _useFirestore = false;
     _transactions = const [];
+    _adminUsers = const [];
     _errorMessage = null;
     _lastUpdated = DateTime.now();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_firestoreEnabledKey, false);
     notifyListeners();
+  }
+
+  Future<void> refreshAdminUsers({bool silent = false}) async {
+    if (!isAdmin) {
+      _adminUsers = const [];
+      return;
+    }
+    if (!silent) {
+      _isAdminLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
+    try {
+      _adminUsers = await _firebase.fetchAdminUserSnapshots();
+    } catch (error) {
+      _errorMessage = _friendlyErrorMessage(error);
+    } finally {
+      _isAdminLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> saveAdminUserProfile(FinanceUser user) async {
+    await _firebase.saveAdminUserProfile(user);
+    await refreshAdminUsers();
+  }
+
+  Future<void> deleteAdminUserData(String uid) async {
+    await _firebase.deleteAdminUserData(uid);
+    await refreshAdminUsers();
+  }
+
+  Future<void> saveAdminTransaction({
+    required String uid,
+    required FinancialTransaction transaction,
+  }) async {
+    await _firebase.saveAdminTransaction(uid: uid, transaction: transaction);
+    await refreshAdminUsers();
+  }
+
+  Future<void> deleteAdminTransaction({
+    required String uid,
+    required String transactionId,
+  }) async {
+    await _firebase.deleteAdminTransaction(
+      uid: uid,
+      transactionId: transactionId,
+    );
+    await refreshAdminUsers();
+  }
+
+  Future<String> createLocalBackup({String? label}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final backups = _readLocalBackups(prefs);
+    final now = DateTime.now();
+    final id = now.millisecondsSinceEpoch.toString();
+    backups.insert(0, {
+      'id': id,
+      'label': label?.trim().isNotEmpty == true
+          ? label!.trim()
+          : 'Backup ${now.toIso8601String()}',
+      'savedAt': now.toIso8601String(),
+      'accountId': _user?.accountId ?? '',
+      'email': _user?.email ?? '',
+      'transactions': [
+        for (final transaction in _transactions)
+          _transactionToJson(transaction),
+      ],
+    });
+    await prefs.setString(
+      _localBackupsKey,
+      jsonEncode(backups.take(10).toList()),
+    );
+    return id;
+  }
+
+  Future<List<Map<String, dynamic>>> localBackups() async {
+    final prefs = await SharedPreferences.getInstance();
+    return _readLocalBackups(prefs);
+  }
+
+  Future<int> restoreLocalBackup(String id) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    Map<String, dynamic>? backup;
+    for (final item in _readLocalBackups(prefs)) {
+      if ('${item['id']}' == id) {
+        backup = item;
+        break;
+      }
+    }
+    if (backup == null) {
+      throw const FirebaseFinanceException('Backup was not found.');
+    }
+    final rows = backup['transactions'];
+    if (rows is! List) {
+      throw const FirebaseFinanceException('Backup file is invalid.');
+    }
+    final transactions = rows
+        .whereType<Map>()
+        .map((item) => _transactionFromJson(Map<String, dynamic>.from(item)))
+        .toList(growable: false);
+    final restored = await _firebase.replaceTransactions(transactions);
+    _transactions = restored;
+    _lastUpdated = DateTime.now();
+    notifyListeners();
+    return restored.length;
+  }
+
+  List<Map<String, dynamic>> _readLocalBackups(SharedPreferences prefs) {
+    final raw = prefs.getString(_localBackupsKey);
+    if (raw == null || raw.trim().isEmpty) {
+      return [];
+    }
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) {
+      return [];
+    }
+    return decoded
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Map<String, dynamic> _transactionToJson(FinancialTransaction transaction) {
+    return {
+      'id': transaction.id,
+      'createdAt': transaction.createdAt?.toIso8601String(),
+      'source': transaction.source.label,
+      'date': transaction.date.toIso8601String(),
+      'hasDate': transaction.hasDate,
+      'type': transaction.type.label,
+      'category': transaction.category,
+      'description': transaction.description,
+      'currency': transaction.currency.label,
+      'amount': transaction.amount,
+      'paymentMethod': transaction.paymentMethod,
+      'notes': transaction.notes,
+      'raw': transaction.raw,
+    };
+  }
+
+  FinancialTransaction _transactionFromJson(Map<String, dynamic> data) {
+    final raw = data['raw'];
+    return FinancialTransaction(
+      id: '${data['id'] ?? ''}'.trim(),
+      createdAt: DateTime.tryParse('${data['createdAt'] ?? ''}'),
+      source: _parseBackupSource('${data['source'] ?? ''}'),
+      date: DateTime.tryParse('${data['date'] ?? ''}') ?? DateTime.now(),
+      hasDate: data['hasDate'] != false,
+      type: _parseBackupType('${data['type'] ?? ''}'),
+      category: '${data['category'] ?? 'Uncategorized'}'.trim(),
+      description: '${data['description'] ?? ''}'.trim(),
+      currency: _parseBackupCurrency('${data['currency'] ?? ''}'),
+      amount: double.tryParse('${data['amount'] ?? 0}')?.abs() ?? 0,
+      paymentMethod: '${data['paymentMethod'] ?? ''}'.trim(),
+      notes: '${data['notes'] ?? ''}'.trim(),
+      raw: raw is Map
+          ? raw.map((key, value) => MapEntry('$key', '$value'))
+          : const {},
+    );
+  }
+
+  TransactionSource _parseBackupSource(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized.contains('sheet')) {
+      return TransactionSource.googleSheet;
+    }
+    if (normalized.contains('script') || normalized.contains('gemini')) {
+      return TransactionSource.script;
+    }
+    return TransactionSource.application;
+  }
+
+  TransactionType _parseBackupType(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized.contains('income')) {
+      return TransactionType.income;
+    }
+    if (normalized.contains('expense')) {
+      return TransactionType.expense;
+    }
+    if (normalized.contains('reserve')) {
+      return TransactionType.reserveable;
+    }
+    return TransactionType.unknown;
+  }
+
+  CurrencyCode _parseBackupCurrency(String value) {
+    final normalized = value.toLowerCase();
+    if (normalized.contains('lbp')) {
+      return CurrencyCode.lbp;
+    }
+    if (normalized.contains('usd')) {
+      return CurrencyCode.usd;
+    }
+    return CurrencyCode.unknown;
   }
 
   Future<int> addTransactionsFromGeminiScript(
