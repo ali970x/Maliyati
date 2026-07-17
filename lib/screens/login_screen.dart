@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../config/app_config.dart';
@@ -283,7 +284,19 @@ class _LoginScreenState extends State<LoginScreen> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 16),
+                          if (!_isCreatingAccount) ...[
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: controller.isLoading
+                                    ? null
+                                    : _sendPasswordReset,
+                                icon: const Icon(Icons.lock_reset_rounded),
+                                label: const Text('Forgot password?'),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 12),
                           FilledButton.icon(
                             onPressed: controller.isLoading
                                 ? null
@@ -307,51 +320,53 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           if (!_isCreatingAccount) ...[
                             const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(
-                                    color: theme.colorScheme.outline,
+                            if (!kIsWeb) ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Divider(
+                                      color: theme.colorScheme.outline,
+                                    ),
                                   ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                    ),
+                                    child: Text(
+                                      'or',
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                            fontWeight: FontWeight.w800,
+                                          ),
+                                    ),
                                   ),
-                                  child: Text(
-                                    'or',
-                                    style: theme.textTheme.labelMedium
-                                        ?.copyWith(
-                                          color: theme
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                          fontWeight: FontWeight.w800,
-                                        ),
+                                  Expanded(
+                                    child: Divider(
+                                      color: theme.colorScheme.outline,
+                                    ),
                                   ),
-                                ),
-                                Expanded(
-                                  child: Divider(
-                                    color: theme.colorScheme.outline,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                side: BorderSide(
-                                  color: theme.colorScheme.outlineVariant,
-                                ),
+                                ],
                               ),
-                              onPressed: controller.isLoading
-                                  ? null
-                                  : controller.signInWithGoogle,
-                              icon: const Icon(Icons.account_circle_rounded),
-                              label: const Text('Continue with Google'),
-                            ),
+                              const SizedBox(height: 16),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  side: BorderSide(
+                                    color: theme.colorScheme.outlineVariant,
+                                  ),
+                                ),
+                                onPressed: controller.isLoading
+                                    ? null
+                                    : controller.signInWithGoogle,
+                                icon: const Icon(Icons.account_circle_rounded),
+                                label: const Text('Continue with Google'),
+                              ),
+                            ],
                             const SizedBox(height: 10),
                             TextButton(
                               onPressed: controller.isLoading
@@ -431,6 +446,29 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       await widget.controller.signInWithEmail(email: email, password: password);
     }
+  }
+
+  Future<void> _sendPasswordReset() async {
+    final email = _emailController.text.trim();
+    if (!email.contains('@') || !email.contains('.')) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Enter your email first.')));
+      return;
+    }
+    final sent = await widget.controller.sendPasswordResetEmail(email);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          sent
+              ? 'Password reset email sent to $email.'
+              : widget.controller.errorMessage ?? 'Could not send reset email.',
+        ),
+      ),
+    );
   }
 
   Future<bool> _checkUserId({bool force = false}) async {

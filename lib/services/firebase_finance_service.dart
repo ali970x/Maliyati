@@ -78,6 +78,14 @@ class FirebaseFinanceService {
     return _toFinanceUser(result.user, includeProfile: true);
   }
 
+  Future<void> sendPasswordResetEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      throw const FirebaseFinanceException('Enter your email first.');
+    }
+    await _auth.sendPasswordResetEmail(email: trimmed);
+  }
+
   Future<FinanceUser?> createAccountWithEmail({
     required String name,
     required String email,

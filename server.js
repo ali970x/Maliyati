@@ -111,9 +111,9 @@ function serveFile(filePath, request, response) {
     'index.html',
     'version.json',
   ]);
-  const cacheControl = revalidateFiles.has(fileName)
+  const cacheControl = revalidateFiles.has(fileName) || fileName === 'main.dart.js'
     ? 'no-store, no-cache, must-revalidate'
-    : fileName === 'main.dart.js' || filePath.includes(`${path.sep}canvaskit${path.sep}`)
+    : filePath.includes(`${path.sep}canvaskit${path.sep}`)
       ? 'public, max-age=31536000, immutable'
       : 'public, max-age=3600';
   const acceptsBrotli = /\bbr\b/.test(request.headers['accept-encoding'] || '');

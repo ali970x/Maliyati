@@ -552,6 +552,28 @@ class DashboardController extends ChangeNotifier {
     );
   }
 
+  Future<bool> sendPasswordResetEmail(String email) async {
+    if (!_isFirebaseConfigured) {
+      _errorMessage =
+          'Firebase is not configured yet. Check firebase_options.dart.';
+      notifyListeners();
+      return false;
+    }
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _firebase.sendPasswordResetEmail(email);
+      return true;
+    } catch (error) {
+      _errorMessage = _friendlyErrorMessage(error);
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> createAccountWithEmail({
     required String name,
     required String email,
