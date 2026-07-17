@@ -219,8 +219,12 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _smartClipboard.initialize(onOpenSmartInput: _openSmartInput);
-    _initializeShareHandler();
+    // These integrations are Android-only. Starting platform channels on the
+    // browser immediately after Google authentication can crash the web view.
+    if (!kIsWeb) {
+      _smartClipboard.initialize(onOpenSmartInput: _openSmartInput);
+      _initializeShareHandler();
+    }
   }
 
   @override
@@ -249,11 +253,18 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   }
 
   Future<void> _initializeShareHandler() async {
-    final handler = ShareHandler.instance;
-    _shareSubscription = handler.sharedMediaStream.listen(_handleSharedMedia);
-    final initialMedia = await handler.getInitialSharedMedia();
-    if (initialMedia != null) {
-      _handleSharedMedia(initialMedia);
+    try {
+      final handler = ShareHandler.instance;
+      _shareSubscription = handler.sharedMediaStream.listen(
+        _handleSharedMedia,
+        onError: (error, stackTrace) {},
+      );
+      final initialMedia = await handler.getInitialSharedMedia();
+      if (initialMedia != null) {
+        _handleSharedMedia(initialMedia);
+      }
+    } catch (_) {
+      // Sharing is an optional mobile convenience and must not block the app.
     }
   }
 
