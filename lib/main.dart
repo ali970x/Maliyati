@@ -21,8 +21,13 @@ import 'widgets/responsive_layout.dart';
 import 'services/firebase_bootstrap.dart';
 import 'services/smart_clipboard_service.dart';
 
-Future<void> main() async {
+Future<void> main() => startFinanceTrackerApp();
+
+Future<void> startFinanceTrackerApp({
+  void Function()? registerPlatformPlugins,
+}) async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerPlatformPlugins?.call();
   await FirebaseBootstrap.initializeIfConfigured();
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle.dark.copyWith(
