@@ -10,6 +10,8 @@ import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
 
+enum DashboardFocus { income, expense, reserveable, debit }
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, required this.controller});
 
@@ -20,7 +22,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  TransactionType? _selectedTransactionType;
+  DashboardFocus? _selectedFocus;
   bool _showSelectedAsCategories = true;
   String? _selectedCategory;
 
@@ -73,23 +75,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             first: _NetBalance(controller: controller),
             second: _SummaryGrid(
               controller: controller,
-              selectedType: _selectedTransactionType,
-              onTypeSelected: (type) {
+              selectedFocus: _selectedFocus,
+              onFocusSelected: (focus) {
                 setState(() {
-                  if (_selectedTransactionType == type &&
-                      _showSelectedAsCategories) {
-                    _selectedTransactionType = null;
+                  if (_selectedFocus == focus && _showSelectedAsCategories) {
+                    _selectedFocus = null;
                     _selectedCategory = null;
                   } else {
-                    _selectedTransactionType = type;
+                    _selectedFocus = focus;
                     _selectedCategory = null;
                     _showSelectedAsCategories = true;
                   }
                 });
               },
-              onTypeLongPressed: (type) {
+              onFocusLongPressed: (focus) {
                 setState(() {
-                  _selectedTransactionType = type;
+                  _selectedFocus = focus;
                   _selectedCategory = null;
                   _showSelectedAsCategories = false;
                 });
@@ -99,7 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 12),
           _SelectedTransactionsSection(
             controller: controller,
-            selectedType: _selectedTransactionType,
+            selectedFocus: _selectedFocus,
             showCategories: _showSelectedAsCategories,
             selectedCategory: _selectedCategory,
             onCategorySelected: (category) {
@@ -145,14 +146,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 class _SelectedTransactionsSection extends StatelessWidget {
   const _SelectedTransactionsSection({
     required this.controller,
-    required this.selectedType,
+    required this.selectedFocus,
     required this.showCategories,
     required this.selectedCategory,
     required this.onCategorySelected,
   });
 
   final DashboardController controller;
-  final TransactionType? selectedType;
+  final DashboardFocus? selectedFocus;
   final bool showCategories;
   final String? selectedCategory;
   final ValueChanged<String> onCategorySelected;
@@ -162,39 +163,38 @@ class _SelectedTransactionsSection extends StatelessWidget {
     final strings = controller.strings;
     final theme = Theme.of(context);
 
-    if (selectedType == null) {
+    if (selectedFocus == null) {
       return const SizedBox.shrink();
     }
 
-    var transactions =
-        controller.periodTransactions
-            .where((transaction) => transaction.type == selectedType)
-            .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
-    final (color, icon, title, emptyMessage) = switch (selectedType!) {
-      TransactionType.income => (
+    var transactions = controller.periodTransactions
+        .where((transaction) => _matchesFocus(transaction, selectedFocus!))
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    final (color, icon, title, emptyMessage) = switch (selectedFocus!) {
+      DashboardFocus.income => (
         const Color(0xFF168A5B),
         Icons.south_west_rounded,
         strings.showIncomeTransactions,
         strings.noIncomeInPeriod,
       ),
-      TransactionType.expense => (
+      DashboardFocus.expense => (
         const Color(0xFFC74949),
         Icons.north_east_rounded,
         strings.showExpenseTransactions,
         strings.noExpensesInPeriod,
       ),
-      TransactionType.reserveable => (
+      DashboardFocus.reserveable => (
         const Color(0xFFD97706),
         Icons.request_quote_rounded,
         strings.showReserveableTransactions,
         strings.noReserveablesInPeriod,
       ),
-      TransactionType.unknown => (
-        theme.colorScheme.onSurfaceVariant,
-        Icons.help_outline_rounded,
-        strings.transactions,
-        strings.noTransactionsYet,
+      DashboardFocus.debit => (
+        const Color(0xFF7C3AED),
+        Icons.account_balance_rounded,
+        'Debit',
+        'No debit transactions in this period.',
       ),
     };
 
@@ -313,6 +313,29 @@ class _SelectedTransactionsSection extends StatelessWidget {
       ],
     );
   }
+
+  bool _matchesFocus(
+    FinancialTransaction transaction,
+    DashboardFocus focus,
+  ) {
+    return switch (focus) {
+      DashboardFocus.income => transaction.type == TransactionType.income,
+      DashboardFocus.expense => transaction.type == TransactionType.expense,
+      DashboardFocus.reserveable =>
+        transaction.type == TransactionType.reserveable,
+      DashboardFocus.debit => _isDebitTransaction(transaction),
+    };
+  }
+}
+
+bool _isDebitTransaction(FinancialTransaction transaction) {
+  final value = transaction.category.trim().toLowerCase();
+  return value.contains('dyoun') ||
+      value.contains('dyoune') ||
+      value.contains('debit') ||
+      value.contains('debt') ||
+      value.contains('دين') ||
+      value.contains('ديون');
 }
 
 class _ExpenseFocusCard extends StatelessWidget {
@@ -878,32 +901,43 @@ class _MiniFigure extends StatelessWidget {
 class _SummaryGrid extends StatelessWidget {
   const _SummaryGrid({
     required this.controller,
-    required this.selectedType,
-    required this.onTypeSelected,
-    required this.onTypeLongPressed,
+    required this.selectedFocus,
+    required this.onFocusSelected,
+    required this.onFocusLongPressed,
   });
 
   final DashboardController controller;
-  final TransactionType? selectedType;
-  final ValueChanged<TransactionType> onTypeSelected;
-  final ValueChanged<TransactionType> onTypeLongPressed;
+  final DashboardFocus? selectedFocus;
+  final ValueChanged<DashboardFocus> onFocusSelected;
+  final ValueChanged<DashboardFocus> onFocusLongPressed;
 
   @override
   Widget build(BuildContext context) {
     final summary = controller.summary;
     final strings = controller.strings;
-    final incomeColor = selectedType == TransactionType.income
+    final debitTotal = controller.periodTransactions
+        .where(_isDebitTransaction)
+        .fold<double>(
+          0,
+          (sum, transaction) =>
+              sum + transaction.amountInUsd(controller.exchangeRate),
+        );
+    final debitLbp = debitTotal * controller.exchangeRate;
+    final incomeColor = selectedFocus == DashboardFocus.income
         ? const Color(0xFF0F766E)
         : const Color(0xFF168A5B);
-    final expenseColor = selectedType == TransactionType.expense
+    final expenseColor = selectedFocus == DashboardFocus.expense
         ? const Color(0xFFB91C1C)
         : const Color(0xFFC74949);
-    final reserveableColor = selectedType == TransactionType.reserveable
+    final reserveableColor = selectedFocus == DashboardFocus.reserveable
         ? const Color(0xFFB45309)
         : const Color(0xFFD97706);
+    final debitColor = selectedFocus == DashboardFocus.debit
+        ? const Color(0xFF5B21B6)
+        : const Color(0xFF7C3AED);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = AppResponsive.isWideWeb(context) ? 3 : 2;
+        final columns = 2;
         final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
         final height = AppResponsive.isWideWeb(context) ? 190.0 : 150.0;
         return Wrap(
@@ -920,8 +954,8 @@ class _SummaryGrid extends StatelessWidget {
                     '${FinanceFormatters.compactUsd(summary.totalIncomeUsd)} + ${FinanceFormatters.lbp(summary.totalIncomeLbp)}',
                 icon: Icons.south_west_rounded,
                 color: incomeColor,
-                onTap: () => onTypeSelected(TransactionType.income),
-                onLongPress: () => onTypeLongPressed(TransactionType.income),
+                onTap: () => onFocusSelected(DashboardFocus.income),
+                onLongPress: () => onFocusLongPressed(DashboardFocus.income),
               ),
             ),
             SizedBox(
@@ -934,8 +968,8 @@ class _SummaryGrid extends StatelessWidget {
                     '${FinanceFormatters.compactUsd(summary.totalExpenseUsd)} + ${FinanceFormatters.lbp(summary.totalExpenseLbp)}',
                 icon: Icons.north_east_rounded,
                 color: expenseColor,
-                onTap: () => onTypeSelected(TransactionType.expense),
-                onLongPress: () => onTypeLongPressed(TransactionType.expense),
+                onTap: () => onFocusSelected(DashboardFocus.expense),
+                onLongPress: () => onFocusLongPressed(DashboardFocus.expense),
               ),
             ),
             SizedBox(
@@ -948,9 +982,22 @@ class _SummaryGrid extends StatelessWidget {
                     '${FinanceFormatters.compactUsd(summary.totalReserveableUsd)} + ${FinanceFormatters.lbp(summary.totalReserveableLbp)}',
                 icon: Icons.request_quote_rounded,
                 color: reserveableColor,
-                onTap: () => onTypeSelected(TransactionType.reserveable),
+                onTap: () => onFocusSelected(DashboardFocus.reserveable),
                 onLongPress: () =>
-                    onTypeLongPressed(TransactionType.reserveable),
+                    onFocusLongPressed(DashboardFocus.reserveable),
+              ),
+            ),
+            SizedBox(
+              width: width,
+              height: height,
+              child: MetricCard(
+                title: 'Debit',
+                value: FinanceFormatters.usd(debitTotal),
+                subtitle: FinanceFormatters.lbp(debitLbp),
+                icon: Icons.account_balance_rounded,
+                color: debitColor,
+                onTap: () => onFocusSelected(DashboardFocus.debit),
+                onLongPress: () => onFocusLongPressed(DashboardFocus.debit),
               ),
             ),
           ],
