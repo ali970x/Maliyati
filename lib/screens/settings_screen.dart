@@ -280,12 +280,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final drawerWidth = MediaQuery.sizeOf(
-      context,
-    ).width.clamp(320.0, 420.0).toDouble();
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final drawerWidth = (screenWidth * 0.72).clamp(280.0, 460.0).toDouble();
     return Drawer(
       width: drawerWidth,
       backgroundColor: theme.colorScheme.surface,
+      elevation: 18,
+      shadowColor: Colors.black.withValues(alpha: 0.28),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(
+          left: Radius.circular(isRtl ? 22 : 0),
+          right: Radius.circular(isRtl ? 0 : 22),
+        ),
+      ),
       child: SafeArea(
         child: Column(
           children: [
@@ -1253,24 +1261,24 @@ class _SettingsMenuTile extends StatelessWidget {
       color: active
           ? const Color(0xFF2563EB).withValues(alpha: 0.10)
           : Colors.transparent,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(14),
         onTap: () => onSelected(pane),
         child: SizedBox(
-          height: 54,
+          height: 48,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               children: [
                 Icon(
                   icon,
-                  size: 24,
+                  size: 22,
                   color: active
                       ? activeInk
                       : theme.colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     label,
@@ -1384,13 +1392,23 @@ class _BackupRestoreSectionState extends State<_BackupRestoreSection> {
     }
   }
 
+  void _showDriveInfo() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Use local backup now. Direct Google Drive backup will be enabled after connecting Drive permission.',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return _SettingsPanel(
       icon: Icons.backup_rounded,
       title: 'Backup / restore',
-      subtitle: 'Local device backups. Google Drive needs secure Drive access.',
+      subtitle: 'Keep recent copies on this device and restore them anytime.',
       children: [
         FilledButton.icon(
           onPressed: _busy ? null : _backup,
@@ -1412,8 +1430,9 @@ class _BackupRestoreSectionState extends State<_BackupRestoreSection> {
           child: ListTile(
             leading: const Icon(Icons.cloud_upload_outlined),
             title: const Text('Google Drive backup'),
-            subtitle: const Text('Needs Drive OAuth scope / backend support.'),
-            trailing: const Text('Next'),
+            subtitle: const Text('Not connected yet. Local backup is ready.'),
+            trailing: const Icon(Icons.info_outline_rounded),
+            onTap: _showDriveInfo,
           ),
         ),
         const SizedBox(height: 12),

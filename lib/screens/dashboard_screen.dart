@@ -22,9 +22,46 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final _scrollController = ScrollController();
+  final _selectedSectionKey = GlobalKey();
   DashboardFocus? _selectedFocus;
   bool _showSelectedAsCategories = true;
   String? _selectedCategory;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _selectFocus(DashboardFocus focus, {required bool showCategories}) {
+    setState(() {
+      if (_selectedFocus == focus && _showSelectedAsCategories) {
+        _selectedFocus = null;
+        _selectedCategory = null;
+      } else {
+        _selectedFocus = focus;
+        _selectedCategory = null;
+        _showSelectedAsCategories = showCategories;
+      }
+    });
+    if (_selectedFocus != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelection());
+    }
+  }
+
+  void _scrollToSelection() {
+    final context = _selectedSectionKey.currentContext;
+    if (context == null || !_scrollController.hasClients) {
+      return;
+    }
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      alignment: 0.08,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return RefreshIndicator(
       onRefresh: controller.refresh,
       child: ListView(
+        controller: _scrollController,
         padding: AppResponsive.pagePadding(context),
         children: [
           _Header(controller: controller),
@@ -76,29 +114,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             second: _SummaryGrid(
               controller: controller,
               selectedFocus: _selectedFocus,
-              onFocusSelected: (focus) {
-                setState(() {
-                  if (_selectedFocus == focus && _showSelectedAsCategories) {
-                    _selectedFocus = null;
-                    _selectedCategory = null;
-                  } else {
-                    _selectedFocus = focus;
-                    _selectedCategory = null;
-                    _showSelectedAsCategories = true;
-                  }
-                });
-              },
-              onFocusLongPressed: (focus) {
-                setState(() {
-                  _selectedFocus = focus;
-                  _selectedCategory = null;
-                  _showSelectedAsCategories = false;
-                });
-              },
+              onFocusSelected: (focus) =>
+                  _selectFocus(focus, showCategories: true),
+              onFocusLongPressed: (focus) =>
+                  _selectFocus(focus, showCategories: false),
             ),
           ),
           const SizedBox(height: 12),
           _SelectedTransactionsSection(
+            key: _selectedSectionKey,
             controller: controller,
             selectedFocus: _selectedFocus,
             showCategories: _showSelectedAsCategories,
@@ -145,6 +169,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 class _SelectedTransactionsSection extends StatelessWidget {
   const _SelectedTransactionsSection({
+    super.key,
     required this.controller,
     required this.selectedFocus,
     required this.showCategories,

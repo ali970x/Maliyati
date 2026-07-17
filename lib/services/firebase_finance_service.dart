@@ -205,7 +205,12 @@ class FirebaseFinanceService {
 
   Future<void> signOut() async {
     await _auth.signOut();
-    await _googleSignIn.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {
+      // Firebase Auth is the source of truth. On web, GoogleSignIn can throw
+      // after the Firebase session is already closed, so sign-out must continue.
+    }
   }
 
   Future<List<AdminUserSnapshot>> fetchAdminUserSnapshots() async {
