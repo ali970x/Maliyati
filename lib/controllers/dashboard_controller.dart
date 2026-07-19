@@ -988,6 +988,9 @@ class DashboardController extends ChangeNotifier {
     return id;
   }
 
+  String createBackupJson({String? label}) =>
+      jsonEncode(_createBackupDocument(label: label));
+
   Future<List<Map<String, dynamic>>> localBackups() async {
     final prefs = await SharedPreferences.getInstance();
     return _readLocalBackups(prefs);
@@ -1009,6 +1012,14 @@ class DashboardController extends ChangeNotifier {
       throw const FirebaseFinanceException('Backup was not found.');
     }
     return _restoreBackupDocument(backup);
+  }
+
+  Future<int> restoreBackupJson(String json) async {
+    final decoded = jsonDecode(json);
+    if (decoded is! Map) {
+      throw const FirebaseFinanceException('Backup file is invalid.');
+    }
+    return _restoreBackupDocument(Map<String, dynamic>.from(decoded));
   }
 
   Future<GoogleDriveBackupFile> createGoogleDriveBackup({String? label}) {

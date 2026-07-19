@@ -31,7 +31,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late FinancialTransaction _transaction;
   late final TextEditingController _descriptionController;
   late final TextEditingController _categoryController;
-  late final TextEditingController _amountController;
+  late final TextEditingController _amountUsdController;
+  late final TextEditingController _amountLbpController;
   late final TextEditingController _paymentMethodController;
   late final TextEditingController _notesController;
   late TransactionType _selectedType;
@@ -47,10 +48,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   void initState() {
     super.initState();
     _transaction = widget.transaction;
-    _isEditing = widget.startEditing;
+    _isEditing = true;
     _descriptionController = TextEditingController();
     _categoryController = TextEditingController();
-    _amountController = TextEditingController();
+    _amountUsdController = TextEditingController();
+    _amountLbpController = TextEditingController();
     _paymentMethodController = TextEditingController();
     _notesController = TextEditingController();
     _loadFormValues(_transaction);
@@ -60,7 +62,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   void dispose() {
     _descriptionController.dispose();
     _categoryController.dispose();
-    _amountController.dispose();
+    _amountUsdController.dispose();
+    _amountLbpController.dispose();
     _paymentMethodController.dispose();
     _notesController.dispose();
     super.dispose();
@@ -76,27 +79,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
         actions: [
-          if (!_isEditing)
-            IconButton(
-              tooltip: 'Delete',
-              onPressed: _isSaving ? null : _confirmDelete,
-              icon: const Icon(Icons.delete_outline_rounded),
-            ),
-          TextButton.icon(
-            onPressed: _isSaving
-                ? null
-                : _isEditing
-                ? _saveChanges
-                : _startEditing,
-            icon: Icon(_isEditing ? Icons.check_rounded : Icons.edit_rounded),
-            label: Text(_isEditing ? strings.save : strings.editLocally),
+          IconButton(
+            tooltip: 'Delete',
+            onPressed: _isSaving ? null : _confirmDelete,
+            icon: const Icon(Icons.delete_outline_rounded),
           ),
-          if (_isEditing)
-            IconButton(
-              tooltip: strings.cancel,
-              onPressed: _cancelEditing,
-              icon: const Icon(Icons.close_rounded),
-            ),
         ],
       ),
       body: Align(
@@ -107,9 +94,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 ? AppResponsive.webDetailMaxWidth
                 : double.infinity,
           ),
-          child: _isEditing
-              ? _EditBody(state: this)
-              : _ReadOnlyBody(state: this),
+          child: _EditBody(state: this),
         ),
       ),
     );
@@ -138,11 +123,17 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _hasDate = transaction.hasDate;
     _descriptionController.text = transaction.description;
     _categoryController.text = transaction.category;
-    _amountController.text = transaction.amount == 0
+    final amountText = transaction.amount == 0
         ? ''
         : transaction.amount.toStringAsFixed(
             transaction.amount.truncateToDouble() == transaction.amount ? 0 : 2,
           );
+    _amountUsdController.text = transaction.currency == CurrencyCode.usd
+        ? amountText
+        : '';
+    _amountLbpController.text = transaction.currency == CurrencyCode.lbp
+        ? amountText
+        : '';
     _paymentMethodController.text = transaction.paymentMethod;
     _notesController.text = transaction.notes;
   }
@@ -151,12 +142,20 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
+    final usd = _parseAmount(_amountUsdController.text);
+    final lbp = _parseAmount(_amountLbpController.text);
+    if (usd <= 0 && lbp <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a USD or LBP amount.')),
+      );
+      return;
+    }
     final updated = _transaction.copyWith(
       type: _selectedType,
       category: _categoryController.text.trim(),
       description: _descriptionController.text.trim(),
-      currency: _selectedCurrency,
-      amount: _parseAmount(_amountController.text),
+      currency: lbp > 0 ? CurrencyCode.lbp : CurrencyCode.usd,
+      amount: lbp > 0 ? lbp : usd,
       paymentMethod: _paymentMethodController.text.trim(),
       notes: _notesController.text.trim(),
       source: _selectedSource,
@@ -165,7 +164,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         _selectedDate.month,
         _selectedDate.day,
       ),
-      hasDate: _hasDate,
+      hasDate: true,
     );
     if (!_hasMeaningfulChanges(updated)) {
       setState(() => _isEditing = false);
@@ -614,9 +613,42 @@ class _EditBody extends StatelessWidget {
                   TextFormField(
                     controller: state._descriptionController,
                     decoration: InputDecoration(
-                      labelText: strings.description,
-                      prefixIcon: const Icon(Icons.notes_rounded),
+                      labelText: 'Title',
+                      prefixIcon: const Icon(Icons.title_rounded),
                     ),
+                    validator: (value) => value == null || value.trim().isEmpty
+                        ? 'Enter a title.'
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: state._amountUsdController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'Amount (\$)',
+                            prefixIcon: const Icon(Icons.attach_money_rounded),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: TextFormField(
+                          controller: state._amountLbpController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'Amount (LBP)',
+                            prefixIcon: const Icon(Icons.payments_rounded),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   _OptionTextField(
@@ -635,114 +667,55 @@ class _EditBody extends StatelessWidget {
                         : null,
                   ),
                   const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Destination wallet',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          controller: state._amountController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
+                        child: ChoiceChip(
+                          avatar: const Icon(
+                            Icons.account_balance_wallet_rounded,
                           ),
-                          decoration: InputDecoration(
-                            labelText:
-                                state._selectedCurrency == CurrencyCode.usd
-                                ? 'Amount (USD)'
-                                : 'Amount (LBP)',
-                            prefixIcon: Center(
-                              child: Text(
-                                state._selectedCurrency == CurrencyCode.usd
-                                    ? r'$'
-                                    : 'LBP',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                            ),
-                            prefixIconConstraints: const BoxConstraints(
-                              minWidth: 48,
-                            ),
+                          label: const Text('My Wallet'),
+                          selected: !state._paymentMethodController.text
+                              .toLowerCase()
+                              .contains('wish'),
+                          onSelected: (_) => state.setState(
+                            () => state._paymentMethodController.text = 'Cash',
                           ),
-                          validator: (value) {
-                            if (value == null ||
-                                state._parseAmount(value) <= 0) {
-                              return strings.amount;
-                            }
-                            return null;
-                          },
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
-                        child: DropdownButtonFormField<CurrencyCode>(
-                          initialValue: state._selectedCurrency,
-                          decoration: InputDecoration(
-                            labelText: strings.value,
-                            prefixIcon: const Icon(
-                              Icons.currency_exchange_rounded,
+                        child: ChoiceChip(
+                          avatar: ClipRRect(
+                            borderRadius: BorderRadius.circular(7),
+                            child: Image.asset(
+                              'assets/branding/wish_money_logo.jpg',
+                              width: 24,
+                              height: 24,
+                              fit: BoxFit.cover,
                             ),
                           ),
-                          items: const [
-                            DropdownMenuItem(
-                              value: CurrencyCode.usd,
-                              child: Text('USD'),
-                            ),
-                            DropdownMenuItem(
-                              value: CurrencyCode.lbp,
-                              child: Text('LBP'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) {
-                              state._updateCurrency(value);
-                            }
-                          },
+                          label: const Text('Wish Money'),
+                          selected: state._paymentMethodController.text
+                              .toLowerCase()
+                              .contains('wish'),
+                          onSelected: (_) => state.setState(
+                            () => state._paymentMethodController.text =
+                                'Wish Money',
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    value: state._hasDate,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      strings.hasDate,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    secondary: const Icon(Icons.event_rounded),
-                    onChanged: state._updateHasDate,
-                  ),
-                  if (state._hasDate)
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.calendar_month_rounded),
-                      title: Text(strings.date),
-                      subtitle: Text(
-                        FinanceFormatters.date(state._selectedDate),
-                      ),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: state._selectedDate,
-                          firstDate: DateTime(2000),
-                          lastDate: DateTime.now().add(
-                            const Duration(days: 365),
-                          ),
-                        );
-                        if (picked != null) {
-                          state._updateDate(picked);
-                        }
-                      },
-                    ),
-                  const SizedBox(height: 12),
-                  _OptionTextField(
-                    controller: state._paymentMethodController,
-                    label: strings.paymentMethod,
-                    icon: Icons.credit_card_rounded,
-                    options: state.widget.controller.paymentMethodOptions,
-                    fallbackOptions: const ['Cash', 'Whish money', 'Paid'],
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -753,6 +726,23 @@ class _EditBody extends StatelessWidget {
                       labelText: strings.notes,
                       prefixIcon: const Icon(Icons.sticky_note_2_rounded),
                     ),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.calendar_month_rounded),
+                    title: Text(strings.date),
+                    subtitle: Text(FinanceFormatters.date(state._selectedDate)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: state._selectedDate,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime.now().add(const Duration(days: 365)),
+                      );
+                      if (picked != null) state._updateDate(picked);
+                    },
                   ),
                 ],
               ),

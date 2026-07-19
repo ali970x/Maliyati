@@ -2441,41 +2441,56 @@ class _BalanceHero extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 flex: 2,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    InkWell(
-                      onTap: onWalletPressed,
-                      borderRadius: BorderRadius.circular(22),
-                      child: const _BalanceOrb(),
-                    ),
-                    const SizedBox(height: 10),
-                    InkWell(
-                      onTap: onWishWalletPressed,
-                      borderRadius: BorderRadius.circular(22),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF3A1829),
-                          border: Border.all(
-                            color: const Color(0xFFFF8DB5),
-                            width: 1.2,
-                          ),
-                        ),
-                        child: ClipOval(
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Image.asset(
-                              'assets/branding/wish_money_logo.jpg',
-                              fit: BoxFit.cover,
+                child: SizedBox(
+                  height: 116,
+                  child: Stack(
+                    alignment: Alignment.centerRight,
+                    clipBehavior: Clip.none,
+                    children: [
+                      InkWell(
+                        onTap: onWalletPressed,
+                        borderRadius: BorderRadius.circular(60),
+                        child: const _BalanceOrb(),
+                      ),
+                      Positioned(
+                        right: 138,
+                        top: 23,
+                        child: InkWell(
+                          onTap: onWishWalletPressed,
+                          borderRadius: BorderRadius.circular(36),
+                          child: Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: const Color(0xFF071C2C),
+                              border: Border.all(
+                                color: const Color(
+                                  0xFF5ADBE9,
+                                ).withValues(alpha: .5),
+                              ),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0x66000000),
+                                  blurRadius: 12,
+                                  offset: Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(14),
+                              child: ClipOval(
+                                child: Image.asset(
+                                  'assets/branding/wish_money_logo.jpg',
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -3030,73 +3045,73 @@ class _TransactionRow extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => TransactionDetailScreen(
-              controller: controller,
-              transaction: transaction,
-            ),
-          ),
-        ),
-        onLongPress: () => Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => TransactionDetailScreen(
-              controller: controller,
-              transaction: transaction,
-              startEditing: true,
-            ),
-          ),
-        ),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 39,
-                height: 39,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(11),
-                  border: Border.all(color: color.withValues(alpha: .34)),
-                ),
-                child: Icon(icon, color: color, size: 20),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => TransactionDetailScreen(
+                controller: controller,
+                transaction: transaction,
               ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      transaction.description.isEmpty
-                          ? transaction.category
-                          : transaction.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Color(0xFF88A2B8),
-                        fontSize: 11,
+            ),
+          ),
+          onLongPress: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => TransactionDetailScreen(
+                controller: controller,
+                transaction: transaction,
+                startEditing: true,
+              ),
+            ),
+          ),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 39,
+                  height: 39,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(color: color.withValues(alpha: .34)),
+                  ),
+                  child: Icon(icon, color: color, size: 20),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        transaction.description.isEmpty
+                            ? transaction.category
+                            : transaction.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF88A2B8),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                '${income ? '+' : '-'}${FinanceFormatters.amount(transaction)}',
-                style: TextStyle(color: color, fontWeight: FontWeight.w900),
-              ),
-            ],
+                const SizedBox(width: 12),
+                Text(
+                  '${income ? '+' : '-'}${FinanceFormatters.amount(transaction)}',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -3131,7 +3146,8 @@ Future<bool> _confirmDashboardDelete(BuildContext context) async =>
           ),
         ],
       ),
-    )) ?? false;
+    )) ??
+    false;
 
 class _DashboardSwipeAction extends StatelessWidget {
   const _DashboardSwipeAction({
@@ -3162,7 +3178,10 @@ class _DashboardSwipeAction extends StatelessWidget {
         const SizedBox(height: 3),
         Text(
           label,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ],
     ),

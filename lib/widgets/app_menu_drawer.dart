@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -37,19 +42,22 @@ class AppMenuScreen extends StatelessWidget {
                 _open(context, BackupRestoreScreen(controller: controller)),
           ),
           const SizedBox(height: 12),
-          _SettingsCard(
-            icon: Icons.lock_outline_rounded,
-            title: 'Screen lock',
-            subtitle: controller.isAppLockEnabled
-                ? 'Fingerprint unlock is on'
-                : 'Protect Maliyati with a PIN or fingerprint',
-            trailing: Switch(
-              value: controller.isAppLockEnabled,
-              onChanged: (value) => controller.updateAppLockEnabled(value),
+          if (!kIsWeb) ...[
+            _SettingsCard(
+              icon: Icons.lock_outline_rounded,
+              title: 'Screen lock',
+              subtitle: controller.isAppLockEnabled
+                  ? 'Fingerprint unlock is on'
+                  : 'Protect Maliyati with a PIN or fingerprint',
+              trailing: Switch(
+                value: controller.isAppLockEnabled,
+                onChanged: (value) => controller.updateAppLockEnabled(value),
+              ),
+              onTap: () =>
+                  _open(context, AppLockScreen(controller: controller)),
             ),
-            onTap: () => _open(context, AppLockScreen(controller: controller)),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
           _SettingsCard(
             icon: Icons.table_chart_outlined,
             title: 'Sheet connection',
@@ -95,8 +103,7 @@ class AppMenuScreen extends StatelessWidget {
                 _open(context, LanguagePickerScreen(controller: controller)),
           ),
           const SizedBox(height: 12),
-          const _FloatingQuickInputSettingsCard(),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
           _SettingsCard(
             icon: Icons.share_outlined,
             title: 'Share app',
@@ -185,7 +192,7 @@ class AboutApplicationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-              'Version 1.3.2',
+              'Version 1.4.0',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w800,
@@ -1144,6 +1151,8 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   List<Map<String, dynamic>> _localBackups = const [];
   bool _busy = false;
   int _section = 0;
+  double _progress = 0;
+  String _progressLabel = '';
 
   @override
   void initState() {
@@ -1152,11 +1161,23 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<void> _backup() async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _progress = .15;
+      _progressLabel = 'Preparing Google Drive backup…';
+    });
     try {
+      setState(() {
+        _progress = .55;
+        _progressLabel = 'Uploading to Google Drive…';
+      });
       await widget.controller.createGoogleDriveBackup();
       await _load();
       if (mounted) {
+        setState(() {
+          _progress = 1;
+          _progressLabel = 'Google Drive backup complete';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Google Drive backup created.')),
         );
@@ -1197,13 +1218,35 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   }
 
   Future<void> _backupLocal() async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _progress = .15;
+      _progressLabel = 'Preparing local backup…';
+    });
     try {
+      final now = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final json = widget.controller.createBackupJson();
+      setState(() {
+        _progress = .55;
+        _progressLabel = 'Choose where to save the backup…';
+      });
+      final savedPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save Maliyati backup',
+        fileName: 'maliyati-backup-$now.json',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        bytes: Uint8List.fromList(utf8.encode(json)),
+      );
+      if (savedPath == null) return;
       await widget.controller.createLocalBackup();
       await _load();
       if (mounted) {
+        setState(() {
+          _progress = 1;
+          _progressLabel = 'Local backup saved successfully';
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Local backup created on this device.')),
+          const SnackBar(content: Text('Local backup saved successfully.')),
         );
       }
     } finally {
@@ -1249,6 +1292,76 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
+  Future<void> _browseLocalBackup() async {
+    setState(() {
+      _busy = true;
+      _progress = .2;
+      _progressLabel = 'Choose a local Maliyati backup…';
+    });
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
+      );
+      final bytes = result?.files.single.bytes;
+      if (bytes == null) return;
+      setState(() {
+        _progress = .65;
+        _progressLabel = 'Restoring local backup…';
+      });
+      final count = await widget.controller.restoreBackupJson(
+        utf8.decode(bytes),
+      );
+      if (!mounted) return;
+      setState(() {
+        _progress = 1;
+        _progressLabel = 'Restored $count transactions';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Restored $count transactions from file.')),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Restore failed: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _chooseRestoreSource() => showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.cloud_download_rounded),
+            title: const Text('Google Drive backup'),
+            subtitle: const Text('Browse backups saved in Google Drive'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              setState(() => _section = 2);
+              _load();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.folder_open_rounded),
+            title: const Text('Local backup file'),
+            subtitle: const Text('Choose a JSON backup from this device'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _browseLocalBackup();
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final user = widget.controller.user;
@@ -1283,6 +1396,12 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
+                if (_progressLabel.isNotEmpty) ...[
+                  LinearProgressIndicator(value: _progress),
+                  const SizedBox(height: 8),
+                  Text(_progressLabel),
+                  const SizedBox(height: 16),
+                ],
                 if (_section == 0) ...[
                   Row(
                     children: [
@@ -1351,6 +1470,13 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
                     trailing: const Icon(Icons.save_alt_rounded),
                   ),
                 ] else ...[
+                  _BackupRow(
+                    title: 'Restore a backup',
+                    subtitle: 'Choose Google Drive or a local JSON file',
+                    onTap: _busy ? null : _chooseRestoreSource,
+                    trailing: const Icon(Icons.folder_open_rounded),
+                  ),
+                  const SizedBox(height: 12),
                   _BackupRow(
                     title: 'Refresh backups',
                     subtitle: 'Load local and Google Drive backup lists',

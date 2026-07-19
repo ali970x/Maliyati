@@ -249,7 +249,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    _isAppLocked = widget.controller.isAppLockEnabled;
+    _isAppLocked = !kIsWeb && widget.controller.isAppLockEnabled;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _showInitialLock());
     // These integrations are Android-only. Starting platform channels on the
@@ -270,6 +270,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (kIsWeb) return;
     _smartClipboard.updateLifecycle(state);
     if (state == AppLifecycleState.paused &&
         widget.controller.isAppLockEnabled &&
@@ -282,7 +283,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   }
 
   Future<void> _showInitialLock() async {
-    if (!mounted || !widget.controller.isAppLockEnabled || _isUnlocking) {
+    if (kIsWeb || !mounted || !widget.controller.isAppLockEnabled || _isUnlocking) {
       return;
     }
     setState(() => _isAppLocked = true);

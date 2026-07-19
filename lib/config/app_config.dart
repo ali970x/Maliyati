@@ -6,6 +6,14 @@ class AppConfig {
   static const defaultGoogleSheetUrl =
       'https://docs.google.com/spreadsheets/d/1CMtELArv48IVjIo_u5wKSPR8Bqe7JfFqMI0qLLG5Zck/edit?usp=sharing';
 
+  // Web OAuth client from the Firebase project. It is used only by the
+  // Google Drive picker/backup flow in browsers.
+  static const googleWebClientId = String.fromEnvironment(
+    'GOOGLE_WEB_CLIENT_ID',
+    defaultValue:
+        '34788182639-nsp1ct80jvr0jkc4teqs1vlk8gkcd1lt.apps.googleusercontent.com',
+  );
+
   static const defaultExchangeRate = 89000.0;
 
   static const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
