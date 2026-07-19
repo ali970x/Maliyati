@@ -185,7 +185,7 @@ class AboutApplicationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-              'Version 1.3.1',
+              'Version 1.3.2',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w800,

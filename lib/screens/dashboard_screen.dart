@@ -2995,25 +2995,33 @@ class _TransactionRow extends StatelessWidget {
     final icon = transaction.isIncome
         ? Icons.account_balance_wallet_outlined
         : _categoryIcon(transaction.category);
+    // Keep gestures physical in both English and Arabic: swipe right deletes,
+    // swipe left archives. Dismissible directions are logical in RTL layouts.
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final deleteDirection = isRtl
+        ? DismissDirection.endToStart
+        : DismissDirection.startToEnd;
+    const deleteAction = _DashboardSwipeAction(
+      color: Color(0xFFC74949),
+      icon: Icons.delete_outline_rounded,
+      label: 'Delete',
+      alignment: Alignment.centerLeft,
+    );
+    const archiveAction = _DashboardSwipeAction(
+      color: Color(0xFFD97706),
+      icon: Icons.archive_outlined,
+      label: 'Archive',
+      alignment: Alignment.centerRight,
+    );
     return Dismissible(
       key: ValueKey('dashboard-${transaction.id ?? transaction.hashCode}'),
-      background: const _DashboardSwipeAction(
-        color: Color(0xFFC74949),
-        icon: Icons.delete_outline_rounded,
-        label: 'Delete',
-        alignment: Alignment.centerLeft,
-      ),
-      secondaryBackground: const _DashboardSwipeAction(
-        color: Color(0xFFD97706),
-        icon: Icons.archive_outlined,
-        label: 'Archive',
-        alignment: Alignment.centerRight,
-      ),
-      confirmDismiss: (direction) => direction == DismissDirection.startToEnd
+      background: isRtl ? archiveAction : deleteAction,
+      secondaryBackground: isRtl ? deleteAction : archiveAction,
+      confirmDismiss: (direction) => direction == deleteDirection
           ? _confirmDashboardDelete(context)
           : Future.value(true),
       onDismissed: (direction) {
-        if (direction == DismissDirection.startToEnd) {
+        if (direction == deleteDirection) {
           controller.deleteTransaction(transaction);
         } else {
           controller.archiveTransaction(transaction);
