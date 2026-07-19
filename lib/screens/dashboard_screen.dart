@@ -2327,6 +2327,40 @@ class _BalanceHero extends StatelessWidget {
       child: Stack(
         children: [
           const Positioned.fill(child: _SignalGrid()),
+          Align(
+            alignment: const Alignment(.30, 0),
+            child: InkWell(
+              onTap: onWishWalletPressed,
+              borderRadius: BorderRadius.circular(36),
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF071C2C),
+                  border: Border.all(
+                    color: const Color(0xFF5ADBE9).withValues(alpha: .5),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 12,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/branding/wish_money_logo.jpg',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           Row(
             children: [
               Expanded(
@@ -2451,43 +2485,6 @@ class _BalanceHero extends StatelessWidget {
                         onTap: onWalletPressed,
                         borderRadius: BorderRadius.circular(60),
                         child: const _BalanceOrb(),
-                      ),
-                      Positioned(
-                        right: 138,
-                        top: 23,
-                        child: InkWell(
-                          onTap: onWishWalletPressed,
-                          borderRadius: BorderRadius.circular(36),
-                          child: Container(
-                            width: 70,
-                            height: 70,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: const Color(0xFF071C2C),
-                              border: Border.all(
-                                color: const Color(
-                                  0xFF5ADBE9,
-                                ).withValues(alpha: .5),
-                              ),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Color(0x66000000),
-                                  blurRadius: 12,
-                                  offset: Offset(0, 5),
-                                ),
-                              ],
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: ClipOval(
-                                child: Image.asset(
-                                  'assets/branding/wish_money_logo.jpg',
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
                       ),
                     ],
                   ),
