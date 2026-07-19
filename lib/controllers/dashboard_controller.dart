@@ -910,8 +910,10 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> signOut() async {
-    if (_isFirebaseConfigured) {
-      await _firebase.signOut();
+    try {
+      if (_isFirebaseConfigured) await _firebase.signOut();
+    } catch (_) {
+      // A local logout must still succeed if a web session has expired.
     }
     _user = null;
     _useFirestore = false;
@@ -1784,8 +1786,10 @@ class DashboardController extends ChangeNotifier {
       _walletOpeningLbp = settings.cashOpeningLbp;
       _wishWalletOpeningUsd = settings.wishOpeningUsd;
       _wishWalletOpeningLbp = settings.wishOpeningLbp;
-      _cashWalletBaselineTransactionIds = settings.cashBaselineTransactionIds.toSet();
-      _wishWalletBaselineTransactionIds = settings.wishBaselineTransactionIds.toSet();
+      _cashWalletBaselineTransactionIds = settings.cashBaselineTransactionIds
+          .toSet();
+      _wishWalletBaselineTransactionIds = settings.wishBaselineTransactionIds
+          .toSet();
       _cashWalletComparisonRange = WalletComparisonRange.values.firstWhere(
         (value) => value.name == settings.cashComparisonRange,
         orElse: () => WalletComparisonRange.week,
@@ -1799,10 +1803,22 @@ class DashboardController extends ChangeNotifier {
       await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
       await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
       await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
-      await prefs.setStringList(_cashWalletBaselineTransactionIdsKey, _cashWalletBaselineTransactionIds.toList());
-      await prefs.setStringList(_wishWalletBaselineTransactionIdsKey, _wishWalletBaselineTransactionIds.toList());
-      await prefs.setString(_cashWalletComparisonRangeKey, _cashWalletComparisonRange.name);
-      await prefs.setString(_wishWalletComparisonRangeKey, _wishWalletComparisonRange.name);
+      await prefs.setStringList(
+        _cashWalletBaselineTransactionIdsKey,
+        _cashWalletBaselineTransactionIds.toList(),
+      );
+      await prefs.setStringList(
+        _wishWalletBaselineTransactionIdsKey,
+        _wishWalletBaselineTransactionIds.toList(),
+      );
+      await prefs.setString(
+        _cashWalletComparisonRangeKey,
+        _cashWalletComparisonRange.name,
+      );
+      await prefs.setString(
+        _wishWalletComparisonRangeKey,
+        _wishWalletComparisonRange.name,
+      );
     } catch (_) {
       // Wallet sync must never prevent sign-in or offline usage.
     }
@@ -1819,8 +1835,10 @@ class DashboardController extends ChangeNotifier {
           cashOpeningLbp: _walletOpeningLbp,
           wishOpeningUsd: _wishWalletOpeningUsd,
           wishOpeningLbp: _wishWalletOpeningLbp,
-          cashBaselineTransactionIds: _cashWalletBaselineTransactionIds.toList(),
-          wishBaselineTransactionIds: _wishWalletBaselineTransactionIds.toList(),
+          cashBaselineTransactionIds: _cashWalletBaselineTransactionIds
+              .toList(),
+          wishBaselineTransactionIds: _wishWalletBaselineTransactionIds
+              .toList(),
           cashComparisonRange: _cashWalletComparisonRange.name,
           wishComparisonRange: _wishWalletComparisonRange.name,
         ),

@@ -5,6 +5,7 @@ import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
 import '../services/app_lock_service.dart';
 import '../services/google_drive_backup_service.dart';
+import '../services/smart_clipboard_service.dart';
 import 'smart_clipboard_settings_section.dart';
 
 class AppMenuScreen extends StatelessWidget {
@@ -68,10 +69,19 @@ class AppMenuScreen extends StatelessWidget {
           _SettingsCard(
             icon: Icons.palette_outlined,
             title: 'Appearance',
-            subtitle: 'Theme, colors and display density',
-            onTap: () => _open(
-              context,
-              AppearanceSettingsScreen(controller: controller),
+            subtitle: controller.themeMode == ThemeMode.dark
+                ? 'Dark theme is on'
+                : 'Light theme is on',
+            trailing: Switch(
+              value: controller.themeMode == ThemeMode.dark,
+              onChanged: (enabled) => controller.updateThemeMode(
+                enabled ? ThemeMode.dark : ThemeMode.light,
+              ),
+            ),
+            onTap: () => controller.updateThemeMode(
+              controller.themeMode == ThemeMode.dark
+                  ? ThemeMode.light
+                  : ThemeMode.dark,
             ),
           ),
           const SizedBox(height: 12),
@@ -85,12 +95,7 @@ class AppMenuScreen extends StatelessWidget {
                 _open(context, LanguagePickerScreen(controller: controller)),
           ),
           const SizedBox(height: 12),
-          _SettingsCard(
-            icon: Icons.open_in_new_rounded,
-            title: 'Floating quick input',
-            subtitle: 'Keep Maliyati available above other apps',
-            onTap: () => _open(context, const FloatingQuickInputScreen()),
-          ),
+          const _FloatingQuickInputSettingsCard(),
           const SizedBox(height: 20),
           _SettingsCard(
             icon: Icons.share_outlined,
@@ -124,7 +129,15 @@ class AppMenuScreen extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            onPressed: controller.signOut,
+            onPressed: () async {
+              await controller.signOut();
+              if (context.mounted) {
+                Navigator.of(
+                  context,
+                  rootNavigator: true,
+                ).popUntil((route) => route.isFirst);
+              }
+            },
             icon: const Icon(Icons.logout_rounded),
             label: const Text(
               'Log out',
@@ -172,7 +185,7 @@ class AboutApplicationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Version 1.2.8',
+                    'Version 1.2.9',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w800,
@@ -304,6 +317,65 @@ class FloatingQuickInputScreen extends StatelessWidget {
       padding: EdgeInsets.all(16),
       child: SmartClipboardSettingsSection(),
     ),
+  );
+}
+
+class _FloatingQuickInputSettingsCard extends StatefulWidget {
+  const _FloatingQuickInputSettingsCard();
+
+  @override
+  State<_FloatingQuickInputSettingsCard> createState() =>
+      _FloatingQuickInputSettingsCardState();
+}
+
+class _FloatingQuickInputSettingsCardState
+    extends State<_FloatingQuickInputSettingsCard> {
+  final _service = SmartClipboardService.instance;
+  bool _enabled = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final enabled = await _service.isEnabled;
+    if (mounted)
+      setState(() {
+        _enabled = enabled;
+        _loading = false;
+      });
+  }
+
+  Future<void> _setEnabled(bool enabled) async {
+    if (enabled &&
+        _service.isSupported &&
+        !await _service.requestOverlayPermission()) {
+      return;
+    }
+    await _service.setEnabled(enabled);
+    if (mounted) setState(() => _enabled = enabled);
+  }
+
+  @override
+  Widget build(BuildContext context) => _SettingsCard(
+    icon: Icons.open_in_new_rounded,
+    title: 'Floating quick input',
+    subtitle: _service.isSupported
+        ? (_enabled
+              ? 'Floating button is on'
+              : 'Show a button above other apps')
+        : 'Available on Android only',
+    trailing: Switch(
+      value: _enabled,
+      onChanged: _loading || !_service.isSupported ? null : _setEnabled,
+    ),
+    onTap: () => _setEnabled(!_enabled),
+    onLongPress: () => Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const FloatingQuickInputScreen())),
   );
 }
 
@@ -603,6 +675,7 @@ class _SettingsCard extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.trailing,
+    this.onLongPress,
     this.showChevron = true,
     this.avatar = false,
   });
@@ -611,6 +684,7 @@ class _SettingsCard extends StatelessWidget {
   final String subtitle;
   final VoidCallback onTap;
   final Widget? trailing;
+  final VoidCallback? onLongPress;
   final bool showChevron;
   final bool avatar;
 
@@ -626,6 +700,7 @@ class _SettingsCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
