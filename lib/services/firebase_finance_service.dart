@@ -658,6 +658,9 @@ class FirebaseFinanceService {
       'category': transaction.category,
       'paymentMethod': transaction.paymentMethod,
       'notes': transaction.notes,
+      // Keep this at the document root as well as in `raw`.  A few legacy
+      // import paths rebuild `raw`, while this field must survive refreshes.
+      'archived': transaction.isArchived,
       'createdAt': transaction.createdAt == null
           ? FieldValue.serverTimestamp()
           : Timestamp.fromDate(transaction.createdAt!),
@@ -695,6 +698,7 @@ class FirebaseFinanceService {
       'notes': '${data['notes'] ?? ''}',
       'source': '${data['source'] ?? ''}',
       'created_at': createdAt?.toIso8601String() ?? '',
+      'archived': '${data['archived'] == true}',
     };
     final storedRaw = data['raw'];
     if (storedRaw is Map) {

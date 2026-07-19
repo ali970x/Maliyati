@@ -7,15 +7,19 @@ import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_identity.dart';
 
+enum _EditTransactionStatus { income, expense, credit, debit }
+
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
     super.key,
     required this.controller,
     required this.transaction,
+    this.startEditing = false,
   });
 
   final DashboardController controller;
   final FinancialTransaction transaction;
+  final bool startEditing;
 
   @override
   State<TransactionDetailScreen> createState() =>
@@ -33,6 +37,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late TransactionType _selectedType;
   late CurrencyCode _selectedCurrency;
   late TransactionSource _selectedSource;
+  late bool _isDebit;
   late DateTime _selectedDate;
   late bool _hasDate;
   bool _isEditing = false;
@@ -42,6 +47,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   void initState() {
     super.initState();
     _transaction = widget.transaction;
+    _isEditing = widget.startEditing;
     _descriptionController = TextEditingController();
     _categoryController = TextEditingController();
     _amountController = TextEditingController();
@@ -127,6 +133,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         ? CurrencyCode.usd
         : transaction.currency;
     _selectedSource = transaction.source;
+    _isDebit = transaction.isDebit;
     _selectedDate = transaction.date;
     _hasDate = transaction.hasDate;
     _descriptionController.text = transaction.description;
@@ -160,6 +167,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ),
       hasDate: _hasDate,
     );
+    if (!_hasMeaningfulChanges(updated)) {
+      setState(() => _isEditing = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('No changes to save.')));
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       await widget.controller.updateTransaction(_transaction, updated);
@@ -181,11 +195,42 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   void _updateType(TransactionType type) {
-    setState(() => _selectedType = type);
+    setState(() {
+      _selectedType = type;
+      _isDebit = false;
+      if (_paymentMethodController.text.trim().toLowerCase() == 'debit') {
+        _paymentMethodController.clear();
+      }
+    });
+  }
+
+  void _updateDebitStatus() {
+    setState(() {
+      _selectedType = TransactionType.expense;
+      _isDebit = true;
+      _paymentMethodController.text = 'Debit';
+    });
   }
 
   void _updateCurrency(CurrencyCode currency) {
     setState(() => _selectedCurrency = currency);
+  }
+
+  bool _hasMeaningfulChanges(FinancialTransaction updated) {
+    final sameDate =
+        updated.date.year == _transaction.date.year &&
+        updated.date.month == _transaction.date.month &&
+        updated.date.day == _transaction.date.day;
+    return updated.type != _transaction.type ||
+        updated.category != _transaction.category ||
+        updated.description != _transaction.description ||
+        updated.currency != _transaction.currency ||
+        updated.amount != _transaction.amount ||
+        updated.paymentMethod != _transaction.paymentMethod ||
+        updated.notes != _transaction.notes ||
+        updated.source != _transaction.source ||
+        updated.hasDate != _transaction.hasDate ||
+        !sameDate;
   }
 
   void _updateSource(TransactionSource source) {
@@ -307,7 +352,6 @@ class _ReadOnlyBody extends StatelessWidget {
     final description = transaction.description.isEmpty
         ? transaction.category
         : transaction.description;
-    final transactionId = TransactionIdentity.fullId(transaction);
     final convertedAmount = FinanceFormatters.convertedAmount(
       transaction,
       exchangeRate,
@@ -394,10 +438,13 @@ class _ReadOnlyBody extends StatelessWidget {
                         ? FinanceFormatters.date(transaction.date)
                         : strings.noDateInSheet,
                   ),
-                  _HeaderChip(label: 'Source', value: transaction.source.label),
                   _HeaderChip(
-                    label: 'ID',
-                    value: TransactionIdentity.shortId(transaction),
+                    label: strings.category,
+                    value: transaction.category,
+                  ),
+                  _HeaderChip(
+                    label: 'Wallet',
+                    value: state._emptyFallback(transaction.paymentMethod),
                   ),
                 ],
               ),
@@ -408,10 +455,6 @@ class _ReadOnlyBody extends StatelessWidget {
         _SectionCard(
           title: strings.overview,
           children: [
-            _CopyableDetailRow(
-              label: 'Transaction ID',
-              value: transactionId.isEmpty ? '-' : transactionId,
-            ),
             _DetailRow(
               label: strings.type,
               value: state._typeLabel(transaction.type),
@@ -424,13 +467,6 @@ class _ReadOnlyBody extends StatelessWidget {
                   ? FinanceFormatters.date(transaction.date)
                   : strings.noDateInSheet,
             ),
-            _DetailRow(
-              label: 'Created at',
-              value: transaction.createdAt == null
-                  ? '-'
-                  : FinanceFormatters.dateTime(transaction.createdAt!),
-            ),
-            _DetailRow(label: 'Source', value: transaction.source.label),
             _DetailRow(
               label: strings.paymentMethod,
               value: state._emptyFallback(transaction.paymentMethod),
@@ -500,29 +536,50 @@ class _EditBody extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  DropdownButtonFormField<TransactionType>(
-                    initialValue: state._selectedType,
+                  DropdownButtonFormField<_EditTransactionStatus>(
+                    value: state._isDebit
+                        ? _EditTransactionStatus.debit
+                        : switch (state._selectedType) {
+                            TransactionType.income =>
+                              _EditTransactionStatus.income,
+                            TransactionType.reserveable =>
+                              _EditTransactionStatus.credit,
+                            _ => _EditTransactionStatus.expense,
+                          },
                     decoration: InputDecoration(
                       labelText: strings.type,
                       prefixIcon: const Icon(Icons.label_rounded),
                     ),
                     items: [
                       DropdownMenuItem(
-                        value: TransactionType.income,
+                        value: _EditTransactionStatus.income,
                         child: Text(strings.income),
                       ),
                       DropdownMenuItem(
-                        value: TransactionType.expense,
+                        value: _EditTransactionStatus.expense,
                         child: Text(strings.expense),
                       ),
                       DropdownMenuItem(
-                        value: TransactionType.reserveable,
+                        value: _EditTransactionStatus.credit,
                         child: Text(strings.reserveable),
+                      ),
+                      const DropdownMenuItem(
+                        value: _EditTransactionStatus.debit,
+                        child: Text('Debit'),
                       ),
                     ],
                     onChanged: (value) {
-                      if (value != null) {
-                        state._updateType(value);
+                      switch (value) {
+                        case _EditTransactionStatus.income:
+                          state._updateType(TransactionType.income);
+                        case _EditTransactionStatus.expense:
+                          state._updateType(TransactionType.expense);
+                        case _EditTransactionStatus.credit:
+                          state._updateType(TransactionType.reserveable);
+                        case _EditTransactionStatus.debit:
+                          state._updateDebitStatus();
+                        case null:
+                          break;
                       }
                     },
                   ),
@@ -587,8 +644,23 @@ class _EditBody extends StatelessWidget {
                             decimal: true,
                           ),
                           decoration: InputDecoration(
-                            labelText: strings.amount,
-                            prefixIcon: const Icon(Icons.payments_rounded),
+                            labelText:
+                                state._selectedCurrency == CurrencyCode.usd
+                                ? 'Amount (USD)'
+                                : 'Amount (LBP)',
+                            prefixIcon: Center(
+                              child: Text(
+                                state._selectedCurrency == CurrencyCode.usd
+                                    ? r'$'
+                                    : 'LBP',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            prefixIconConstraints: const BoxConstraints(
+                              minWidth: 48,
+                            ),
                           ),
                           validator: (value) {
                             if (value == null ||
@@ -605,7 +677,9 @@ class _EditBody extends StatelessWidget {
                           initialValue: state._selectedCurrency,
                           decoration: InputDecoration(
                             labelText: strings.value,
-                            prefixIcon: const Icon(Icons.attach_money_rounded),
+                            prefixIcon: const Icon(
+                              Icons.currency_exchange_rounded,
+                            ),
                           ),
                           items: const [
                             DropdownMenuItem(
