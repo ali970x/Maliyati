@@ -120,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 clipBehavior: Clip.antiAlias,
                                 child: Image.asset(
-                                  'assets/branding/vak_app_icon_3.png',
+                                  'assets/branding/maliyati_wallet_icon_v2.png',
                                   fit: BoxFit.cover,
                                 ),
                               ),

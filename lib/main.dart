@@ -518,6 +518,21 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
                           onUnlock: _unlock,
                         ),
                       ),
+                    if (!_isAppLocked &&
+                        Theme.of(context).brightness == Brightness.dark)
+                      Positioned(
+                        top: 8,
+                        right: 12,
+                        child: Material(
+                          color: const Color(0xFF1E1E1E),
+                          shape: const CircleBorder(),
+                          child: IconButton(
+                            tooltip: 'Settings',
+                            onPressed: _openMenu,
+                            icon: const Icon(Icons.settings_rounded),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

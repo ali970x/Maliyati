@@ -140,7 +140,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final content = _DashboardContent(
       controller: controller,
-      onOpenMenu: widget.onOpenMenu,
       balanceVisible: _balanceVisible,
       onToggleBalance: () => setState(() => _balanceVisible = !_balanceVisible),
     );
@@ -1742,13 +1741,11 @@ IconData _kindIcon(_DashboardMetricKind kind) => switch (kind) {
 class _DashboardContent extends StatelessWidget {
   const _DashboardContent({
     required this.controller,
-    required this.onOpenMenu,
     required this.balanceVisible,
     required this.onToggleBalance,
   });
 
   final DashboardController controller;
-  final VoidCallback? onOpenMenu;
   final bool balanceVisible;
   final VoidCallback onToggleBalance;
 
@@ -1764,7 +1761,7 @@ class _DashboardContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _DashboardHeader(controller: controller, onOpenMenu: onOpenMenu),
+        _DashboardHeader(controller: controller),
         const SizedBox(height: 14),
         // One persistent control rail: period controls plus the selected
         // business context remain at the top on every dashboard state.
@@ -1920,10 +1917,9 @@ class _DashboardContent extends StatelessWidget {
 }
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.controller, required this.onOpenMenu});
+  const _DashboardHeader({required this.controller});
 
   final DashboardController controller;
-  final VoidCallback? onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -1932,11 +1928,6 @@ class _DashboardHeader extends StatelessWidget {
     final greetingName = name == null || name.isEmpty ? 'there' : name;
     return Row(
       children: [
-        _HeaderAction(
-          icon: Icons.tune_rounded,
-          tooltip: 'Menu',
-          onPressed: onOpenMenu,
-        ),
         const Spacer(),
         Flexible(
           child: Column(
@@ -2462,7 +2453,10 @@ class _BalanceHero extends StatelessWidget {
                       onTap: onWishWalletPressed,
                       borderRadius: BorderRadius.circular(14),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFF8E184D),
                           borderRadius: BorderRadius.circular(14),
@@ -2471,9 +2465,20 @@ class _BalanceHero extends StatelessWidget {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.phone_android_rounded, color: Colors.white, size: 18),
+                            Icon(
+                              Icons.phone_android_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                             SizedBox(width: 5),
-                            Text('Wish', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w900)),
+                            Text(
+                              'Wish',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
                           ],
                         ),
                       ),
