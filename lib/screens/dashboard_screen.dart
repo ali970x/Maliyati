@@ -1928,16 +1928,16 @@ class _DashboardHeader extends StatelessWidget {
     final greetingName = name == null || name.isEmpty ? 'there' : name;
     return Row(
       children: [
-        const Spacer(),
-        Flexible(
+        Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 controller.language == AppLanguage.arabic
                     ? 'لوحة التحكم'
                     : 'Control center',
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w900,
                   letterSpacing: -.6,
@@ -1949,6 +1949,7 @@ class _DashboardHeader extends StatelessWidget {
                     ? 'نظرة عامة على وضعك المالي، $greetingName'
                     : 'A clear view of your money, $greetingName',
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: const Color(0xFF93AEC5),
                 ),
@@ -2451,35 +2452,26 @@ class _BalanceHero extends StatelessWidget {
                     const SizedBox(height: 10),
                     InkWell(
                       onTap: onWishWalletPressed,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(22),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8E184D),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFFF8DB5)),
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF3A1829),
+                          border: Border.all(
+                            color: const Color(0xFFFF8DB5),
+                            width: 1.2,
+                          ),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.phone_android_rounded,
-                              color: Colors.white,
-                              size: 18,
+                        child: ClipOval(
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Image.asset(
+                              'assets/branding/wish_money_logo.jpg',
+                              fit: BoxFit.cover,
                             ),
-                            SizedBox(width: 5),
-                            Text(
-                              'Wish',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -3003,14 +2995,47 @@ class _TransactionRow extends StatelessWidget {
     final icon = transaction.isIncome
         ? Icons.account_balance_wallet_outlined
         : _categoryIcon(transaction.category);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
+    return Dismissible(
+      key: ValueKey('dashboard-${transaction.id ?? transaction.hashCode}'),
+      background: const _DashboardSwipeAction(
+        color: Color(0xFFC74949),
+        icon: Icons.delete_outline_rounded,
+        label: 'Delete',
+        alignment: Alignment.centerLeft,
+      ),
+      secondaryBackground: const _DashboardSwipeAction(
+        color: Color(0xFFD97706),
+        icon: Icons.archive_outlined,
+        label: 'Archive',
+        alignment: Alignment.centerRight,
+      ),
+      confirmDismiss: (direction) => direction == DismissDirection.startToEnd
+          ? _confirmDashboardDelete(context)
+          : Future.value(true),
+      onDismissed: (direction) {
+        if (direction == DismissDirection.startToEnd) {
+          controller.deleteTransaction(transaction);
+        } else {
+          controller.archiveTransaction(transaction);
+        }
+      },
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => TransactionDetailScreen(
               controller: controller,
               transaction: transaction,
+            ),
+          ),
+        ),
+        onLongPress: () => Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => TransactionDetailScreen(
+              controller: controller,
+              transaction: transaction,
+              startEditing: true,
             ),
           ),
         ),
@@ -3064,6 +3089,7 @@ class _TransactionRow extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -3078,6 +3104,61 @@ class _TransactionRow extends StatelessWidget {
     if (value.contains('shop')) return Icons.shopping_bag_outlined;
     return Icons.receipt_long_rounded;
   }
+}
+
+Future<bool> _confirmDashboardDelete(BuildContext context) async =>
+    (await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    )) ?? false;
+
+class _DashboardSwipeAction extends StatelessWidget {
+  const _DashboardSwipeAction({
+    required this.color,
+    required this.icon,
+    required this.label,
+    required this.alignment,
+  });
+
+  final Color color;
+  final IconData icon;
+  final String label;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.symmetric(vertical: 2),
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    alignment: alignment,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.white),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+      ],
+    ),
+  );
 }
 
 class _ResponsivePair extends StatelessWidget {

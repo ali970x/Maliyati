@@ -185,7 +185,7 @@ class AboutApplicationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Version 1.3.0',
+              'Version 1.3.1',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w800,
@@ -458,6 +458,24 @@ class _SheetConnectionScreenState extends State<SheetConnectionScreen> {
     ).showSnackBar(const SnackBar(content: Text('Sheet connection saved.')));
   }
 
+  Future<void> _runSheetAction(Future<int> Function() action) async {
+    setState(() => _saving = true);
+    try {
+      final count = await action();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$count transactions completed successfully.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Google Sheet error: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => _PlainSettingsScaffold(
     title: 'Sheet connection',
@@ -508,6 +526,26 @@ class _SheetConnectionScreenState extends State<SheetConnectionScreen> {
           onPressed: _saving ? null : _save,
           icon: const Icon(Icons.save_rounded),
           label: const Text('Save connection'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: _saving
+              ? null
+              : () => _runSheetAction(
+                    widget.controller.importGoogleSheetToFirestore,
+                  ),
+          icon: const Icon(Icons.download_rounded),
+          label: const Text('Import from Google Sheet'),
+        ),
+        const SizedBox(height: 10),
+        FilledButton.tonalIcon(
+          onPressed: _saving
+              ? null
+              : () => _runSheetAction(
+                    widget.controller.exportCurrentTransactionsToSheet,
+                  ),
+          icon: const Icon(Icons.upload_rounded),
+          label: const Text('Export to Google Sheet'),
         ),
       ],
     ),

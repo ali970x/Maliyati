@@ -706,6 +706,13 @@ class FirebaseFinanceService {
         raw['${entry.key}'] = '${entry.value}';
       }
     }
+    // The document-level flag is authoritative. Older versions stored a
+    // stale `archived` value in raw, which could make an archived item return
+    // after a refresh or prevent a restored item from returning to the list.
+    final archivedValue = data['archived'];
+    if (archivedValue is bool) {
+      raw['archived'] = archivedValue ? 'true' : 'false';
+    }
 
     return FinancialTransaction(
       id: '${data['id'] ?? ''}'.trim().isEmpty
