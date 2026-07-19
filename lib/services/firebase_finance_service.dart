@@ -38,6 +38,28 @@ class SheetIntegrationSettings {
   final String exportSecret;
 }
 
+class WalletSyncSettings {
+  const WalletSyncSettings({
+    required this.cashOpeningUsd,
+    required this.cashOpeningLbp,
+    required this.wishOpeningUsd,
+    required this.wishOpeningLbp,
+    required this.cashBaselineTransactionIds,
+    required this.wishBaselineTransactionIds,
+    required this.cashComparisonRange,
+    required this.wishComparisonRange,
+  });
+
+  final double cashOpeningUsd;
+  final double cashOpeningLbp;
+  final double wishOpeningUsd;
+  final double wishOpeningLbp;
+  final List<String> cashBaselineTransactionIds;
+  final List<String> wishBaselineTransactionIds;
+  final String cashComparisonRange;
+  final String wishComparisonRange;
+}
+
 class FirebaseFinanceService {
   static const adminEmail = 'labdev99@gmail.com';
 
@@ -427,6 +449,51 @@ class FirebaseFinanceService {
     }, SetOptions(merge: true));
   }
 
+  Future<WalletSyncSettings?> fetchWalletSettings() async {
+    final user = _requireUser();
+    final snapshot = await _settings(user.uid).get();
+    final data = snapshot.data();
+    if (data == null || !data.containsKey('walletOpeningUsd')) {
+      return null;
+    }
+    double number(String key) {
+      final value = data[key];
+      if (value is num) return value.toDouble();
+      return double.tryParse('$value') ?? 0;
+    }
+
+    List<String> ids(String key) => (data[key] as List<dynamic>? ?? const [])
+        .map((value) => '$value'.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+
+    return WalletSyncSettings(
+      cashOpeningUsd: number('walletOpeningUsd'),
+      cashOpeningLbp: number('walletOpeningLbp'),
+      wishOpeningUsd: number('wishWalletOpeningUsd'),
+      wishOpeningLbp: number('wishWalletOpeningLbp'),
+      cashBaselineTransactionIds: ids('cashWalletBaselineTransactionIds'),
+      wishBaselineTransactionIds: ids('wishWalletBaselineTransactionIds'),
+      cashComparisonRange: '${data['cashWalletComparisonRange'] ?? 'week'}',
+      wishComparisonRange: '${data['wishWalletComparisonRange'] ?? 'week'}',
+    );
+  }
+
+  Future<void> saveWalletSettings(WalletSyncSettings settings) async {
+    final user = _requireUser();
+    await _settings(user.uid).set({
+      'walletOpeningUsd': settings.cashOpeningUsd,
+      'walletOpeningLbp': settings.cashOpeningLbp,
+      'wishWalletOpeningUsd': settings.wishOpeningUsd,
+      'wishWalletOpeningLbp': settings.wishOpeningLbp,
+      'cashWalletBaselineTransactionIds': settings.cashBaselineTransactionIds,
+      'wishWalletBaselineTransactionIds': settings.wishBaselineTransactionIds,
+      'cashWalletComparisonRange': settings.cashComparisonRange,
+      'wishWalletComparisonRange': settings.wishComparisonRange,
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   CollectionReference<Map<String, dynamic>> _transactions(String uid) {
     return _firestore.collection('users').doc(uid).collection('transactions');
   }
@@ -629,6 +696,12 @@ class FirebaseFinanceService {
       'source': '${data['source'] ?? ''}',
       'created_at': createdAt?.toIso8601String() ?? '',
     };
+    final storedRaw = data['raw'];
+    if (storedRaw is Map) {
+      for (final entry in storedRaw.entries) {
+        raw['${entry.key}'] = '${entry.value}';
+      }
+    }
 
     return FinancialTransaction(
       id: '${data['id'] ?? ''}'.trim().isEmpty

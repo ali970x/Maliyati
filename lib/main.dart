@@ -13,14 +13,16 @@ import 'screens/add_transaction_screen.dart';
 import 'screens/admin_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'screens/spending_alerts_screen.dart';
+import 'screens/wish_receipt_review_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/login_screen.dart';
-import 'screens/settings_screen.dart';
 import 'screens/transactions_screen.dart';
 import 'widgets/finance_formatters.dart';
 import 'widgets/responsive_layout.dart';
 import 'services/firebase_bootstrap.dart';
+import 'services/app_lock_service.dart';
 import 'services/smart_clipboard_service.dart';
+import 'widgets/app_menu_drawer.dart';
 
 Future<void> main() => startFinanceTrackerApp();
 
@@ -93,14 +95,14 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: kIsWeb ? const Color(0xFF2563EB) : const Color(0xFF0F766E),
+      seedColor: isDark ? const Color(0xFF9E9E9E) : const Color(0xFF6B259E),
       brightness: brightness,
     );
-    final surface = isDark ? const Color(0xFF171C20) : Colors.white;
+    final surface = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final overlayStyle = isDark
         ? SystemUiOverlayStyle.light.copyWith(
             statusBarColor: Colors.transparent,
-            systemNavigationBarColor: const Color(0xFF0E1215),
+            systemNavigationBarColor: const Color(0xFF101010),
             systemNavigationBarIconBrightness: Brightness.light,
           )
         : SystemUiOverlayStyle.dark.copyWith(
@@ -114,39 +116,59 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
       brightness: brightness,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: isDark
-          ? const Color(0xFF0E1215)
-          : kIsWeb
-          ? const Color(0xFFF6F8FC)
-          : const Color(0xFFF5F7FA),
+          ? const Color(0xFF101010)
+          : const Color(0xFFF6F8FC),
       cardTheme: CardThemeData(
-        color: surface,
-        surfaceTintColor: surface,
+        color: isDark ? const Color(0xFF1E1E1E) : surface,
+        surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        elevation: 0,
+        shadowColor: Colors.black.withValues(alpha: .32),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: BorderSide(
+            color: isDark ? const Color(0xFF3A3A3A) : const Color(0xFFE1DFE7),
+          ),
+        ),
       ),
       dialogTheme: DialogThemeData(backgroundColor: surface),
       bottomSheetTheme: BottomSheetThemeData(backgroundColor: surface),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surface,
+        fillColor: isDark ? const Color(0xFF1E1E1E) : surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: colorScheme.outlineVariant),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: isDark
+                ? const Color(0xFF484848)
+                : const Color(0xFF8AA7BE).withValues(alpha: .30),
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+            color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF6B259E),
+            width: 1.5,
+          ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: isDark ? const Color(0xFF111619) : Colors.white,
-        indicatorColor: colorScheme.primaryContainer,
+        backgroundColor: isDark ? const Color(0xFF151515) : Colors.white,
+        indicatorColor: isDark
+            ? const Color(0xFF3A3A3A)
+            : const Color(0xFF6B259E).withValues(alpha: .14),
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          foregroundColor: colorScheme.onSurfaceVariant,
+          backgroundColor: Colors.transparent,
         ),
       ),
       appBarTheme: AppBarTheme(systemOverlayStyle: overlayStyle),
@@ -180,7 +202,7 @@ class _SessionLoadingScreen extends StatelessWidget {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(22),
                 child: Image.asset(
-                  'assets/branding/maliyati_app_icon.png',
+                  'assets/branding/maliyati_wallet_icon_v2.png',
                   width: 74,
                   height: 74,
                   fit: BoxFit.cover,
@@ -213,18 +235,23 @@ class FinanceHome extends StatefulWidget {
 }
 
 class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _appLock = AppLockService();
   int _selectedIndex = 0;
   int _smartInputRequest = 0;
   String? _smartInputScript;
   bool _smartInputAutoRun = false;
   final _smartClipboard = SmartClipboardService.instance;
   StreamSubscription<SharedMedia>? _shareSubscription;
+  bool _isAppLocked = false;
+  bool _isUnlocking = false;
+  bool _lockOnNextResume = false;
 
   @override
   void initState() {
     super.initState();
+    _isAppLocked = widget.controller.isAppLockEnabled;
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showInitialLock());
     // These integrations are Android-only. Starting platform channels on the
     // browser immediately after Google authentication can crash the web view.
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
@@ -244,6 +271,34 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _smartClipboard.updateLifecycle(state);
+    if (state == AppLifecycleState.paused &&
+        widget.controller.isAppLockEnabled &&
+        !_isUnlocking) {
+      _lockOnNextResume = true;
+    } else if (state == AppLifecycleState.resumed && _lockOnNextResume) {
+      _lockOnNextResume = false;
+      _showInitialLock();
+    }
+  }
+
+  Future<void> _showInitialLock() async {
+    if (!mounted || !widget.controller.isAppLockEnabled || _isUnlocking) {
+      return;
+    }
+    setState(() => _isAppLocked = true);
+    await _unlock();
+  }
+
+  Future<void> _unlock() async {
+    if (_isUnlocking || !mounted) return;
+    setState(() => _isUnlocking = true);
+    final unlocked = await _appLock.authenticate();
+    if (mounted) {
+      setState(() {
+        _isUnlocking = false;
+        if (unlocked) _isAppLocked = false;
+      });
+    }
   }
 
   void _openSmartInput(String script, {bool autoRun = true}) {
@@ -275,11 +330,79 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   }
 
   void _handleSharedMedia(SharedMedia media) {
+    SharedAttachment? attachment;
+    for (final item in media.attachments ?? const <SharedAttachment?>[]) {
+      if (item?.type == SharedAttachmentType.image) {
+        attachment = item;
+        break;
+      }
+    }
+    final imagePath = attachment?.path.trim();
+    if (imagePath != null && imagePath.isNotEmpty) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => WishReceiptReviewScreen(
+            controller: widget.controller,
+            imagePath: imagePath,
+          ),
+        ),
+      );
+      return;
+    }
     final text = media.content?.trim() ?? '';
     if (text.isEmpty) {
       return;
     }
     _openSmartInput(text, autoRun: false);
+  }
+
+  void _openMenu() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 160),
+        reverseTransitionDuration: const Duration(milliseconds: 120),
+        pageBuilder: (_, animation, _) =>
+            AppMenuScreen(controller: widget.controller),
+        transitionsBuilder: (_, animation, _, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  void _showMoreOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.notifications_active_rounded),
+                title: const Text('Alerts'),
+                subtitle: const Text('Review and adjust your spending alerts'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  setState(() => _selectedIndex = 4);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('Settings'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _openMenu();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -289,7 +412,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
       animation: controller,
       builder: (context, _) {
         final screens = [
-          DashboardScreen(controller: controller),
+          DashboardScreen(controller: controller, onOpenMenu: _openMenu),
           TransactionsScreen(controller: controller),
           AddTransactionScreen(
             key: ValueKey('smart-input-$_smartInputRequest'),
@@ -310,40 +433,41 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
           index: activeIndex,
           children: screens,
         );
-        final navigationBar = NavigationBar(
+        final navigationBar = _CyberNavigationBar(
           selectedIndex: activeIndex,
           onDestinationSelected: (index) =>
               setState(() => _selectedIndex = index),
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.dashboard_outlined),
-              selectedIcon: const Icon(Icons.dashboard_rounded),
+          items: [
+            _CyberNavData(
+              icon: Icons.dashboard_outlined,
+              selectedIcon: Icons.dashboard_rounded,
               label: strings.dashboard,
             ),
-            NavigationDestination(
-              icon: const Icon(Icons.receipt_long_outlined),
-              selectedIcon: const Icon(Icons.receipt_long_rounded),
+            _CyberNavData(
+              icon: Icons.receipt_long_outlined,
+              selectedIcon: Icons.receipt_long_rounded,
               label: strings.transactions,
             ),
-            NavigationDestination(
-              icon: const _AddNavIcon(selected: false),
-              selectedIcon: const _AddNavIcon(selected: true),
+            const _CyberNavData(
+              icon: Icons.add_rounded,
+              selectedIcon: Icons.add_rounded,
               label: 'Add',
+              isAdd: true,
             ),
-            NavigationDestination(
-              icon: const Icon(Icons.insights_outlined),
-              selectedIcon: const Icon(Icons.insights_rounded),
-              label: strings.analytics,
+            _CyberNavData(
+              icon: Icons.insights_outlined,
+              selectedIcon: Icons.insights_rounded,
+              label: controller.language.code == 'ar' ? 'التقارير' : 'Reports',
             ),
-            const NavigationDestination(
-              icon: Icon(Icons.notifications_active_outlined),
-              selectedIcon: Icon(Icons.notifications_active_rounded),
-              label: 'Alerts',
+            _CyberNavData(
+              icon: Icons.notifications_active_outlined,
+              selectedIcon: Icons.notifications_active_rounded,
+              label: controller.language.code == 'ar' ? 'المزيد' : 'More',
             ),
             if (controller.isAdmin)
-              const NavigationDestination(
-                icon: Icon(Icons.admin_panel_settings_outlined),
-                selectedIcon: Icon(Icons.admin_panel_settings_rounded),
+              const _CyberNavData(
+                icon: Icons.admin_panel_settings_outlined,
+                selectedIcon: Icons.admin_panel_settings_rounded,
                 label: 'Admin',
               ),
           ],
@@ -368,34 +492,36 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
                 ? TextDirection.rtl
                 : TextDirection.ltr,
             child: Scaffold(
-              key: _scaffoldKey,
-              drawerEdgeDragWidth: 28,
-              drawerScrimColor: Colors.black.withValues(alpha: 0.42),
-              drawer: SettingsDrawer(controller: controller),
               body: SafeArea(
-                child: Column(
+                child: Stack(
                   children: [
-                    _GlobalTopBar(
-                      onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                      selectedIndex: activeIndex,
-                      isAdmin: controller.isAdmin,
-                      onDestinationSelected: (index) =>
-                          setState(() => _selectedIndex = index),
-                    ),
-                    Expanded(
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: AppResponsive.contentMaxWidth(context),
+                    Column(
+                      children: [
+                        Expanded(
+                          child: Center(
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: AppResponsive.contentMaxWidth(
+                                  context,
+                                ),
+                              ),
+                              child: indexedScreens,
+                            ),
                           ),
-                          child: indexedScreens,
+                        ),
+                      ],
+                    ),
+                    if (_isAppLocked)
+                      Positioned.fill(
+                        child: _AppLockGate(
+                          isUnlocking: _isUnlocking,
+                          onUnlock: _unlock,
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
-              bottomNavigationBar: AppResponsive.isWeb
+              bottomNavigationBar: _isAppLocked
                   ? null
                   : Center(
                       heightFactor: 1,
@@ -414,8 +540,9 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   }
 }
 
-class _GlobalTopBar extends StatelessWidget {
-  const _GlobalTopBar({
+class GlobalTopBar extends StatelessWidget {
+  const GlobalTopBar({
+    super.key,
     required this.onOpenMenu,
     required this.selectedIndex,
     required this.isAdmin,
@@ -430,12 +557,35 @@ class _GlobalTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isWide = AppResponsive.isWideWeb(context);
+    final brand = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.asset(
+            'assets/branding/maliyati_wallet_icon_v2.png',
+            width: 30,
+            height: 30,
+            fit: BoxFit.cover,
+          ),
+        ),
+        const SizedBox(width: 9),
+        Text(
+          AppConfig.appName,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
+    );
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Material(
-        color: theme.colorScheme.surface,
+        color: theme.scaffoldBackgroundColor,
         child: Container(
-          height: AppResponsive.isWideWeb(context) ? 68 : 58,
+          height: isWide ? 68 : 58,
           decoration: BoxDecoration(
             border: Border(
               bottom: BorderSide(
@@ -450,33 +600,8 @@ class _GlobalTopBar extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Tooltip(
-                    message: 'Open settings',
-                    child: IconButton(
-                      onPressed: onOpenMenu,
-                      icon: const Icon(Icons.menu_rounded, size: 30),
-                      splashRadius: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: Image.asset(
-                      'assets/branding/maliyati_app_icon.png',
-                      width: 29,
-                      height: 29,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Text(
-                    AppConfig.appName,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0,
-                    ),
-                  ),
-                  if (AppResponsive.isWideWeb(context)) ...[
+                  if (isWide) brand else const SizedBox(width: 56),
+                  if (isWide) ...[
                     const SizedBox(width: 28),
                     Expanded(
                       child: SingleChildScrollView(
@@ -538,9 +663,96 @@ class _GlobalTopBar extends StatelessWidget {
                       ),
                     ),
                   ] else
-                    const Spacer(),
+                    Expanded(child: Center(child: brand)),
+                  Padding(
+                    padding: const EdgeInsetsDirectional.only(end: 8),
+                    child: IconButton.filledTonal(
+                      tooltip: 'Menu',
+                      onPressed: onOpenMenu,
+                      icon: const Icon(Icons.more_horiz_rounded),
+                    ),
+                  ),
                 ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AppLockGate extends StatelessWidget {
+  const _AppLockGate({required this.isUnlocking, required this.onUnlock});
+
+  final bool isUnlocking;
+  final VoidCallback onUnlock;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.scaffoldBackgroundColor,
+      child: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 86,
+                  height: 86,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surface.withValues(alpha: .92),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: Icon(
+                    Icons.lock_rounded,
+                    size: 44,
+                    color: theme.brightness == Brightness.dark
+                        ? Colors.white
+                        : const Color(0xFF252525),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Maliyati Locked',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    color: theme.colorScheme.onSurface,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 26),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: OutlinedButton.icon(
+                    onPressed: isUnlocking ? null : onUnlock,
+                    icon: isUnlocking
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.lock_open_rounded),
+                    label: const Text(
+                      'Unlock',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.colorScheme.onSurface,
+                      side: BorderSide(
+                        color: theme.colorScheme.outline.withValues(alpha: .55),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -605,6 +817,157 @@ class _WebNavItem extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CyberNavData {
+  const _CyberNavData({
+    required this.icon,
+    required this.selectedIcon,
+    required this.label,
+    this.isAdd = false,
+  });
+
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final bool isAdd;
+}
+
+class _CyberNavigationBar extends StatelessWidget {
+  const _CyberNavigationBar({
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+    required this.items,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onDestinationSelected;
+  final List<_CyberNavData> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final light = Theme.of(context).brightness == Brightness.light;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      child: Container(
+        height: 72,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+        decoration: BoxDecoration(
+          color: light
+              ? Colors.white.withValues(alpha: .97)
+              : const Color(0xFF061725).withValues(alpha: .96),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: light
+                ? const Color(0xFFE1DFE7)
+                : const Color(0xFF2B536E).withValues(alpha: .78),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: (light ? const Color(0xFF49366A) : Colors.black)
+                  .withValues(alpha: light ? .14 : .42),
+              blurRadius: 22,
+              offset: const Offset(0, 9),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (var index = 0; index < items.length; index++)
+              Expanded(
+                child: _CyberNavItem(
+                  data: items[index],
+                  selected: index == selectedIndex,
+                  onTap: () => onDestinationSelected(index),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CyberNavItem extends StatelessWidget {
+  const _CyberNavItem({
+    required this.data,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _CyberNavData data;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final light = Theme.of(context).brightness == Brightness.light;
+    final color = selected
+        ? (light ? const Color(0xFF6B259E) : const Color(0xFF12D9F4))
+        : (light ? const Color(0xFF77717D) : const Color(0xFF90AABE));
+    if (data.isAdd) {
+      return InkWell(
+        borderRadius: BorderRadius.circular(30),
+        onTap: onTap,
+        child: Center(
+          child: Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: light
+                    ? const [Color(0xFF8F2DC2), Color(0xFF5B1E9A)]
+                    : const [Color(0xFF12D9F4), Color(0xFF256BE8)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      (light
+                              ? const Color(0xFF7C38AD)
+                              : const Color(0xFF12D9F4))
+                          .withValues(alpha: .30),
+                  blurRadius: 17,
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 29),
+          ),
+        ),
+      );
+    }
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              selected ? data.selectedIcon : data.icon,
+              color: color,
+              size: 23,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              data.icon == Icons.notifications_active_outlined
+                  ? 'Alerts'
+                  : data.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                fontSize: 10,
+              ),
+            ),
+          ],
         ),
       ),
     );

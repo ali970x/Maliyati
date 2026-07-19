@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,10 +10,45 @@ import '../models/transaction.dart';
 import '../services/firebase_finance_service.dart';
 import '../services/firebase_bootstrap.dart';
 import '../services/gemini_transaction_parser.dart';
+import '../services/google_drive_backup_service.dart';
 import '../services/google_sheet_service.dart';
 import '../services/sheet_export_service.dart';
 
 enum TimeFilter { today, last3Days, thisWeek, thisMonth, custom, allTime }
+
+enum WalletComparisonRange { day, week, month }
+
+extension WalletComparisonRangeLabel on WalletComparisonRange {
+  String get label => switch (this) {
+    WalletComparisonRange.day => 'Yesterday',
+    WalletComparisonRange.week => 'Last week',
+    WalletComparisonRange.month => 'Last month',
+  };
+
+  Duration get duration => switch (this) {
+    WalletComparisonRange.day => const Duration(days: 1),
+    WalletComparisonRange.week => const Duration(days: 7),
+    WalletComparisonRange.month => const Duration(days: 30),
+  };
+}
+
+/// Kept as a single value for backwards source compatibility. The old theme
+/// gallery has been retired: Cyber Grid is now the product identity.
+enum AppThemeStyle { cyberGrid }
+
+enum AppLockMethod { biometric, pin }
+
+extension AppThemeStyleDetails on AppThemeStyle {
+  Color get seedColor => switch (this) {
+    AppThemeStyle.cyberGrid => const Color(0xFF12D9F4),
+  };
+
+  String get label => switch (this) {
+    AppThemeStyle.cyberGrid => 'Cyber Grid',
+  };
+
+  bool get isDark => true;
+}
 
 class SmartActionExecutionSummary {
   const SmartActionExecutionSummary({
@@ -59,10 +95,13 @@ class DashboardController extends ChangeNotifier {
     FirebaseFinanceService? firebaseService,
     SheetExportService? sheetExportService,
     GeminiTransactionParser? geminiParser,
+    GoogleDriveBackupService? googleDriveBackupService,
   }) : _usesInjectedSheetService = service != null,
        _service = service ?? GoogleSheetService(),
        _sheetExportService = sheetExportService ?? SheetExportService(),
-       _geminiParser = geminiParser ?? GeminiTransactionParser() {
+       _geminiParser = geminiParser ?? GeminiTransactionParser(),
+       _googleDriveBackupService =
+           googleDriveBackupService ?? GoogleDriveBackupService() {
     _firebaseService = firebaseService;
   }
 
@@ -70,17 +109,35 @@ class DashboardController extends ChangeNotifier {
   static const _exchangeRateKey = 'exchange_rate';
   static const _languageKey = 'language';
   static const _themeModeKey = 'theme_mode';
+  static const _themeStyleKey = 'theme_style';
+  static const _appLockEnabledKey = 'app_lock_enabled';
+  static const _appLockMethodKey = 'app_lock_method';
+  static const _autoBackupEnabledKey = 'auto_backup_enabled';
+  static const _lastAutoBackupKey = 'last_auto_backup';
   static const _calculationStartMonthKey = 'calculation_start_month';
   static const _firestoreEnabledKey = 'firestore_enabled';
   static const _sheetExportEndpointKey = 'sheet_export_endpoint';
   static const _sheetExportSecretKey = 'sheet_export_secret';
   static const _localBackupsKey = 'local_transaction_backups';
+  static const _walletOpeningUsdKey = 'wallet_opening_usd';
+  static const _walletOpeningLbpKey = 'wallet_opening_lbp';
+  static const _wishWalletOpeningUsdKey = 'wish_wallet_opening_usd';
+  static const _wishWalletOpeningLbpKey = 'wish_wallet_opening_lbp';
+  static const _walletBaselineTransactionIdsKey =
+      'wallet_baseline_transaction_ids';
+  static const _cashWalletBaselineTransactionIdsKey =
+      'cash_wallet_baseline_transaction_ids';
+  static const _wishWalletBaselineTransactionIdsKey =
+      'wish_wallet_baseline_transaction_ids';
+  static const _cashWalletComparisonRangeKey = 'cash_wallet_comparison_range';
+  static const _wishWalletComparisonRangeKey = 'wish_wallet_comparison_range';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
   FirebaseFinanceService? _firebaseService;
   final SheetExportService _sheetExportService;
   final GeminiTransactionParser _geminiParser;
+  final GoogleDriveBackupService _googleDriveBackupService;
 
   List<FinancialTransaction> _transactions = [];
   String _sheetUrl = AppConfig.defaultGoogleSheetUrl;
@@ -89,6 +146,19 @@ class DashboardController extends ChangeNotifier {
   double _exchangeRate = AppConfig.defaultExchangeRate;
   AppLanguage _language = AppLanguage.english;
   ThemeMode _themeMode = ThemeMode.light;
+  AppThemeStyle _themeStyle = AppThemeStyle.cyberGrid;
+  bool _appLockEnabled = false;
+  AppLockMethod _appLockMethod = AppLockMethod.biometric;
+  bool _autoBackupEnabled = false;
+  double _walletOpeningUsd = 0;
+  double _walletOpeningLbp = 0;
+  double _wishWalletOpeningUsd = 0;
+  double _wishWalletOpeningLbp = 0;
+  Set<String> _cashWalletBaselineTransactionIds = <String>{};
+  Set<String> _wishWalletBaselineTransactionIds = <String>{};
+  WalletComparisonRange _cashWalletComparisonRange = WalletComparisonRange.week;
+  WalletComparisonRange _wishWalletComparisonRange = WalletComparisonRange.week;
+  DateTime? _lastAutoBackup;
   TimeFilter _timeFilter = TimeFilter.thisMonth;
   DateTime? _selectedRecentDay;
   DateTime? _selectedMonth;
@@ -107,8 +177,88 @@ class DashboardController extends ChangeNotifier {
   List<AdminUserSnapshot> _adminUsers = const [];
   bool _isAdminLoading = false;
 
-  List<FinancialTransaction> get transactions =>
-      List.unmodifiable(_transactions);
+  List<FinancialTransaction> get transactions => List.unmodifiable(
+    _transactions.where((transaction) => !transaction.isArchived),
+  );
+
+  List<FinancialTransaction> get archivedTransactions => List.unmodifiable(
+    _transactions.where((transaction) => transaction.isArchived),
+  );
+
+  double get walletOpeningUsd => _walletOpeningUsd;
+
+  double get walletOpeningLbp => _walletOpeningLbp;
+
+  double get wishWalletOpeningUsd => _wishWalletOpeningUsd;
+
+  double get wishWalletOpeningLbp => _wishWalletOpeningLbp;
+
+  WalletComparisonRange walletComparisonRange({required bool isWishMoney}) =>
+      isWishMoney ? _wishWalletComparisonRange : _cashWalletComparisonRange;
+
+  /// Wallet balances begin at the last reset. Categories never decide which
+  /// wallet changes; only the selected payment method (Cash or Wish Money)
+  /// does.
+  WalletSummary get walletSummary => WalletSummary.fromTransactions(
+    _transactions,
+    cashOpeningUsd: _walletOpeningUsd,
+    cashOpeningLbp: _walletOpeningLbp,
+    wishOpeningUsd: _wishWalletOpeningUsd,
+    wishOpeningLbp: _wishWalletOpeningLbp,
+    ignoredCashTransactionIds: _cashWalletBaselineTransactionIds,
+    ignoredWishTransactionIds: _wishWalletBaselineTransactionIds,
+  );
+
+  /// Wallet balance shown on the dashboard follows the selected time filter.
+  /// Today shows the current balance; other periods show the balance at their
+  /// starting day, so “Last 3 days” means the balance from three days ago.
+  WalletSummary get dashboardWalletSummary {
+    if (_timeFilter == TimeFilter.today || _timeFilter == TimeFilter.allTime) {
+      return _walletSummaryAsOf(DateTime.now());
+    }
+    final start = currentWindow.start;
+    if (start == null) return walletSummary;
+    return _walletSummaryAsOf(start.subtract(const Duration(days: 1)));
+  }
+
+  String get dashboardWalletPeriodLabel {
+    if (_timeFilter == TimeFilter.today || _timeFilter == TimeFilter.allTime) {
+      return 'Current balance';
+    }
+    final start = currentWindow.start;
+    if (start == null) return 'Current balance';
+    final date = DateTime(start.year, start.month, start.day);
+    return 'Balance on ${date.day}/${date.month}/${date.year}';
+  }
+
+  WalletSummary _walletSummaryAsOf(DateTime asOf) {
+    final cutoff = DateTime(asOf.year, asOf.month, asOf.day);
+    return WalletSummary.fromTransactions(
+      _transactions
+          .where((transaction) => !transaction.date.isAfter(cutoff))
+          .toList(),
+      cashOpeningUsd: _walletOpeningUsd,
+      cashOpeningLbp: _walletOpeningLbp,
+      wishOpeningUsd: _wishWalletOpeningUsd,
+      wishOpeningLbp: _wishWalletOpeningLbp,
+      ignoredCashTransactionIds: _cashWalletBaselineTransactionIds,
+      ignoredWishTransactionIds: _wishWalletBaselineTransactionIds,
+    );
+  }
+
+  WalletBalanceComparison walletBalanceComparison({required bool isWishMoney}) {
+    final range = walletComparisonRange(isWishMoney: isWishMoney);
+    final current = isWishMoney ? walletSummary.wish : walletSummary.cash;
+    final earlierSummary = _walletSummaryAsOf(
+      DateTime.now().subtract(range.duration),
+    );
+    final earlier = isWishMoney ? earlierSummary.wish : earlierSummary.cash;
+    return WalletBalanceComparison(
+      range: range,
+      usdChange: current.balanceUsd - earlier.balanceUsd,
+      lbpChange: current.balanceLbp - earlier.balanceLbp,
+    );
+  }
 
   String get sheetUrl => _sheetUrl;
 
@@ -121,6 +271,14 @@ class DashboardController extends ChangeNotifier {
   AppLanguage get language => _language;
 
   ThemeMode get themeMode => _themeMode;
+
+  AppThemeStyle get themeStyle => _themeStyle;
+
+  bool get isAppLockEnabled => _appLockEnabled;
+
+  AppLockMethod get appLockMethod => _appLockMethod;
+
+  bool get isAutoBackupEnabled => _autoBackupEnabled;
 
   AppStrings get strings => AppStrings(_language);
 
@@ -197,13 +355,13 @@ class DashboardController extends ChangeNotifier {
   }
 
   List<String> get paymentMethodOptions {
-    final values =
-        _transactions
-            .map((transaction) => transaction.paymentMethod.trim())
-            .where((value) => value.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    final values = <String>{
+      'Cash',
+      'Wish Money',
+      ..._transactions
+          .map((transaction) => transaction.paymentMethod.trim())
+          .where((value) => value.isNotEmpty),
+    }.toList()..sort();
     return values;
   }
 
@@ -218,9 +376,12 @@ class DashboardController extends ChangeNotifier {
   List<FinancialTransaction> get calculationTransactions {
     final start = _calculationStartMonth;
     if (start == null) {
-      return List.unmodifiable(_transactions);
+      return _transactions
+          .where((transaction) => !transaction.isArchived)
+          .toList();
     }
     return _transactions.where((transaction) {
+      if (transaction.isArchived) return false;
       if (!transaction.hasDate) {
         return false;
       }
@@ -346,9 +507,52 @@ class DashboardController extends ChangeNotifier {
       _exchangeRate =
           prefs.getDouble(_exchangeRateKey) ?? AppConfig.defaultExchangeRate;
       _language = AppLanguage.fromCode(prefs.getString(_languageKey));
-      _themeMode = prefs.getString(_themeModeKey) == ThemeMode.dark.name
-          ? ThemeMode.dark
-          : ThemeMode.light;
+      // The dashboard opens on the last completed month. Long-pressing a
+      // period control can then compare it with any chosen month/year.
+      final now = DateTime.now();
+      // Dashboard figures should always open on the current calendar month.
+      _selectedMonth = DateTime(now.year, now.month);
+      _timeFilter = TimeFilter.thisMonth;
+      _themeStyle = AppThemeStyle.cyberGrid;
+      _themeMode = ThemeMode.light;
+      await prefs.setString(_themeStyleKey, _themeStyle.name);
+      await prefs.setString(_themeModeKey, _themeMode.name);
+      _appLockEnabled = prefs.getBool(_appLockEnabledKey) ?? false;
+      _appLockMethod = AppLockMethod.values.firstWhere(
+        (method) => method.name == prefs.getString(_appLockMethodKey),
+        orElse: () => AppLockMethod.biometric,
+      );
+      if (_appLockMethod == AppLockMethod.pin) {
+        _appLockMethod = AppLockMethod.biometric;
+        await prefs.setString(_appLockMethodKey, AppLockMethod.biometric.name);
+      }
+      _autoBackupEnabled = prefs.getBool(_autoBackupEnabledKey) ?? false;
+      _walletOpeningUsd = prefs.getDouble(_walletOpeningUsdKey) ?? 0;
+      _walletOpeningLbp = prefs.getDouble(_walletOpeningLbpKey) ?? 0;
+      _wishWalletOpeningUsd = prefs.getDouble(_wishWalletOpeningUsdKey) ?? 0;
+      _wishWalletOpeningLbp = prefs.getDouble(_wishWalletOpeningLbpKey) ?? 0;
+      // Older versions used one baseline for both wallets. Keep it as the
+      // first-run fallback, then persist separate baselines from now on.
+      final legacyBaseline =
+          prefs.getStringList(_walletBaselineTransactionIdsKey)?.toSet() ??
+          <String>{};
+      _cashWalletBaselineTransactionIds =
+          prefs.getStringList(_cashWalletBaselineTransactionIdsKey)?.toSet() ??
+          legacyBaseline;
+      _wishWalletBaselineTransactionIds =
+          prefs.getStringList(_wishWalletBaselineTransactionIdsKey)?.toSet() ??
+          legacyBaseline;
+      _cashWalletComparisonRange = WalletComparisonRange.values.firstWhere(
+        (value) => value.name == prefs.getString(_cashWalletComparisonRangeKey),
+        orElse: () => WalletComparisonRange.week,
+      );
+      _wishWalletComparisonRange = WalletComparisonRange.values.firstWhere(
+        (value) => value.name == prefs.getString(_wishWalletComparisonRangeKey),
+        orElse: () => WalletComparisonRange.week,
+      );
+      _lastAutoBackup = DateTime.tryParse(
+        prefs.getString(_lastAutoBackupKey) ?? '',
+      );
       _calculationStartMonth = _monthFromStorage(
         prefs.getString(_calculationStartMonthKey),
       );
@@ -364,7 +568,9 @@ class DashboardController extends ChangeNotifier {
           } catch (_) {}
         }
       }
+      await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
+      await _runDailyAutoBackupIfDue();
     } catch (_) {
       _isFirebaseConfigured = FirebaseBootstrap.isInitialized;
       _useFirestore = false;
@@ -510,6 +716,14 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateExchangeRate(double exchangeRate) async {
+    if (exchangeRate <= 0) return;
+    _exchangeRate = exchangeRate;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_exchangeRateKey, _exchangeRate);
+    notifyListeners();
+  }
+
   Future<int> exportCurrentTransactionsToSheet({
     void Function(int completed, int total, String label)? onProgress,
   }) async {
@@ -608,6 +822,7 @@ class DashboardController extends ChangeNotifier {
       try {
         await _loadSheetIntegrationSettings();
       } catch (_) {}
+      await _loadWalletSettings();
       await refresh();
     } catch (error) {
       _errorMessage = _friendlyErrorMessage(error);
@@ -682,6 +897,7 @@ class DashboardController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
       await _loadSheetIntegrationSettings();
+      await _loadWalletSettings();
       await refresh();
       return _user != null;
     } catch (error) {
@@ -760,21 +976,9 @@ class DashboardController extends ChangeNotifier {
   Future<String> createLocalBackup({String? label}) async {
     final prefs = await SharedPreferences.getInstance();
     final backups = _readLocalBackups(prefs);
-    final now = DateTime.now();
-    final id = now.millisecondsSinceEpoch.toString();
-    backups.insert(0, {
-      'id': id,
-      'label': label?.trim().isNotEmpty == true
-          ? label!.trim()
-          : 'Backup ${now.toIso8601String()}',
-      'savedAt': now.toIso8601String(),
-      'accountId': _user?.accountId ?? '',
-      'email': _user?.email ?? '',
-      'transactions': [
-        for (final transaction in _transactions)
-          _transactionToJson(transaction),
-      ],
-    });
+    final backup = _createBackupDocument(label: label);
+    final id = '${backup['id']}';
+    backups.insert(0, backup);
     await prefs.setString(
       _localBackupsKey,
       jsonEncode(backups.take(10).toList()),
@@ -802,6 +1006,45 @@ class DashboardController extends ChangeNotifier {
     if (backup == null) {
       throw const FirebaseFinanceException('Backup was not found.');
     }
+    return _restoreBackupDocument(backup);
+  }
+
+  Future<GoogleDriveBackupFile> createGoogleDriveBackup({String? label}) {
+    return _googleDriveBackupService.uploadBackup(
+      _createBackupDocument(label: label),
+    );
+  }
+
+  Future<List<GoogleDriveBackupFile>> googleDriveBackups() {
+    return _googleDriveBackupService.listBackups();
+  }
+
+  Future<int> restoreGoogleDriveBackup(String fileId) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    final backup = await _googleDriveBackupService.downloadBackup(fileId);
+    return _restoreBackupDocument(backup);
+  }
+
+  Map<String, dynamic> _createBackupDocument({String? label}) {
+    final now = DateTime.now();
+    return {
+      'id': now.millisecondsSinceEpoch.toString(),
+      'label': label?.trim().isNotEmpty == true
+          ? label!.trim()
+          : 'Backup ${now.toIso8601String()}',
+      'savedAt': now.toIso8601String(),
+      'accountId': _user?.accountId ?? '',
+      'email': _user?.email ?? '',
+      'transactions': [
+        for (final transaction in _transactions)
+          _transactionToJson(transaction),
+      ],
+    };
+  }
+
+  Future<int> _restoreBackupDocument(Map<String, dynamic> backup) async {
     final rows = backup['transactions'];
     if (rows is! List) {
       throw const FirebaseFinanceException('Backup file is invalid.');
@@ -1033,10 +1276,23 @@ class DashboardController extends ChangeNotifier {
     }
     final ready = _assignMissingId(transaction);
     final saved = await _firebase.addTransaction(ready);
-    _transactions = [saved, ..._transactions]
-      ..sort((a, b) => b.date.compareTo(a.date));
+    _transactions = [
+      saved,
+      ..._transactions,
+    ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
     _lastUpdated = DateTime.now();
     notifyListeners();
+  }
+
+  Future<void> archiveTransaction(FinancialTransaction transaction) async {
+    final raw = Map<String, String>.from(transaction.raw)
+      ..['archived'] = 'true';
+    await updateTransaction(transaction, transaction.copyWith(raw: raw));
+  }
+
+  Future<void> restoreTransaction(FinancialTransaction transaction) async {
+    final raw = Map<String, String>.from(transaction.raw)..remove('archived');
+    await updateTransaction(transaction, transaction.copyWith(raw: raw));
   }
 
   FinancialTransaction _assignMissingId(FinancialTransaction transaction) {
@@ -1200,8 +1456,200 @@ class DashboardController extends ChangeNotifier {
   Future<void> updateThemeMode(ThemeMode mode) async {
     _themeMode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_themeModeKey, mode.name);
+    await prefs.setString(_themeModeKey, _themeMode.name);
     notifyListeners();
+  }
+
+  Future<void> updateThemeStyle(AppThemeStyle style) async {
+    _themeStyle = AppThemeStyle.cyberGrid;
+    _themeMode = ThemeMode.light;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_themeStyleKey, style.name);
+    await prefs.setString(_themeModeKey, _themeMode.name);
+    notifyListeners();
+  }
+
+  Future<void> updateAppLockEnabled(bool enabled) async {
+    _appLockEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_appLockEnabledKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> updateAppLockMethod(AppLockMethod method) async {
+    _appLockMethod = method;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_appLockMethodKey, method.name);
+    notifyListeners();
+  }
+
+  Future<void> updateAutoBackupEnabled(bool enabled) async {
+    _autoBackupEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoBackupEnabledKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> updateWalletOpeningBalances({
+    required double usd,
+    required double lbp,
+  }) async {
+    _walletOpeningUsd = usd < 0 ? 0 : usd;
+    _walletOpeningLbp = lbp < 0 ? 0 : lbp;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
+    await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
+    await _saveWalletSettings();
+    notifyListeners();
+  }
+
+  Future<void> updateWishWalletOpeningBalances({
+    required double usd,
+    required double lbp,
+  }) async {
+    _wishWalletOpeningUsd = usd < 0 ? 0 : usd;
+    _wishWalletOpeningLbp = lbp < 0 ? 0 : lbp;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
+    await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
+    await _saveWalletSettings();
+    notifyListeners();
+  }
+
+  Future<void> updateWalletComparisonRange({
+    required bool isWishMoney,
+    required WalletComparisonRange range,
+  }) async {
+    if (isWishMoney) {
+      _wishWalletComparisonRange = range;
+    } else {
+      _cashWalletComparisonRange = range;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      isWishMoney
+          ? _wishWalletComparisonRangeKey
+          : _cashWalletComparisonRangeKey,
+      range.name,
+    );
+    await _saveWalletSettings();
+    notifyListeners();
+  }
+
+  /// Starts wallet tracking from the balances entered now. Existing income and
+  /// expenses remain in the app but no longer affect either wallet.
+  Future<void> resetWalletTracking({
+    required double cashUsd,
+    required double cashLbp,
+    required double wishUsd,
+    required double wishLbp,
+  }) async {
+    _walletOpeningUsd = cashUsd < 0 ? 0 : cashUsd;
+    _walletOpeningLbp = cashLbp < 0 ? 0 : cashLbp;
+    _wishWalletOpeningUsd = wishUsd < 0 ? 0 : wishUsd;
+    _wishWalletOpeningLbp = wishLbp < 0 ? 0 : wishLbp;
+    _cashWalletBaselineTransactionIds = _transactions
+        .where(
+          (transaction) =>
+              !transaction.paymentMethod.toLowerCase().contains('wish'),
+        )
+        .map((transaction) => transaction.id?.trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    _wishWalletBaselineTransactionIds = _transactions
+        .where(
+          (transaction) =>
+              transaction.paymentMethod.toLowerCase().contains('wish'),
+        )
+        .map((transaction) => transaction.id?.trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
+    await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
+    await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
+    await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
+    await prefs.setStringList(
+      _cashWalletBaselineTransactionIdsKey,
+      _cashWalletBaselineTransactionIds.toList(),
+    );
+    await prefs.setStringList(
+      _wishWalletBaselineTransactionIdsKey,
+      _wishWalletBaselineTransactionIds.toList(),
+    );
+    await _saveWalletSettings();
+    notifyListeners();
+  }
+
+  Future<void> resetCashWalletTracking({
+    required double usd,
+    required double lbp,
+  }) async {
+    _walletOpeningUsd = usd < 0 ? 0 : usd;
+    _walletOpeningLbp = lbp < 0 ? 0 : lbp;
+    _cashWalletBaselineTransactionIds = _transactions
+        .where(
+          (transaction) =>
+              !transaction.paymentMethod.toLowerCase().contains('wish'),
+        )
+        .map((transaction) => transaction.id?.trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
+    await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
+    await prefs.setStringList(
+      _cashWalletBaselineTransactionIdsKey,
+      _cashWalletBaselineTransactionIds.toList(),
+    );
+    await _saveWalletSettings();
+    notifyListeners();
+  }
+
+  Future<void> resetWishWalletTracking({
+    required double usd,
+    required double lbp,
+  }) async {
+    _wishWalletOpeningUsd = usd < 0 ? 0 : usd;
+    _wishWalletOpeningLbp = lbp < 0 ? 0 : lbp;
+    _wishWalletBaselineTransactionIds = _transactions
+        .where(
+          (transaction) =>
+              transaction.paymentMethod.toLowerCase().contains('wish'),
+        )
+        .map((transaction) => transaction.id?.trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
+    await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
+    await prefs.setStringList(
+      _wishWalletBaselineTransactionIdsKey,
+      _wishWalletBaselineTransactionIds.toList(),
+    );
+    await _saveWalletSettings();
+    notifyListeners();
+  }
+
+  Future<void> _runDailyAutoBackupIfDue() async {
+    if (!_autoBackupEnabled || _user == null) {
+      return;
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (_lastAutoBackup != null && !_lastAutoBackup!.isBefore(today)) {
+      return;
+    }
+    try {
+      await createGoogleDriveBackup(
+        label: 'Auto backup ${now.toIso8601String()}',
+      );
+      _lastAutoBackup = now;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lastAutoBackupKey, now.toIso8601String());
+    } catch (_) {
+      // Backup can retry when the app is opened again with a working account.
+    }
   }
 
   Future<void> updateCalculationStartMonth(DateTime? month) async {
@@ -1315,6 +1763,71 @@ class DashboardController extends ChangeNotifier {
         exportSecret: _sheetExportSecret,
       ),
     );
+  }
+
+  Future<void> _loadWalletSettings() async {
+    if (!_isFirebaseConfigured || _user == null) {
+      return;
+    }
+    try {
+      final settings = await _firebase.fetchWalletSettings();
+      if (settings == null) {
+        // The phone may already have balances stored locally from an older
+        // release. Let it publish that data once; a new browser must not
+        // overwrite it with empty values.
+        if (!kIsWeb) {
+          await _saveWalletSettings();
+        }
+        return;
+      }
+      _walletOpeningUsd = settings.cashOpeningUsd;
+      _walletOpeningLbp = settings.cashOpeningLbp;
+      _wishWalletOpeningUsd = settings.wishOpeningUsd;
+      _wishWalletOpeningLbp = settings.wishOpeningLbp;
+      _cashWalletBaselineTransactionIds = settings.cashBaselineTransactionIds.toSet();
+      _wishWalletBaselineTransactionIds = settings.wishBaselineTransactionIds.toSet();
+      _cashWalletComparisonRange = WalletComparisonRange.values.firstWhere(
+        (value) => value.name == settings.cashComparisonRange,
+        orElse: () => WalletComparisonRange.week,
+      );
+      _wishWalletComparisonRange = WalletComparisonRange.values.firstWhere(
+        (value) => value.name == settings.wishComparisonRange,
+        orElse: () => WalletComparisonRange.week,
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
+      await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
+      await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
+      await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
+      await prefs.setStringList(_cashWalletBaselineTransactionIdsKey, _cashWalletBaselineTransactionIds.toList());
+      await prefs.setStringList(_wishWalletBaselineTransactionIdsKey, _wishWalletBaselineTransactionIds.toList());
+      await prefs.setString(_cashWalletComparisonRangeKey, _cashWalletComparisonRange.name);
+      await prefs.setString(_wishWalletComparisonRangeKey, _wishWalletComparisonRange.name);
+    } catch (_) {
+      // Wallet sync must never prevent sign-in or offline usage.
+    }
+  }
+
+  Future<void> _saveWalletSettings() async {
+    if (!_isFirebaseConfigured || _user == null) {
+      return;
+    }
+    try {
+      await _firebase.saveWalletSettings(
+        WalletSyncSettings(
+          cashOpeningUsd: _walletOpeningUsd,
+          cashOpeningLbp: _walletOpeningLbp,
+          wishOpeningUsd: _wishWalletOpeningUsd,
+          wishOpeningLbp: _wishWalletOpeningLbp,
+          cashBaselineTransactionIds: _cashWalletBaselineTransactionIds.toList(),
+          wishBaselineTransactionIds: _wishWalletBaselineTransactionIds.toList(),
+          cashComparisonRange: _cashWalletComparisonRange.name,
+          wishComparisonRange: _wishWalletComparisonRange.name,
+        ),
+      );
+    } catch (_) {
+      // Local settings remain available if Firestore is temporarily offline.
+    }
   }
 
   Future<void> updateTransaction(
@@ -1732,6 +2245,130 @@ class FinancialSummary {
     final entries = map.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     return Map.fromEntries(entries);
+  }
+}
+
+class WalletSummary {
+  const WalletSummary({required this.cash, required this.wish});
+
+  final WalletAccountSummary cash;
+  final WalletAccountSummary wish;
+
+  factory WalletSummary.fromTransactions(
+    List<FinancialTransaction> transactions, {
+    required double cashOpeningUsd,
+    required double cashOpeningLbp,
+    required double wishOpeningUsd,
+    required double wishOpeningLbp,
+    required Set<String> ignoredCashTransactionIds,
+    required Set<String> ignoredWishTransactionIds,
+  }) {
+    final cashTransactions = <FinancialTransaction>[];
+    final wishTransactions = <FinancialTransaction>[];
+    for (final transaction in transactions) {
+      final id = transaction.id?.trim() ?? '';
+      final isWish = transaction.paymentMethod.trim().toLowerCase().contains(
+        'wish',
+      );
+      if (id.isNotEmpty &&
+          (isWish
+              ? ignoredWishTransactionIds.contains(id)
+              : ignoredCashTransactionIds.contains(id))) {
+        continue;
+      }
+      if (isWish) {
+        wishTransactions.add(transaction);
+      } else {
+        cashTransactions.add(transaction);
+      }
+    }
+    return WalletSummary(
+      cash: WalletAccountSummary.fromTransactions(
+        cashTransactions,
+        openingUsd: cashOpeningUsd,
+        openingLbp: cashOpeningLbp,
+      ),
+      wish: WalletAccountSummary.fromTransactions(
+        wishTransactions,
+        openingUsd: wishOpeningUsd,
+        openingLbp: wishOpeningLbp,
+      ),
+    );
+  }
+}
+
+class WalletBalanceComparison {
+  const WalletBalanceComparison({
+    required this.range,
+    required this.usdChange,
+    required this.lbpChange,
+  });
+
+  final WalletComparisonRange range;
+  final double usdChange;
+  final double lbpChange;
+}
+
+class WalletAccountSummary {
+  const WalletAccountSummary({
+    required this.openingUsd,
+    required this.openingLbp,
+    required this.incomeUsd,
+    required this.incomeLbp,
+    required this.expenseUsd,
+    required this.expenseLbp,
+    required this.reserveableUsd,
+    required this.reserveableLbp,
+  });
+
+  final double openingUsd;
+  final double openingLbp;
+  final double incomeUsd;
+  final double incomeLbp;
+  final double expenseUsd;
+  final double expenseLbp;
+  final double reserveableUsd;
+  final double reserveableLbp;
+
+  double get balanceUsd => openingUsd + incomeUsd - expenseUsd - reserveableUsd;
+  double get balanceLbp => openingLbp + incomeLbp - expenseLbp - reserveableLbp;
+
+  factory WalletAccountSummary.fromTransactions(
+    List<FinancialTransaction> transactions, {
+    required double openingUsd,
+    required double openingLbp,
+  }) {
+    var incomeUsd = 0.0;
+    var incomeLbp = 0.0;
+    var expenseUsd = 0.0;
+    var expenseLbp = 0.0;
+    var reserveableUsd = 0.0;
+    var reserveableLbp = 0.0;
+    for (final transaction in transactions) {
+      final amount = transaction.amount;
+      final isUsd = transaction.currency == CurrencyCode.usd;
+      final isLbp = transaction.currency == CurrencyCode.lbp;
+      if (transaction.isIncome) {
+        if (isUsd) incomeUsd += amount;
+        if (isLbp) incomeLbp += amount;
+      } else if (transaction.isExpense) {
+        if (isUsd) expenseUsd += amount;
+        if (isLbp) expenseLbp += amount;
+      } else if (transaction.isReserveable) {
+        if (isUsd) reserveableUsd += amount;
+        if (isLbp) reserveableLbp += amount;
+      }
+    }
+    return WalletAccountSummary(
+      openingUsd: openingUsd,
+      openingLbp: openingLbp,
+      incomeUsd: incomeUsd,
+      incomeLbp: incomeLbp,
+      expenseUsd: expenseUsd,
+      expenseLbp: expenseLbp,
+      reserveableUsd: reserveableUsd,
+      reserveableLbp: reserveableLbp,
+    );
   }
 }
 
