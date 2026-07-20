@@ -108,6 +108,28 @@ class _SpendingAlertsScreenState extends State<SpendingAlertsScreen> {
           ),
         ),
         const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: .45),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.insights_rounded, color: theme.colorScheme.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Your spending is compared against the limits below.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
         _RiskCard(
           title: 'Today',
           spent: daily,
@@ -243,7 +265,11 @@ class _RiskCard extends StatelessWidget {
         ? 'Careful'
         : 'Safe';
     return Card(
-      elevation: 0,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: color.withValues(alpha: .28)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

@@ -45,6 +45,17 @@ Defaults:
 
 The app also lets you change these from the Settings screen and stores them locally.
 
+## Google Drive backups
+
+The **Setting** page can create and restore JSON backups in the signed-in
+Google account's Drive. The app requests the restricted `drive.file` scope, so
+it can access only backup files created by Maliyati.
+
+Before the first backup, enable **Google Drive API** in the Google Cloud project
+connected to Firebase (`maliyati-app-2026`). If the OAuth consent screen is in
+testing mode, add the backup user's Google account as a test user. The first
+backup prompts the user to grant Drive permission.
+
 ## Run in Android Studio
 
 1. Open this folder in Android Studio:

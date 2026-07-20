@@ -14,6 +14,96 @@ import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
 import 'transaction_detail_screen.dart';
 
+class _WalletAnalyticsCard extends StatelessWidget {
+  const _WalletAnalyticsCard({required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final wallets = controller.walletSummary;
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Wallet overview',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _WalletAnalyticValue(
+                    label: 'Cash',
+                    usd: wallets.cash.balanceUsd,
+                    lbp: wallets.cash.balanceLbp,
+                    color: const Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _WalletAnalyticValue(
+                    label: 'Wish Money',
+                    usd: wallets.wish.balanceUsd,
+                    lbp: wallets.wish.balanceLbp,
+                    color: const Color(0xFF6D28D9),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletAnalyticValue extends StatelessWidget {
+  const _WalletAnalyticValue({
+    required this.label,
+    required this.usd,
+    required this.lbp,
+    required this.color,
+  });
+  final String label;
+  final double usd;
+  final double lbp;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .08),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(color: color, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          FinanceFormatters.usd(usd),
+          style: const TextStyle(fontWeight: FontWeight.w900),
+        ),
+        Text(
+          FinanceFormatters.lbp(lbp),
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    ),
+  );
+}
+
 class AnalyticsScreen extends StatelessWidget {
   const AnalyticsScreen({super.key, required this.controller});
 
@@ -44,21 +134,12 @@ class AnalyticsScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              IconButton.filledTonal(
-                onPressed: controller.isLoading ? null : controller.refresh,
-                tooltip: strings.refresh,
-                icon: controller.isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh_rounded),
-              ),
             ],
           ),
           const SizedBox(height: 12),
           PeriodFilterBar(controller: controller),
+          const SizedBox(height: 12),
+          _WalletAnalyticsCard(controller: controller),
           const SizedBox(height: 12),
           if (transactions.isEmpty)
             SizedBox(

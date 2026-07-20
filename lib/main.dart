@@ -80,7 +80,7 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        themeMode: _controller.themeMode,
+        themeMode: ThemeMode.light,
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: !_controller.isInitialized
@@ -283,7 +283,10 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   }
 
   Future<void> _showInitialLock() async {
-    if (kIsWeb || !mounted || !widget.controller.isAppLockEnabled || _isUnlocking) {
+    if (kIsWeb ||
+        !mounted ||
+        !widget.controller.isAppLockEnabled ||
+        _isUnlocking) {
       return;
     }
     setState(() => _isAppLocked = true);

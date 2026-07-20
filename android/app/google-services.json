@@ -7,42 +7,6 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:34788182639:android:82d6e9b6e4fbc575d75b9a",
-        "android_client_info": {
-          "package_name": "com.codex.finance.finance_tracker"
-        }
-      },
-      "oauth_client": [
-        {
-          "client_id": "34788182639-nsp1ct80jvr0jkc4teqs1vlk8gkcd1lt.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
-      "api_key": [
-        {
-          "current_key": "AIzaSyDAeWKBMOK93Y2xcrji0pwTt0358DIUvn4"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "34788182639-nsp1ct80jvr0jkc4teqs1vlk8gkcd1lt.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "34788182639-o801k636kfan63n33lstbmd779f02mjs.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.codex.finance.financeTracker"
-              }
-            }
-          ]
-        }
-      }
-    },
-    {
-      "client_info": {
         "mobilesdk_app_id": "1:34788182639:android:033205b23cc63d31d75b9a",
         "android_client_info": {
           "package_name": "com.maliyati.app"
@@ -55,6 +19,14 @@
           "android_info": {
             "package_name": "com.maliyati.app",
             "certificate_hash": "8e2bba9c0697ba17710f36b81a598f1de6d52a26"
+          }
+        },
+        {
+          "client_id": "34788182639-ctdm922bp12e0ct5qc90qifsou3iaooe.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.maliyati.app",
+            "certificate_hash": "4a3f66f493871b54b37ca45ff08190456f218cff"
           }
         },
         {

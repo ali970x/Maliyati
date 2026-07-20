@@ -79,8 +79,8 @@ class AppStrings {
   String get income => isArabic ? 'الدخل' : 'Income';
   String get expense => isArabic ? 'المصاريف' : 'Expense';
   String get expenses => isArabic ? 'المصاريف' : 'Expenses';
-  String get reserveable => isArabic ? 'مستحق' : 'Reserveable';
-  String get reserveables => isArabic ? 'المستحقات' : 'Reserveables';
+  String get reserveable => 'Credit';
+  String get reserveables => 'Credits';
   String get showIncomeTransactions =>
       isArabic ? 'عمليات الدخل' : 'Income transactions';
   String get showExpenseTransactions =>

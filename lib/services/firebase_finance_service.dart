@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/transaction.dart';
+import 'accounting_rules.dart';
 
 class FinanceUser {
   const FinanceUser({
@@ -314,9 +315,10 @@ class FirebaseFinanceService {
   }) async {
     _requireAdmin();
     final id = _requireTransactionId(transaction);
+    final normalized = AccountingRules.normalize(transaction);
     await _transactions(
       uid,
-    ).doc(id).set(_toFirestore(transaction), SetOptions(merge: true));
+    ).doc(id).set(_toFirestore(normalized), SetOptions(merge: true));
   }
 
   Future<void> deleteAdminTransaction({
@@ -344,7 +346,10 @@ class FirebaseFinanceService {
     final writeBatch = _firestore.batch();
     for (final transaction in transactions) {
       final id = _requireTransactionId(transaction);
-      writeBatch.set(_transactions(uid).doc(id), _toFirestore(transaction));
+      writeBatch.set(
+        _transactions(uid).doc(id),
+        _toFirestore(AccountingRules.normalize(transaction)),
+      );
     }
     await writeBatch.commit();
     return transactions;
@@ -364,7 +369,7 @@ class FirebaseFinanceService {
     FinancialTransaction transaction,
   ) async {
     final user = _requireUser();
-    final saved = await _withId(user, transaction);
+    final saved = await _withId(user, AccountingRules.normalize(transaction));
     await _transactions(user.uid).doc(saved.id!).set(_toFirestore(saved));
     return saved;
   }
@@ -374,10 +379,11 @@ class FirebaseFinanceService {
   ) async {
     final user = _requireUser();
     final id = _requireTransactionId(transaction);
+    final normalized = AccountingRules.normalize(transaction);
     await _transactions(
       user.uid,
-    ).doc(id).set(_toFirestore(transaction), SetOptions(merge: true));
-    return transaction;
+    ).doc(id).set(_toFirestore(normalized), SetOptions(merge: true));
+    return normalized;
   }
 
   Future<void> deleteTransaction(String id) async {
@@ -392,7 +398,10 @@ class FirebaseFinanceService {
     final batch = _firestore.batch();
     for (final transaction in transactions) {
       final id = _requireTransactionId(transaction);
-      batch.set(_transactions(user.uid).doc(id), _toFirestore(transaction));
+      batch.set(
+        _transactions(user.uid).doc(id),
+        _toFirestore(AccountingRules.normalize(transaction)),
+      );
     }
     await batch.commit();
   }
@@ -413,7 +422,10 @@ class FirebaseFinanceService {
     }
 
     final accountId = await _currentAccountId(user);
-    final saved = _withSequentialIds(transactions, accountId: accountId);
+    final saved = _withSequentialIds(
+      transactions.map(AccountingRules.normalize).toList(growable: false),
+      accountId: accountId,
+    );
     final writeBatch = _firestore.batch();
     for (final transaction in saved) {
       writeBatch.set(
@@ -657,6 +669,15 @@ class FirebaseFinanceService {
       'amount': transaction.amount,
       'category': transaction.category,
       'paymentMethod': transaction.paymentMethod,
+      'walletId': transaction.walletId,
+      'destinationWalletId': transaction.destinationWalletId ?? '',
+      'linkedTransactionId': transaction.linkedTransactionId ?? '',
+      'walletDirection': transaction.walletDirection,
+      'settlementStatus': transaction.settlementStatus.label,
+      'affectsExpenseStats': transaction.affectsExpenseStats,
+      'affectsIncomeStats': transaction.affectsIncomeStats,
+      'affectsReceivables': transaction.affectsReceivables,
+      'affectsPayables': transaction.affectsPayables,
       'notes': transaction.notes,
       // Keep this at the document root as well as in `raw`.  A few legacy
       // import paths rebuild `raw`, while this field must survive refreshes.
@@ -695,6 +716,15 @@ class FirebaseFinanceService {
       'amount_lbp': amountLbp.toString(),
       'category': '${data['category'] ?? ''}',
       'payment_method': '${data['paymentMethod'] ?? ''}',
+      'wallet_id': '${data['walletId'] ?? data['paymentMethod'] ?? ''}',
+      'destination_wallet_id': '${data['destinationWalletId'] ?? ''}',
+      'linked_transaction_id': '${data['linkedTransactionId'] ?? ''}',
+      'wallet_direction': '${data['walletDirection'] ?? ''}',
+      'settlement_status': '${data['settlementStatus'] ?? ''}',
+      'affects_expense_stats': '${data['affectsExpenseStats'] ?? ''}',
+      'affects_income_stats': '${data['affectsIncomeStats'] ?? ''}',
+      'affects_receivables': '${data['affectsReceivables'] ?? ''}',
+      'affects_payables': '${data['affectsPayables'] ?? ''}',
       'notes': '${data['notes'] ?? ''}',
       'source': '${data['source'] ?? ''}',
       'created_at': createdAt?.toIso8601String() ?? '',
@@ -714,22 +744,24 @@ class FirebaseFinanceService {
       raw['archived'] = archivedValue ? 'true' : 'false';
     }
 
-    return FinancialTransaction(
-      id: '${data['id'] ?? ''}'.trim().isEmpty
-          ? fallbackId
-          : '${data['id']}'.trim(),
-      createdAt: createdAt,
-      source: _parseSource('${data['source'] ?? ''}'),
-      date: DateTime(date.year, date.month, date.day),
-      hasDate: data['hasDate'] != false,
-      type: _parseType('${data['status'] ?? data['type'] ?? ''}'),
-      category: '${data['category'] ?? 'Uncategorized'}'.trim(),
-      description: '${data['title'] ?? data['description'] ?? ''}'.trim(),
-      currency: currency,
-      amount: amount.abs(),
-      paymentMethod: '${data['paymentMethod'] ?? ''}'.trim(),
-      notes: '${data['notes'] ?? ''}'.trim(),
-      raw: raw,
+    return AccountingRules.normalize(
+      FinancialTransaction(
+        id: '${data['id'] ?? ''}'.trim().isEmpty
+            ? fallbackId
+            : '${data['id']}'.trim(),
+        createdAt: createdAt,
+        source: _parseSource('${data['source'] ?? ''}'),
+        date: DateTime(date.year, date.month, date.day),
+        hasDate: data['hasDate'] != false,
+        type: _parseType('${data['status'] ?? data['type'] ?? ''}'),
+        category: '${data['category'] ?? 'Uncategorized'}'.trim(),
+        description: '${data['title'] ?? data['description'] ?? ''}'.trim(),
+        currency: currency,
+        amount: amount.abs(),
+        paymentMethod: '${data['paymentMethod'] ?? ''}'.trim(),
+        notes: '${data['notes'] ?? ''}'.trim(),
+        raw: raw,
+      ),
     );
   }
 
@@ -820,8 +852,18 @@ class FirebaseFinanceService {
 
   TransactionType _parseType(String value) {
     final normalized = value.toLowerCase();
-    if (normalized.contains('reserve')) {
+    if (normalized.contains('credit') ||
+        normalized.contains('reserve') ||
+        normalized.contains('receivable')) {
       return TransactionType.reserveable;
+    }
+    if (normalized.contains('debt') ||
+        normalized.contains('payable') ||
+        normalized.contains('payables')) {
+      return TransactionType.debt;
+    }
+    if (normalized.contains('transfer')) {
+      return TransactionType.transfer;
     }
     if (normalized.contains('income')) {
       return TransactionType.income;

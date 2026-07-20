@@ -175,7 +175,7 @@ class SheetExportService {
     final date = transaction.hasDate ? _dateText(transaction.date) : '';
     return {
       'Date': date,
-      'Status': transaction.type.label,
+      'Status': transaction.isDebit ? 'Debit' : transaction.type.label,
       'Title': transaction.description,
       'Amount (\$)': transaction.currency == CurrencyCode.usd
           ? transaction.amount
@@ -188,6 +188,11 @@ class SheetExportService {
       'Notes': transaction.notes,
       'Created At': _dateTimeText(transaction.createdAt ?? DateTime.now()),
       'Source': transaction.source.label,
+      'Wallet': transaction.walletId,
+      'Destination Wallet': transaction.destinationWalletId ?? '',
+      'Wallet Direction': transaction.walletDirection,
+      'Settlement Status': transaction.settlementStatus.label,
+      'Linked Transaction ID': transaction.linkedTransactionId ?? '',
       'ID': transaction.id ?? '',
       'Transaction ID': transaction.id ?? '',
     };
@@ -216,7 +221,26 @@ class SheetExportService {
       amount: amount.abs(),
       paymentMethod: '${row['Payment Method'] ?? ''}'.trim(),
       notes: '${row['Notes'] ?? ''}'.trim(),
-      raw: row.map((key, value) => MapEntry(key, '$value')),
+      raw: {
+        ...row.map((key, value) => MapEntry(key, '$value')),
+        'wallet_id': _firstText(row, const ['Wallet', 'wallet_id']),
+        'destination_wallet_id': _firstText(row, const [
+          'Destination Wallet',
+          'destination_wallet_id',
+        ]),
+        'wallet_direction': _firstText(row, const [
+          'Wallet Direction',
+          'wallet_direction',
+        ]),
+        'settlement_status': _firstText(row, const [
+          'Settlement Status',
+          'settlement_status',
+        ]),
+        'linked_transaction_id': _firstText(row, const [
+          'Linked Transaction ID',
+          'linked_transaction_id',
+        ]),
+      },
     );
   }
 
@@ -236,10 +260,22 @@ class SheetExportService {
   TransactionType _parseType(String value) {
     final normalized = value.toLowerCase();
     if (normalized.contains('income')) return TransactionType.income;
-    if (normalized.contains('reserve') || normalized.contains('receivable')) {
+    if (normalized.contains('credit') ||
+        normalized.contains('reserve') ||
+        normalized.contains('receivable')) {
       return TransactionType.reserveable;
     }
-    if (normalized.contains('expense')) return TransactionType.expense;
+    if (normalized.contains('debt') ||
+        normalized.contains('payable') ||
+        normalized.contains('payables')) {
+      return TransactionType.debt;
+    }
+    if (normalized.contains('transfer')) {
+      return TransactionType.transfer;
+    }
+    if (normalized.contains('expense') || normalized.contains('debit')) {
+      return TransactionType.expense;
+    }
     return TransactionType.unknown;
   }
 

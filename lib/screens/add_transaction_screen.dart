@@ -92,6 +92,8 @@ class _ManualAddForm extends StatefulWidget {
   State<_ManualAddForm> createState() => _ManualAddFormState();
 }
 
+enum _ManualStatus { expense, income, credit, debt, transfer }
+
 class _ManualAddFormState extends State<_ManualAddForm> {
   static const _expenseCategories = [
     'Masrouf bayt',
@@ -114,11 +116,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   final _amountLbpController = TextEditingController();
   final _categoryController = TextEditingController();
   final _paymentMethodController = TextEditingController();
+  final _destinationWalletController = TextEditingController();
   final _notesController = TextEditingController();
   DateTime _date = DateTime.now();
   DateTime _createdAt = DateTime.now();
   TransactionType _type = TransactionType.expense;
+  _ManualStatus _status = _ManualStatus.expense;
   TransactionSource _source = TransactionSource.application;
+  bool _paidNow = true;
   bool _isSaving = false;
 
   @override
@@ -128,6 +133,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     _amountLbpController.dispose();
     _categoryController.dispose();
     _paymentMethodController.dispose();
+    _destinationWalletController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -159,8 +165,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  DropdownButtonFormField<TransactionType>(
-                    initialValue: _type,
+                  DropdownButtonFormField<_ManualStatus>(
+                    initialValue: _status,
                     decoration: _coloredDecoration(
                       context,
                       labelText: 'Status',
@@ -169,23 +175,38 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     ),
                     items: const [
                       DropdownMenuItem(
-                        value: TransactionType.expense,
+                        value: _ManualStatus.expense,
                         child: Text('Expense'),
                       ),
                       DropdownMenuItem(
-                        value: TransactionType.income,
+                        value: _ManualStatus.income,
                         child: Text('Income'),
                       ),
                       DropdownMenuItem(
-                        value: TransactionType.reserveable,
-                        child: Text('Receivables'),
+                        value: _ManualStatus.credit,
+                        child: Text('Credit'),
+                      ),
+                      DropdownMenuItem(
+                        value: _ManualStatus.debt,
+                        child: Text('Debt'),
+                      ),
+                      DropdownMenuItem(
+                        value: _ManualStatus.transfer,
+                        child: Text('Transfer'),
                       ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
                         setState(() {
-                          _type = value;
-                          final allowed = _categoryOptionsFor(value);
+                          _status = value;
+                          _type = switch (value) {
+                            _ManualStatus.income => TransactionType.income,
+                            _ManualStatus.credit => TransactionType.reserveable,
+                            _ManualStatus.debt => TransactionType.debt,
+                            _ManualStatus.transfer => TransactionType.transfer,
+                            _ManualStatus.expense => TransactionType.expense,
+                          };
+                          final allowed = _categoryOptionsFor(_type);
                           if (!allowed.contains(
                             _categoryController.text.trim(),
                           )) {
@@ -195,35 +216,26 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                       }
                     },
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<TransactionSource>(
-                    initialValue: _source,
-                    decoration: _coloredDecoration(
-                      context,
-                      labelText: 'Source',
-                      icon: Icons.source_rounded,
-                      color: const Color(0xFF0F766E),
+                  if (_type == TransactionType.expense) ...[
+                    const SizedBox(height: 12),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: true,
+                          icon: Icon(Icons.payments_rounded),
+                          label: Text('Paid Now'),
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          icon: Icon(Icons.schedule_rounded),
+                          label: Text('On Credit'),
+                        ),
+                      ],
+                      selected: {_paidNow},
+                      onSelectionChanged: (value) =>
+                          setState(() => _paidNow = value.first),
                     ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: TransactionSource.application,
-                        child: Text('application'),
-                      ),
-                      DropdownMenuItem(
-                        value: TransactionSource.googleSheet,
-                        child: Text('Google Sheet'),
-                      ),
-                      DropdownMenuItem(
-                        value: TransactionSource.script,
-                        child: Text('script'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _source = value);
-                      }
-                    },
-                  ),
+                  ],
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _titleController,
@@ -280,14 +292,88 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     fallbackOptions: _categoryOptionsFor(_type),
                   ),
                   const SizedBox(height: 12),
-                  _ListTextField(
-                    controller: _paymentMethodController,
-                    label: 'Payment Method',
-                    icon: Icons.account_balance_wallet_rounded,
-                    color: const Color(0xFFD97706),
-                    options: widget.controller.paymentMethodOptions,
-                    fallbackOptions: const ['Cash', 'Whish money', 'Paid'],
+                  Text(
+                    _type == TransactionType.transfer
+                        ? 'Source wallet'
+                        : 'Wallet',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _WalletDestinationChoice(
+                          label: 'My Wallet',
+                          icon: Icons.account_balance_wallet_rounded,
+                          selected: !_paymentMethodController.text
+                              .trim()
+                              .toLowerCase()
+                              .contains('wish'),
+                          onTap: () => setState(
+                            () => _paymentMethodController.text = 'Cash',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _WalletDestinationChoice(
+                          label: 'Wish Money',
+                          selected: _paymentMethodController.text
+                              .trim()
+                              .toLowerCase()
+                              .contains('wish'),
+                          imageAsset: 'assets/branding/wish_money_logo.jpg',
+                          onTap: () => setState(
+                            () => _paymentMethodController.text = 'Wish Money',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_type == TransactionType.transfer) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Destination wallet',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _WalletDestinationChoice(
+                            label: 'My Wallet',
+                            icon: Icons.account_balance_wallet_rounded,
+                            selected: !_destinationWalletController.text
+                                .trim()
+                                .toLowerCase()
+                                .contains('wish'),
+                            onTap: () => setState(
+                              () => _destinationWalletController.text = 'Cash',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _WalletDestinationChoice(
+                            label: 'Wish Money',
+                            selected: _destinationWalletController.text
+                                .trim()
+                                .toLowerCase()
+                                .contains('wish'),
+                            imageAsset: 'assets/branding/wish_money_logo.jpg',
+                            onTap: () => setState(
+                              () => _destinationWalletController.text =
+                                  'Wish Money',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _notesController,
@@ -305,12 +391,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     label: 'Date',
                     value: FinanceFormatters.date(_date),
                     onTap: () => _pickDate(isCreatedAt: false),
-                  ),
-                  const SizedBox(height: 12),
-                  _DateRow(
-                    label: 'Created At',
-                    value: FinanceFormatters.dateTime(_createdAt),
-                    onTap: () => _pickDate(isCreatedAt: true),
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
@@ -374,6 +454,20 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       ).showSnackBar(const SnackBar(content: Text('Enter USD or LBP amount.')));
       return;
     }
+    if (_type == TransactionType.transfer) {
+      final sourceWallet = _paymentMethodController.text.trim();
+      final destinationWallet = _destinationWalletController.text.trim();
+      if (sourceWallet.isEmpty ||
+          destinationWallet.isEmpty ||
+          sourceWallet.toLowerCase() == destinationWallet.toLowerCase()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Choose different source and destination wallets.'),
+          ),
+        );
+        return;
+      }
+    }
 
     final currency = lbp > 0 ? CurrencyCode.lbp : CurrencyCode.usd;
     final amount = lbp > 0 ? lbp : usd;
@@ -391,6 +485,11 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'Notes': _notesController.text.trim(),
       'Created At': _createdAt.toIso8601String(),
       'Source': _source.label,
+      'wallet_id': _paymentMethodController.text.trim(),
+      'destination_wallet_id': _destinationWalletController.text.trim(),
+      'wallet_direction': _type == TransactionType.expense
+          ? (_paidNow ? '-1' : '0')
+          : '',
     };
     final transaction = FinancialTransaction(
       createdAt: _createdAt,
@@ -409,7 +508,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
 
     setState(() => _isSaving = true);
     try {
-      await widget.controller.addTransaction(transaction);
+      if (_type == TransactionType.expense) {
+        await widget.controller.addExpenseWithPaymentTiming(
+          transaction,
+          paidNow: _paidNow,
+        );
+      } else {
+        await widget.controller.addTransaction(transaction);
+      }
       if (!mounted) {
         return;
       }
@@ -436,12 +542,15 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     _amountLbpController.clear();
     _categoryController.clear();
     _paymentMethodController.clear();
+    _destinationWalletController.clear();
     _notesController.clear();
     setState(() {
       _date = DateTime.now();
       _createdAt = DateTime.now();
       _type = TransactionType.expense;
+      _status = _ManualStatus.expense;
       _source = TransactionSource.application;
+      _paidNow = true;
     });
   }
 
@@ -451,9 +560,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
 
   List<String> _categoryOptionsFor(TransactionType type) {
     return switch (type) {
-      TransactionType.income => _incomeCategories,
-      TransactionType.expense => _expenseCategories,
-      TransactionType.reserveable => const ['Receivables', 'Dyoune'],
+      TransactionType.income => [..._incomeCategories, ..._expenseCategories],
+      TransactionType.expense => [..._incomeCategories, ..._expenseCategories],
+      TransactionType.reserveable => [
+        ..._incomeCategories,
+        ..._expenseCategories,
+      ],
+      TransactionType.debt => ['Payables', 'Debt', 'Loan', 'Other payable'],
+      TransactionType.transfer => ['Wallet transfer'],
       TransactionType.unknown => const ['Uncategorized'],
     };
   }
@@ -463,6 +577,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       TransactionType.income => const Color(0xFF168A5B),
       TransactionType.expense => const Color(0xFFC74949),
       TransactionType.reserveable => const Color(0xFFD97706),
+      TransactionType.debt => const Color(0xFF7C3AED),
+      TransactionType.transfer => const Color(0xFF2563EB),
       TransactionType.unknown => Theme.of(context).colorScheme.onSurfaceVariant,
     };
   }
@@ -515,7 +631,6 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
   List<SmartTransactionAction> _preview = const [];
   String? _error;
   bool _isSaving = false;
-  bool _showExampleAction = false;
   int _completed = 0;
   int _total = 0;
   DateTime? _startedAt;
@@ -561,8 +676,15 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
         Container(
           decoration: BoxDecoration(
             color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: statusColor.withValues(alpha: .24)),
+            boxShadow: [
+              BoxShadow(
+                color: theme.colorScheme.primary.withValues(alpha: .06),
+                blurRadius: 18,
+                offset: const Offset(0, 7),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -573,18 +695,25 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
+                  color: statusColor.withValues(alpha: .09),
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(8),
+                    top: Radius.circular(16),
                   ),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.code_rounded, color: statusColor),
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: .13),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.code_rounded, color: statusColor),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _preview.isEmpty ? 'Input by code' : _inputStatus(),
+                        _preview.isEmpty ? 'Script input' : _inputStatus(),
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: statusColor,
                           fontWeight: FontWeight.w900,
@@ -595,11 +724,6 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
                       onPressed: _paste,
                       tooltip: 'Paste',
                       icon: const Icon(Icons.content_paste_rounded),
-                    ),
-                    IconButton(
-                      onPressed: _revealExampleAction,
-                      tooltip: 'More',
-                      icon: const Icon(Icons.more_horiz_rounded),
                     ),
                     IconButton(
                       onPressed: hasInput ? _clear : null,
@@ -620,7 +744,8 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
                 ),
                 decoration: const InputDecoration(
                   alignLabelWithHint: true,
-                  hintText: 'Paste one transaction JSON or a batch here...',
+                  hintText:
+                      'Paste one transaction JSON or a batch here.\nStatuses: Expense, Income, Debit, Credit.',
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -631,17 +756,6 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
             ],
           ),
         ),
-        if (_showExampleAction) ...[
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: _insertExample,
-              icon: const Icon(Icons.code_rounded),
-              label: const Text('Example'),
-            ),
-          ),
-        ],
         const SizedBox(height: 12),
         Row(
           children: [
@@ -852,7 +966,7 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
                     _ActionCountChip(label: 'Delete', value: delete),
                     _ActionCountChip(label: 'Income', value: income),
                     _ActionCountChip(label: 'Expense', value: expense),
-                    _ActionCountChip(label: 'Reserveable', value: reserveable),
+                    _ActionCountChip(label: 'Credit', value: reserveable),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -898,47 +1012,7 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
       _completed = 0;
       _total = 0;
       _startedAt = null;
-      _showExampleAction = false;
     });
-  }
-
-  Future<void> _revealExampleAction() async {
-    setState(() => _showExampleAction = false);
-    await Future<void>.delayed(const Duration(seconds: 3));
-    if (!mounted) {
-      return;
-    }
-    setState(() => _showExampleAction = true);
-  }
-
-  void _insertExample() {
-    _scriptController.text = '''[
-  {
-    "action": "add_transaction",
-    "date": "2026-07-15",
-    "status": "Expense",
-    "title": "10 kg tomatoes",
-    "amount_lbp": 450000,
-    "category": "Masrouf bayt",
-    "payment_method": "Cash",
-    "notes": "Voice entry"
-  },
-  {
-    "action": "edit_transaction",
-    "target_title": "Cable payment",
-    "date": "2026-07-15",
-    "status": "Income",
-    "title": "Cable payment",
-    "amount_usd": 25,
-    "category": "Income internet",
-    "payment_method": "Whish money"
-  },
-  {
-    "action": "delete_transaction",
-    "target_title": "Old test expense"
-  }
-]''';
-    _parsePreview();
   }
 }
 
@@ -1266,19 +1340,48 @@ class _ProgressPill extends StatelessWidget {
   }
 }
 
-class _RecentTransactionsPanel extends StatelessWidget {
+class _RecentTransactionsPanel extends StatefulWidget {
   const _RecentTransactionsPanel({required this.controller});
 
   final DashboardController controller;
 
   @override
+  State<_RecentTransactionsPanel> createState() =>
+      _RecentTransactionsPanelState();
+}
+
+class _RecentTransactionsPanelState extends State<_RecentTransactionsPanel> {
+  final _panelKey = GlobalKey();
+
+  void _bringPanelIntoView(bool expanded) {
+    if (!expanded) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future<void>.delayed(const Duration(milliseconds: 80), () async {
+        final target = _panelKey.currentContext;
+        if (target == null || !mounted) return;
+        await Scrollable.ensureVisible(
+          target,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          alignment: 0,
+        );
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final recent = controller.transactions.take(8).toList(growable: false);
+    final recent = widget.controller.transactions.toList()
+      ..sort(
+        (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+      );
     return Card(
+      key: _panelKey,
       elevation: 0,
       child: ExpansionTile(
         initiallyExpanded: false,
+        onExpansionChanged: _bringPanelIntoView,
         leading: Icon(Icons.history_rounded, color: theme.colorScheme.primary),
         title: const Text(
           'Recent transactions',
@@ -1300,7 +1403,7 @@ class _RecentTransactionsPanel extends StatelessWidget {
               ),
             )
           else
-            for (final transaction in recent)
+            for (final transaction in recent.take(8))
               ListTile(
                 leading: Icon(
                   transaction.isIncome
@@ -1329,7 +1432,7 @@ class _RecentTransactionsPanel extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => TransactionDetailScreen(
-                        controller: controller,
+                        controller: widget.controller,
                         transaction: transaction,
                       ),
                     ),
@@ -1337,6 +1440,82 @@ class _RecentTransactionsPanel extends StatelessWidget {
                 },
               ),
         ],
+      ),
+    );
+  }
+}
+
+class _WalletDestinationChoice extends StatelessWidget {
+  const _WalletDestinationChoice({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.imageAsset,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final String? imageAsset;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = const Color(0xFF286BEA);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 170),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: .12)
+              : Theme.of(
+                  context,
+                ).colorScheme.surfaceContainerHighest.withValues(alpha: .45),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? accent
+                : Theme.of(context).colorScheme.outlineVariant,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .80),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: imageAsset == null
+                  ? Icon(icon, color: accent, size: 19)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Image.asset(imageAsset!, fit: BoxFit.cover),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                ),
+              ),
+            ),
+            if (selected)
+              Icon(Icons.check_circle_rounded, color: accent, size: 18),
+          ],
+        ),
       ),
     );
   }

@@ -114,7 +114,8 @@ class PeriodFilterBar extends StatelessWidget {
     final month = await showAppMonthPicker(
       context,
       controller,
-      initialMonth: controller.selectedMonth ?? DateTime.now(),
+      initialMonth:
+          controller.selectedMonth ?? DateTime(DateTime.now().year, DateTime.now().month - 1),
     );
     if (month != null) {
       controller.selectMonth(month);
@@ -125,7 +126,8 @@ class PeriodFilterBar extends StatelessWidget {
     final month = await showAppMonthPicker(
       context,
       controller,
-      initialMonth: controller.referenceMonth ?? DateTime.now(),
+      initialMonth:
+          controller.referenceMonth ?? DateTime(DateTime.now().year, DateTime.now().month - 1),
     );
     if (month != null) {
       controller.selectReferenceMonth(month);

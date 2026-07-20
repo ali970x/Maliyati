@@ -9,7 +9,9 @@ plugins {
 
 android {
     namespace = "com.maliyati.app"
-    compileSdk = flutter.compileSdkVersion
+    // Android 36 is already installed in the local SDK. Pinning it avoids
+    // blocking debug builds on a missing Android 34 platform download.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

@@ -7,7 +7,7 @@ import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_identity.dart';
 
-enum _EditTransactionStatus { income, expense, credit, debit }
+enum _EditTransactionStatus { income, expense, credit, debt, transfer }
 
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
@@ -38,7 +38,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late TransactionType _selectedType;
   late CurrencyCode _selectedCurrency;
   late TransactionSource _selectedSource;
-  late bool _isDebit;
   late DateTime _selectedDate;
   late bool _hasDate;
   bool _isEditing = false;
@@ -118,7 +117,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         ? CurrencyCode.usd
         : transaction.currency;
     _selectedSource = transaction.source;
-    _isDebit = transaction.isDebit;
     _selectedDate = transaction.date;
     _hasDate = transaction.hasDate;
     _descriptionController.text = transaction.description;
@@ -193,21 +191,26 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
   }
 
+  Future<void> _settleCurrent() async {
+    setState(() => _isSaving = true);
+    try {
+      await widget.controller.settleTransaction(
+        _transaction,
+        walletId: _paymentMethodController.text.trim(),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
   void _updateType(TransactionType type) {
     setState(() {
       _selectedType = type;
-      _isDebit = false;
-      if (_paymentMethodController.text.trim().toLowerCase() == 'debit') {
-        _paymentMethodController.clear();
-      }
-    });
-  }
-
-  void _updateDebitStatus() {
-    setState(() {
-      _selectedType = TransactionType.expense;
-      _isDebit = true;
-      _paymentMethodController.text = 'Debit';
     });
   }
 
@@ -242,6 +245,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   void _updateDate(DateTime date) {
     setState(() => _selectedDate = date);
+  }
+
+  void _updateWallet(String walletId) {
+    setState(() => _paymentMethodController.text = walletId);
   }
 
   Future<void> _confirmDelete() async {
@@ -299,6 +306,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     if (type == TransactionType.reserveable) {
       return strings.reserveable;
     }
+    if (type == TransactionType.debt) {
+      return 'Debt';
+    }
+    if (type == TransactionType.transfer) {
+      return 'Transfer';
+    }
     return strings.noData;
   }
 
@@ -341,6 +354,16 @@ class _ReadOnlyBody extends StatelessWidget {
         const Color(0xFFD97706),
         const Color(0xFFEAB308),
         Icons.request_quote_rounded,
+      ),
+      TransactionType.debt => (
+        const Color(0xFF7C3AED),
+        const Color(0xFF8B5CF6),
+        Icons.account_balance_rounded,
+      ),
+      TransactionType.transfer => (
+        const Color(0xFF2563EB),
+        const Color(0xFF38BDF8),
+        Icons.swap_horiz_rounded,
       ),
       TransactionType.unknown => (
         theme.colorScheme.onSurfaceVariant,
@@ -536,15 +559,15 @@ class _EditBody extends StatelessWidget {
               child: Column(
                 children: [
                   DropdownButtonFormField<_EditTransactionStatus>(
-                    value: state._isDebit
-                        ? _EditTransactionStatus.debit
-                        : switch (state._selectedType) {
-                            TransactionType.income =>
-                              _EditTransactionStatus.income,
-                            TransactionType.reserveable =>
-                              _EditTransactionStatus.credit,
-                            _ => _EditTransactionStatus.expense,
-                          },
+                    value: switch (state._selectedType) {
+                      TransactionType.income => _EditTransactionStatus.income,
+                      TransactionType.reserveable =>
+                        _EditTransactionStatus.credit,
+                      TransactionType.debt => _EditTransactionStatus.debt,
+                      TransactionType.transfer =>
+                        _EditTransactionStatus.transfer,
+                      _ => _EditTransactionStatus.expense,
+                    },
                     decoration: InputDecoration(
                       labelText: strings.type,
                       prefixIcon: const Icon(Icons.label_rounded),
@@ -563,8 +586,12 @@ class _EditBody extends StatelessWidget {
                         child: Text(strings.reserveable),
                       ),
                       const DropdownMenuItem(
-                        value: _EditTransactionStatus.debit,
-                        child: Text('Debit'),
+                        value: _EditTransactionStatus.debt,
+                        child: Text('Debt'),
+                      ),
+                      const DropdownMenuItem(
+                        value: _EditTransactionStatus.transfer,
+                        child: Text('Transfer'),
                       ),
                     ],
                     onChanged: (value) {
@@ -575,8 +602,10 @@ class _EditBody extends StatelessWidget {
                           state._updateType(TransactionType.expense);
                         case _EditTransactionStatus.credit:
                           state._updateType(TransactionType.reserveable);
-                        case _EditTransactionStatus.debit:
-                          state._updateDebitStatus();
+                        case _EditTransactionStatus.debt:
+                          state._updateType(TransactionType.debt);
+                        case _EditTransactionStatus.transfer:
+                          state._updateType(TransactionType.transfer);
                         case null:
                           break;
                       }
@@ -688,9 +717,7 @@ class _EditBody extends StatelessWidget {
                           selected: !state._paymentMethodController.text
                               .toLowerCase()
                               .contains('wish'),
-                          onSelected: (_) => state.setState(
-                            () => state._paymentMethodController.text = 'Cash',
-                          ),
+                          onSelected: (_) => state._updateWallet('Cash'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -709,10 +736,7 @@ class _EditBody extends StatelessWidget {
                           selected: state._paymentMethodController.text
                               .toLowerCase()
                               .contains('wish'),
-                          onSelected: (_) => state.setState(
-                            () => state._paymentMethodController.text =
-                                'Wish Money',
-                          ),
+                          onSelected: (_) => state._updateWallet('Wish Money'),
                         ),
                       ),
                     ],
@@ -754,6 +778,17 @@ class _EditBody extends StatelessWidget {
             icon: const Icon(Icons.check_rounded),
             label: Text(strings.save),
           ),
+          if ((state._transaction.isDebt || state._transaction.isCredit) &&
+              !state._transaction.isSettled) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: state._isSaving ? null : state._settleCurrent,
+              icon: const Icon(Icons.verified_rounded),
+              label: Text(
+                state._transaction.isDebt ? 'Settle debt' : 'Collect credit',
+              ),
+            ),
+          ],
         ],
       ),
     );

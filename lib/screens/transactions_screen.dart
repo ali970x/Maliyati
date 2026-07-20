@@ -14,9 +14,11 @@ import 'transaction_detail_screen.dart';
 
 enum TransactionSort { newest, oldest, highestAmount, lowestAmount }
 
-enum TransactionTypeFilter { all, income, expense, reserveable }
+enum TransactionTypeFilter { all, income, expense, debit, credit }
 
 enum TransactionCurrencyFilter { all, usd, lbp }
+
+enum _TransactionMenuAction { update, archive, delete }
 
 extension TransactionSortLabel on TransactionSort {
   String get label {
@@ -46,8 +48,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   final _searchController = TextEditingController();
   TransactionTypeFilter _typeFilter = TransactionTypeFilter.all;
   TransactionCurrencyFilter _currencyFilter = TransactionCurrencyFilter.all;
+  TransactionSource? _sourceFilter;
   String? _categoryFilter;
   TransactionSort _sort = TransactionSort.newest;
+  bool _showAdvancedFilters = false;
 
   @override
   void dispose() {
@@ -74,15 +78,21 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               searchController: _searchController,
               typeFilter: _typeFilter,
               currencyFilter: _currencyFilter,
+              sourceFilter: _sourceFilter,
               categoryFilter: _categoryFilter,
               sort: _sort,
               onChanged: () => setState(() {}),
               onTypeChanged: (value) => setState(() => _typeFilter = value),
               onCurrencyChanged: (value) =>
                   setState(() => _currencyFilter = value),
+              onSourceChanged: (value) => setState(() => _sourceFilter = value),
               onCategoryChanged: (value) =>
                   setState(() => _categoryFilter = value),
               onSortChanged: (value) => setState(() => _sort = value),
+              showAdvancedFilters: _showAdvancedFilters,
+              onToggleAdvancedFilters: () =>
+                  setState(() => _showAdvancedFilters = !_showAdvancedFilters),
+              onShowArchived: () => _showArchived(context),
             ),
           ),
           if (controller.isLoading && !controller.hasData)
@@ -99,7 +109,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                 message: strings.tryChangingFilters,
               ),
             )
-          else ...[
+          else if (_showAdvancedFilters) ...[
             _ResultsSummary(
               transactions: transactions,
               exchangeRate: controller.exchangeRate,
@@ -127,26 +137,49 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       for (final transaction in transactions)
                         SizedBox(
                           width: cardWidth,
-                          child: TransactionCard(
-                            transaction: transaction,
-                            exchangeRate: controller.exchangeRate,
-                            strings: controller.strings,
-                            margin: isWide
-                                ? const EdgeInsets.symmetric(vertical: 6)
-                                : const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 6,
-                                  ),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => TransactionDetailScreen(
-                                    controller: controller,
-                                    transaction: transaction,
-                                  ),
-                                ),
-                              );
+                          child: Dismissible(
+                            key: ValueKey(transaction.id ?? '${transaction.date}-${transaction.description}'),
+                            background: _SwipeAction(
+                              color: const Color(0xFFC74949),
+                              icon: Icons.delete_outline_rounded,
+                              label: 'Delete',
+                              alignment: Alignment.centerLeft,
+                            ),
+                            secondaryBackground: _SwipeAction(
+                              color: const Color(0xFFD97706),
+                              icon: Icons.archive_outlined,
+                              label: 'Archive',
+                              alignment: Alignment.centerRight,
+                            ),
+                            confirmDismiss: (direction) =>
+                                direction == DismissDirection.startToEnd
+                                ? _confirmSwipe(context, true)
+                                : Future.value(true),
+                            onDismissed: (direction) {
+                              if (direction == DismissDirection.startToEnd) {
+                                controller.deleteTransaction(transaction);
+                              } else {
+                                controller.archiveTransaction(transaction);
+                              }
                             },
+                            child: TransactionCard(
+                              transaction: transaction,
+                              exchangeRate: controller.exchangeRate,
+                              strings: controller.strings,
+                              margin: isWide
+                                  ? const EdgeInsets.symmetric(vertical: 6)
+                                  : const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              onTap: () => _openDetail(context, transaction),
+                              onLongPress: () => _openDetail(
+                                context,
+                                transaction,
+                                startEditing: true,
+                              ),
+                              trailingAction: _transactionMenu(
+                                context,
+                                transaction,
+                              ),
+                            ),
                           ),
                         ),
                     ],
@@ -170,10 +203,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             return false;
           }
         case TransactionTypeFilter.expense:
-          if (!transaction.isExpense) {
+          if (!transaction.isExpense || transaction.isDebit) {
             return false;
           }
-        case TransactionTypeFilter.reserveable:
+        case TransactionTypeFilter.debit:
+          if (!transaction.isDebit) {
+            return false;
+          }
+        case TransactionTypeFilter.credit:
           if (!transaction.isReserveable) {
             return false;
           }
@@ -190,6 +227,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             return false;
           }
         case TransactionCurrencyFilter.all:
+      }
+      if (_sourceFilter != null && transaction.source != _sourceFilter) {
+        return false;
       }
       if (_categoryFilter != null && transaction.category != _categoryFilter) {
         return false;
@@ -219,6 +259,195 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
     return results;
   }
+
+  void _openDetail(
+    BuildContext context,
+    FinancialTransaction transaction, {
+    bool startEditing = false,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TransactionDetailScreen(
+          controller: widget.controller,
+          transaction: transaction,
+          startEditing: startEditing,
+        ),
+      ),
+    );
+  }
+
+  Future<bool> _confirmSwipe(BuildContext context, bool isDelete) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: const Text('This transaction will be removed permanently.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: isDelete
+                  ? const Color(0xFFC74949)
+                  : const Color(0xFFD97706),
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _showArchived(BuildContext context) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    showDragHandle: true,
+    builder: (_) => _ArchivedTransactionsSheet(controller: widget.controller),
+  );
+
+  Widget _transactionMenu(
+    BuildContext context,
+    FinancialTransaction transaction,
+  ) => PopupMenuButton<_TransactionMenuAction>(
+    tooltip: 'Transaction options',
+    icon: const Icon(Icons.more_vert_rounded),
+    style: IconButton.styleFrom(backgroundColor: Colors.transparent),
+    onSelected: (action) async {
+      switch (action) {
+        case _TransactionMenuAction.update:
+          _openDetail(context, transaction, startEditing: true);
+          break;
+        case _TransactionMenuAction.archive:
+          await widget.controller.archiveTransaction(transaction);
+          break;
+        case _TransactionMenuAction.delete:
+          if (await _confirmSwipe(context, true)) {
+            await widget.controller.deleteTransaction(transaction);
+          }
+          break;
+      }
+    },
+    itemBuilder: (context) => const [
+      PopupMenuItem(
+        value: _TransactionMenuAction.update,
+        child: ListTile(leading: Icon(Icons.edit_rounded), title: Text('Update')),
+      ),
+      PopupMenuItem(
+        value: _TransactionMenuAction.archive,
+        child: ListTile(leading: Icon(Icons.archive_outlined), title: Text('Archive')),
+      ),
+      PopupMenuItem(
+        value: _TransactionMenuAction.delete,
+        child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Delete')),
+      ),
+    ],
+  );
+}
+
+class _SwipeAction extends StatelessWidget {
+  const _SwipeAction({
+    required this.color,
+    required this.icon,
+    required this.label,
+    required this.alignment,
+  });
+
+  final Color color;
+  final IconData icon;
+  final String label;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+    padding: const EdgeInsets.symmetric(horizontal: 22),
+    alignment: alignment,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Colors.white),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ArchivedTransactionsSheet extends StatelessWidget {
+  const _ArchivedTransactionsSheet({required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final transactions = controller.archivedTransactions.toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .78,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 6, 12, 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.archive_rounded),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Archived transactions',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  Text('${transactions.length}'),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: transactions.isEmpty
+                  ? const Center(child: Text('No archived transactions.'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      itemCount: transactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = transactions[index];
+                        return Row(
+                          children: [
+                            Expanded(
+                              child: TransactionCard(
+                                transaction: transaction,
+                                exchangeRate: controller.exchangeRate,
+                                strings: controller.strings,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Restore',
+                              onPressed: () => controller.restoreTransaction(transaction),
+                              icon: const Icon(Icons.unarchive_rounded),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ResultsSummary extends StatelessWidget {
@@ -236,7 +465,8 @@ class _ResultsSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     var income = 0.0;
     var expenses = 0.0;
-    var reserveables = 0.0;
+    var credits = 0.0;
+    var debits = 0.0;
     for (final transaction in transactions) {
       final amount = transaction.amountInUsd(exchangeRate);
       if (transaction.isIncome) {
@@ -244,7 +474,10 @@ class _ResultsSummary extends StatelessWidget {
       } else if (transaction.isExpense) {
         expenses += amount;
       } else if (transaction.isReserveable) {
-        reserveables += amount;
+        credits += amount;
+      }
+      if (transaction.isDebit) {
+        debits += amount;
       }
     }
     final net = income - expenses;
@@ -275,9 +508,14 @@ class _ResultsSummary extends StatelessWidget {
               color: const Color(0xFFC74949),
             ),
             _SummaryPill(
-              label: strings.reserveables,
-              value: FinanceFormatters.compactUsd(reserveables),
+              label: 'Credit',
+              value: FinanceFormatters.compactUsd(credits),
               color: const Color(0xFFD97706),
+            ),
+            _SummaryPill(
+              label: 'Debit',
+              value: FinanceFormatters.compactUsd(debits),
+              color: const Color(0xFF2563EB),
             ),
             _SummaryPill(
               label: strings.netBalance,
@@ -287,7 +525,7 @@ class _ResultsSummary extends StatelessWidget {
                   : const Color(0xFFB91C1C),
             ),
           ];
-          final columns = AppResponsive.isWideWeb(context) ? 5 : 3;
+          final columns = AppResponsive.isWideWeb(context) ? 6 : 3;
           final width = (constraints.maxWidth - 8 * (columns - 1)) / columns;
           return Wrap(
             spacing: 8,
@@ -360,26 +598,36 @@ class _Filters extends StatelessWidget {
     required this.searchController,
     required this.typeFilter,
     required this.currencyFilter,
+    required this.sourceFilter,
     required this.categoryFilter,
     required this.sort,
     required this.onChanged,
     required this.onTypeChanged,
     required this.onCurrencyChanged,
+    required this.onSourceChanged,
     required this.onCategoryChanged,
     required this.onSortChanged,
+    required this.showAdvancedFilters,
+    required this.onToggleAdvancedFilters,
+    required this.onShowArchived,
   });
 
   final DashboardController controller;
   final TextEditingController searchController;
   final TransactionTypeFilter typeFilter;
   final TransactionCurrencyFilter currencyFilter;
+  final TransactionSource? sourceFilter;
   final String? categoryFilter;
   final TransactionSort sort;
   final VoidCallback onChanged;
   final ValueChanged<TransactionTypeFilter> onTypeChanged;
   final ValueChanged<TransactionCurrencyFilter> onCurrencyChanged;
+  final ValueChanged<TransactionSource?> onSourceChanged;
   final ValueChanged<String?> onCategoryChanged;
   final ValueChanged<TransactionSort> onSortChanged;
+  final bool showAdvancedFilters;
+  final VoidCallback onToggleAdvancedFilters;
+  final VoidCallback onShowArchived;
 
   @override
   Widget build(BuildContext context) {
@@ -412,16 +660,22 @@ class _Filters extends StatelessWidget {
                   ),
                 ),
               ),
-              IconButton.filledTonal(
-                onPressed: controller.isLoading ? null : controller.refresh,
-                tooltip: strings.refresh,
-                icon: controller.isLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh_rounded),
+              IconButton(
+                tooltip: showAdvancedFilters ? 'Hide filters' : 'Show filters',
+                onPressed: onToggleAdvancedFilters,
+                style: IconButton.styleFrom(backgroundColor: Colors.transparent),
+                icon: Icon(
+                  showAdvancedFilters
+                      ? Icons.filter_alt_off_rounded
+                      : Icons.filter_alt_rounded,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Archived transactions',
+                onPressed: onShowArchived,
+                style: IconButton.styleFrom(backgroundColor: Colors.transparent),
+                icon: const Icon(Icons.archive_outlined),
               ),
             ],
           ),
@@ -444,29 +698,33 @@ class _Filters extends StatelessWidget {
                   ],
             onChanged: (_) => onChanged(),
           ),
-          const SizedBox(height: 12),
-          PeriodFilterBar(controller: controller),
-          const SizedBox(height: 12),
-          _FilterPanel(
+          if (showAdvancedFilters) ...[
+            const SizedBox(height: 12),
+            PeriodFilterBar(controller: controller),
+            const SizedBox(height: 12),
+            _FilterPanel(
             children: [
-              _SegmentedFilter<TransactionTypeFilter>(
-                label: strings.type,
-                values: TransactionTypeFilter.values,
-                selected: typeFilter,
-                labelFor: (value) => switch (value) {
-                  TransactionTypeFilter.all => strings.allTypes,
-                  TransactionTypeFilter.income => strings.income,
-                  TransactionTypeFilter.expense => strings.expense,
-                  TransactionTypeFilter.reserveable => strings.reserveable,
+              DropdownButtonFormField<TransactionTypeFilter>(
+                initialValue: typeFilter,
+                isExpanded: true,
+                decoration: InputDecoration(
+                  labelText: strings.type,
+                  prefixIcon: const Icon(Icons.tune_rounded),
+                  isDense: true,
+                ),
+                items: TransactionTypeFilter.values.map((value) {
+                  final label = switch (value) {
+                    TransactionTypeFilter.all => strings.allTypes,
+                    TransactionTypeFilter.income => strings.income,
+                    TransactionTypeFilter.expense => strings.expense,
+                    TransactionTypeFilter.debit => 'Debit',
+                    TransactionTypeFilter.credit => 'Credit',
+                  };
+                  return DropdownMenuItem(value: value, child: Text(label));
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) onTypeChanged(value);
                 },
-                iconFor: (value) => switch (value) {
-                  TransactionTypeFilter.all => Icons.receipt_long_rounded,
-                  TransactionTypeFilter.income => Icons.south_west_rounded,
-                  TransactionTypeFilter.expense => Icons.north_east_rounded,
-                  TransactionTypeFilter.reserveable =>
-                    Icons.request_quote_rounded,
-                },
-                onSelected: onTypeChanged,
               ),
               _SegmentedFilter<TransactionCurrencyFilter>(
                 label: strings.value,
@@ -484,10 +742,32 @@ class _Filters extends StatelessWidget {
                 },
                 onSelected: onCurrencyChanged,
               ),
+              DropdownButtonFormField<TransactionSource?>(
+                initialValue: sourceFilter,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Source',
+                  prefixIcon: Icon(Icons.source_rounded),
+                  isDense: true,
+                ),
+                items: [
+                  const DropdownMenuItem<TransactionSource?>(
+                    value: null,
+                    child: Text('All sources'),
+                  ),
+                  ...TransactionSource.values.map(
+                    (source) => DropdownMenuItem<TransactionSource?>(
+                      value: source,
+                      child: Text(source.label),
+                    ),
+                  ),
+                ],
+                onChanged: onSourceChanged,
+              ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Row(
+            ),
+            const SizedBox(height: 12),
+            Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String?>(
@@ -496,6 +776,11 @@ class _Filters extends StatelessWidget {
                   decoration: InputDecoration(
                     labelText: strings.category,
                     prefixIcon: const Icon(Icons.category_rounded),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 11,
+                    ),
                   ),
                   items: [
                     DropdownMenuItem<String?>(
@@ -520,6 +805,11 @@ class _Filters extends StatelessWidget {
                   decoration: InputDecoration(
                     labelText: strings.sort,
                     prefixIcon: const Icon(Icons.sort_rounded),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 11,
+                    ),
                   ),
                   items: TransactionSort.values
                       .map(
@@ -540,7 +830,8 @@ class _Filters extends StatelessWidget {
                 ),
               ),
             ],
-          ),
+            ),
+          ],
         ],
       ),
     );

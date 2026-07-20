@@ -30,7 +30,8 @@ Ask Gemini to return only JSON:
 ```text
 Income
 Expense
-Reserveable
+Debit
+Credit
 ```
 
 The app also accepts a JSON array when Gemini returns more than one transaction.

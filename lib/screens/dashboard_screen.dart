@@ -192,18 +192,9 @@ class _LightDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = controller.summary;
     final comparison = controller.comparison;
-    final debitTotal = controller.periodTransactions
-        .where(
-          (transaction) =>
-              transaction.paymentMethod.trim().toLowerCase() == 'debit',
-        )
-        .fold<double>(
-          0,
-          (total, transaction) =>
-              total + transaction.amountInUsd(controller.exchangeRate),
-        );
+    final debtTotal = summary.totalDebt;
     final shownBalance = showRealBalance
-        ? summary.totalNet + summary.totalReserveable - debitTotal
+        ? summary.totalNet + summary.totalReserveable - debtTotal
         : summary.totalNet;
     final wallets = controller.walletSummary;
     final wide = AppResponsive.isWideWeb(context);
@@ -365,24 +356,11 @@ class _LightDashboard extends StatelessWidget {
                         SizedBox(
                           width: itemWidth,
                           child: _LightMetric(
-                            title: 'Debit',
-                            value: FinanceFormatters.usd(
-                              controller.periodTransactions
-                                  .where(
-                                    (item) =>
-                                        item.paymentMethod.toLowerCase() ==
-                                        'debit',
-                                  )
-                                  .fold<double>(
-                                    0,
-                                    (sum, item) =>
-                                        sum +
-                                        item.amountInUsd(
-                                          controller.exchangeRate,
-                                        ),
-                                  ),
+                            title: 'Debt',
+                            value: FinanceFormatters.usd(summary.totalDebt),
+                            subtitle: FinanceFormatters.lbp(
+                              summary.totalDebtLbp,
                             ),
-                            subtitle: 'Payment card',
                             icon: Icons.account_balance_rounded,
                             color: const Color(0xFF2563EB),
                             onTap: () => _openMetricFocus(
@@ -1557,7 +1535,7 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
       _DashboardMetricKind.income => controller.strings.income,
       _DashboardMetricKind.expense => controller.strings.expenses,
       _DashboardMetricKind.reserveable => controller.strings.reserveables,
-      _DashboardMetricKind.debit => 'Debit',
+      _DashboardMetricKind.debit => 'Debt',
     };
     return Scaffold(
       appBar: AppBar(title: Text(category ?? title)),
@@ -1619,8 +1597,7 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     _DashboardMetricKind.income => transaction.isIncome,
     _DashboardMetricKind.expense => transaction.isExpense,
     _DashboardMetricKind.reserveable => transaction.isReserveable,
-    _DashboardMetricKind.debit =>
-      transaction.paymentMethod.trim().toLowerCase() == 'debit',
+    _DashboardMetricKind.debit => transaction.isDebt,
   };
 }
 
@@ -1858,19 +1835,8 @@ class _DashboardContent extends StatelessWidget {
             ),
           ),
           second: _MetricPanel(
-            title: 'Debit',
-            value: FinanceFormatters.usd(
-              controller.periodTransactions
-                  .where(
-                    (item) =>
-                        item.paymentMethod.trim().toLowerCase() == 'debit',
-                  )
-                  .fold<double>(
-                    0,
-                    (sum, item) =>
-                        sum + item.amountInUsd(controller.exchangeRate),
-                  ),
-            ),
+            title: 'Debt',
+            value: FinanceFormatters.usd(summary.totalDebt),
             change: 0,
             positive: false,
             icon: Icons.account_balance_rounded,

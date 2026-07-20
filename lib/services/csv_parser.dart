@@ -42,9 +42,13 @@ class CsvParser {
       final source = _parseSource(_valueAny(map, const ['source', 'origin']));
       final date = parsedDate ?? _today();
       final hasDate = parsedDate != null;
-      final type = _parseType(
-        _valueAny(map, const ['type', 'status', 'expense', 'income']),
-      );
+      final statusText = _valueAny(map, const [
+        'type',
+        'status',
+        'expense',
+        'income',
+      ]);
+      final type = _parseType(statusText);
       if (type == TransactionType.unknown) {
         continue;
       }
@@ -65,11 +69,16 @@ class CsvParser {
         _valueAny(map, const ['category', 'categories', 'cat']),
         _fallback(description, 'Uncategorized'),
       );
-      final paymentMethod = _valueAny(map, const [
+      final requestedPaymentMethod = _valueAny(map, const [
         'payment_method',
         'payment',
         'method',
       ]);
+      final paymentMethod =
+          statusText.toLowerCase().contains('debit') &&
+              requestedPaymentMethod.isEmpty
+          ? 'Debit'
+          : requestedPaymentMethod;
       final notes = _fallback(
         _valueAny(map, const ['notes', 'note', 'remarks']),
         title.isNotEmpty &&
@@ -271,7 +280,8 @@ class CsvParser {
 
   TransactionType _parseType(String value) {
     final normalized = value.trim().toLowerCase();
-    if (normalized.contains('reserveable') ||
+    if (normalized.contains('credit') ||
+        normalized.contains('reserveable') ||
         normalized.contains('receivable') ||
         normalized.contains('reserved') ||
         normalized.contains('\u0645\u0633\u062a\u062d\u0642')) {
@@ -281,7 +291,18 @@ class CsvParser {
         normalized.contains('\u062f\u062e\u0644')) {
       return TransactionType.income;
     }
+    if (normalized.contains('debt') ||
+        normalized.contains('payable') ||
+        normalized.contains('payables') ||
+        normalized.contains('\u062f\u064a\u0646')) {
+      return TransactionType.debt;
+    }
+    if (normalized.contains('transfer') ||
+        normalized.contains('\u062a\u062d\u0648\u064a\u0644')) {
+      return TransactionType.transfer;
+    }
     if (normalized.contains('expense') ||
+        normalized.contains('debit') ||
         normalized.contains('\u0645\u0635\u0627\u0631\u064a\u0641') ||
         normalized.contains('\u0635\u0631\u0641')) {
       return TransactionType.expense;

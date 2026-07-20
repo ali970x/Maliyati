@@ -157,12 +157,16 @@ class GeminiTransactionParser {
       );
     }
 
-    final type = _parseType(
-      _stringAny(item, const ['status', 'type', 'Status', 'Type']),
-    );
+    final statusText = _stringAny(item, const [
+      'status',
+      'type',
+      'Status',
+      'Type',
+    ]);
+    final type = _parseType(statusText);
     if (type == TransactionType.unknown) {
       throw const GeminiTransactionParseException(
-        'Status must be Income, Expense, or Reserveable.',
+        'Status must be Income, Expense, Credit, Debt, or Transfer.',
       );
     }
 
@@ -176,11 +180,19 @@ class GeminiTransactionParser {
       _stringAny(item, const ['category', 'Category']),
       'Uncategorized',
     );
-    final paymentMethod = _stringAny(item, const [
+    final requestedPaymentMethod = _stringAny(item, const [
       'payment_method',
       'paymentMethod',
       'Payment Method',
+      'wallet',
+      'Wallet',
+      'wallet_id',
     ]);
+    final paymentMethod =
+        statusText.trim().toLowerCase().contains('debit') &&
+            requestedPaymentMethod.isEmpty
+        ? 'Debit'
+        : requestedPaymentMethod;
     final notes = _stringAny(item, const ['notes', 'Notes']);
     final createdAt =
         _parseDateTime(
@@ -196,6 +208,30 @@ class GeminiTransactionParser {
       'amount_lbp': amountLbp.toString(),
       'category': category,
       'payment_method': paymentMethod,
+      'wallet_id': _fallback(
+        _stringAny(item, const ['wallet_id', 'walletId', 'Wallet']),
+        paymentMethod,
+      ),
+      'destination_wallet_id': _stringAny(item, const [
+        'destination_wallet_id',
+        'destinationWalletId',
+        'Destination Wallet',
+      ]),
+      'wallet_direction': _stringAny(item, const [
+        'wallet_direction',
+        'walletDirection',
+        'Wallet Direction',
+      ]),
+      'settlement_status': _stringAny(item, const [
+        'settlement_status',
+        'settlementStatus',
+        'Settlement Status',
+      ]),
+      'linked_transaction_id': _stringAny(item, const [
+        'linked_transaction_id',
+        'linkedTransactionId',
+        'Linked Transaction ID',
+      ]),
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
       'source': source.label,
@@ -274,7 +310,8 @@ class GeminiTransactionParser {
 
   TransactionType _parseType(String value) {
     final normalized = value.trim().toLowerCase();
-    if (normalized.contains('reserveable') ||
+    if (normalized.contains('credit') ||
+        normalized.contains('reserveable') ||
         normalized.contains('receivable') ||
         normalized.contains('reserved')) {
       return TransactionType.reserveable;
@@ -282,7 +319,15 @@ class GeminiTransactionParser {
     if (normalized.contains('income')) {
       return TransactionType.income;
     }
-    if (normalized.contains('expense')) {
+    if (normalized.contains('debt') ||
+        normalized.contains('payable') ||
+        normalized.contains('payables')) {
+      return TransactionType.debt;
+    }
+    if (normalized.contains('transfer')) {
+      return TransactionType.transfer;
+    }
+    if (normalized.contains('expense') || normalized.contains('debit')) {
       return TransactionType.expense;
     }
     return TransactionType.unknown;

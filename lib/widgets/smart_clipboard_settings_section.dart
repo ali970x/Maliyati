@@ -57,6 +57,11 @@ class _SmartClipboardSettingsSectionState
     final theme = Theme.of(context);
     return Card(
       elevation: 0,
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -68,12 +73,12 @@ class _SmartClipboardSettingsSectionState
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
+                    color: theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     Icons.content_paste_search_rounded,
-                    color: theme.colorScheme.onPrimaryContainer,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(width: 12),

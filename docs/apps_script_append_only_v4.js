@@ -2,13 +2,18 @@ const SECRET = 'maliyati-2026';
 const SHEET_NAME = '';
 const FIRST_DATA_ROW = 2;
 const SOURCE_VALUES = ['application', 'Google Sheet', 'script'];
+const STATUS_VALUES = ['Income', 'Expense', 'Credit', 'Debt', 'Transfer'];
+const SETTLEMENT_VALUES = ['open', 'partial', 'settled'];
 
 function setupSheetMetadata() {
   const sheet = getSheet_();
   const columns = ensureSheetColumns_(sheet);
   applyCreatedAtFormat_(sheet, columns.createdAt);
   applySourceDropdown_(sheet, columns.source);
+  applyStatusDropdown_(sheet, columns.status);
+  applySettlementDropdown_(sheet, columns.settlementStatus);
   applySourceColors_(sheet, columns.source);
+  applyStatusColors_(sheet, columns.status);
 }
 
 function doGet(e) {
@@ -76,6 +81,11 @@ function testAppendSample() {
           Notes: 'Delete this row after test',
           'Created At': new Date(),
           Source: 'script',
+          Wallet: 'Cash',
+          'Destination Wallet': '',
+          'Wallet Direction': -1,
+          'Settlement Status': 'open',
+          'Linked Transaction ID': '',
           ID: `test-${Date.now()}`
         }
       })
@@ -204,6 +214,11 @@ function listTransactions_(sheet) {
       Notes: row[columns.notes - 1] || '',
       'Created At': dateTimeText_(createdAt),
       Source: source,
+      Wallet: row[columns.wallet - 1] || '',
+      'Destination Wallet': row[columns.destinationWallet - 1] || '',
+      'Wallet Direction': row[columns.walletDirection - 1] || '',
+      'Settlement Status': row[columns.settlementStatus - 1] || '',
+      'Linked Transaction ID': row[columns.linkedTransactionId - 1] || '',
       ID: id
     });
   });
@@ -220,7 +235,31 @@ function buildRowObject_(input) {
     amountLbp: number_(value_(input, ['Amount (LBP)', 'Amount (LBP )', 'Amount LBP', 'amount_lbp', 'amountLbp'])),
     category: value_(input, ['Category', 'category']),
     paymentMethod: value_(input, ['Payment Method', 'payment_method', 'paymentMethod']),
-    notes: value_(input, ['Notes', 'notes'])
+    notes: value_(input, ['Notes', 'notes']),
+    wallet: value_(input, ['Wallet', 'wallet', 'wallet_id', 'walletId']) ||
+      value_(input, ['Payment Method', 'payment_method', 'paymentMethod']),
+    destinationWallet: value_(input, [
+      'Destination Wallet',
+      'destination_wallet',
+      'destination_wallet_id',
+      'destinationWalletId'
+    ]),
+    walletDirection: normalizeWalletDirection_(value_(input, [
+      'Wallet Direction',
+      'wallet_direction',
+      'walletDirection',
+      'walletImpact'
+    ]), value_(input, ['Status', 'status', 'type'])),
+    settlementStatus: normalizeSettlementStatus_(value_(input, [
+      'Settlement Status',
+      'settlement_status',
+      'settlementStatus'
+    ])),
+    linkedTransactionId: value_(input, [
+      'Linked Transaction ID',
+      'linked_transaction_id',
+      'linkedTransactionId'
+    ])
   };
 }
 
@@ -233,6 +272,11 @@ function writeTransactionRow_(sheet, row, columns, values) {
   sheet.getRange(row, columns.category).setValue(values.category);
   sheet.getRange(row, columns.paymentMethod).setValue(values.paymentMethod);
   sheet.getRange(row, columns.notes).setValue(values.notes);
+  sheet.getRange(row, columns.wallet).setValue(values.wallet);
+  sheet.getRange(row, columns.destinationWallet).setValue(values.destinationWallet);
+  sheet.getRange(row, columns.walletDirection).setValue(values.walletDirection);
+  sheet.getRange(row, columns.settlementStatus).setValue(values.settlementStatus);
+  sheet.getRange(row, columns.linkedTransactionId).setValue(values.linkedTransactionId);
 }
 
 function ensureSheetColumns_(sheet) {
@@ -265,6 +309,16 @@ function ensureSheetColumns_(sheet) {
   const source = columns.source || createColumnAfter_(sheet, columns.notes, 'Source');
   columns = getColumnMap_(sheet);
   const createdAt = columns.created_at || columns.created || columns.createdat || createColumnAfter_(sheet, columns.source, 'Created At');
+  columns = getColumnMap_(sheet);
+  const wallet = columns.wallet || columns.wallet_id || createColumnAfter_(sheet, columns.created_at || columns.created || columns.createdat, 'Wallet');
+  columns = getColumnMap_(sheet);
+  const destinationWallet = columns.destination_wallet || columns.destination_wallet_id || columns.destinationwallet || createColumnAfter_(sheet, columns.wallet || columns.wallet_id, 'Destination Wallet');
+  columns = getColumnMap_(sheet);
+  const walletDirection = columns.wallet_direction || columns.walletdirection || columns.wallet_impact || createColumnAfter_(sheet, columns.destination_wallet || columns.destination_wallet_id || columns.destinationwallet, 'Wallet Direction');
+  columns = getColumnMap_(sheet);
+  const settlementStatus = columns.settlement_status || columns.settlementstatus || createColumnAfter_(sheet, columns.wallet_direction || columns.walletdirection || columns.wallet_impact, 'Settlement Status');
+  columns = getColumnMap_(sheet);
+  const linkedTransactionId = columns.linked_transaction_id || columns.linkedtransactionid || createColumnAfter_(sheet, columns.settlement_status || columns.settlementstatus, 'Linked Transaction ID');
 
   const refreshed = getColumnMap_(sheet);
   const result = {
@@ -278,7 +332,12 @@ function ensureSheetColumns_(sheet) {
     paymentMethod: refreshed.payment_method,
     notes: refreshed.notes,
     source: refreshed.source,
-    createdAt: refreshed.created_at || refreshed.created || refreshed.createdat
+    createdAt: refreshed.created_at || refreshed.created || refreshed.createdat,
+    wallet: refreshed.wallet || refreshed.wallet_id,
+    destinationWallet: refreshed.destination_wallet || refreshed.destination_wallet_id || refreshed.destinationwallet,
+    walletDirection: refreshed.wallet_direction || refreshed.walletdirection || refreshed.wallet_impact,
+    settlementStatus: refreshed.settlement_status || refreshed.settlementstatus,
+    linkedTransactionId: refreshed.linked_transaction_id || refreshed.linkedtransactionid
   };
 
   sheet.getRange(1, result.id).setValue('ID');
@@ -292,6 +351,11 @@ function ensureSheetColumns_(sheet) {
   sheet.getRange(1, result.notes).setValue('Notes');
   sheet.getRange(1, result.source).setValue('Source');
   sheet.getRange(1, result.createdAt).setValue('Created At');
+  sheet.getRange(1, result.wallet).setValue('Wallet');
+  sheet.getRange(1, result.destinationWallet).setValue('Destination Wallet');
+  sheet.getRange(1, result.walletDirection).setValue('Wallet Direction');
+  sheet.getRange(1, result.settlementStatus).setValue('Settlement Status');
+  sheet.getRange(1, result.linkedTransactionId).setValue('Linked Transaction ID');
   return result;
 }
 
@@ -351,7 +415,7 @@ function deleteRowsMissingFromSync_(sheet, columns, incomingIds) {
   }
 
   const rowCount = lastRow - FIRST_DATA_ROW + 1;
-  const width = Math.max(sheet.getLastColumn(), columns.createdAt, columns.id);
+  const width = Math.max(sheet.getLastColumn(), columns.createdAt, columns.id, columns.linkedTransactionId);
   const values = sheet.getRange(FIRST_DATA_ROW, 1, rowCount, width).getValues();
   let deleted = 0;
 
@@ -411,6 +475,24 @@ function applySourceDropdown_(sheet, sourceColumn) {
   range.setDataValidation(rule);
 }
 
+function applyStatusDropdown_(sheet, statusColumn) {
+  const range = sheet.getRange(FIRST_DATA_ROW, statusColumn, sheet.getMaxRows() - FIRST_DATA_ROW + 1, 1);
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(STATUS_VALUES, true)
+    .setAllowInvalid(false)
+    .build();
+  range.setDataValidation(rule);
+}
+
+function applySettlementDropdown_(sheet, settlementColumn) {
+  const range = sheet.getRange(FIRST_DATA_ROW, settlementColumn, sheet.getMaxRows() - FIRST_DATA_ROW + 1, 1);
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(SETTLEMENT_VALUES, true)
+    .setAllowInvalid(false)
+    .build();
+  range.setDataValidation(rule);
+}
+
 function applyCreatedAtFormat_(sheet, createdAtColumn) {
   const range = sheet.getRange(FIRST_DATA_ROW, createdAtColumn, sheet.getMaxRows() - FIRST_DATA_ROW + 1, 1);
   try {
@@ -430,6 +512,29 @@ function applySourceColors_(sheet, sourceColumn) {
     ['application', '#DCFCE7', '#166534'],
     ['Google Sheet', '#DBEAFE', '#1D4ED8'],
     ['script', '#F3E8FF', '#7E22CE']
+  ].map(([value, background, foreground]) =>
+    SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=$${letter}${FIRST_DATA_ROW}="${value}"`)
+      .setBackground(background)
+      .setFontColor(foreground)
+      .setRanges([range])
+      .build()
+  );
+  sheet.setConditionalFormatRules([...existingRules, ...colorRules]);
+}
+
+function applyStatusColors_(sheet, statusColumn) {
+  const range = sheet.getRange(FIRST_DATA_ROW, statusColumn, sheet.getMaxRows() - FIRST_DATA_ROW + 1, 1);
+  const a1 = range.getA1Notation();
+  const letter = columnLetter_(statusColumn);
+  const existingRules = sheet.getConditionalFormatRules()
+    .filter((rule) => !rule.getRanges().some((ruleRange) => ruleRange.getA1Notation() === a1));
+  const colorRules = [
+    ['Income', '#DCFCE7', '#166534'],
+    ['Expense', '#FEE2E2', '#991B1B'],
+    ['Credit', '#FEF3C7', '#92400E'],
+    ['Debt', '#EDE9FE', '#5B21B6'],
+    ['Transfer', '#DBEAFE', '#1D4ED8']
   ].map(([value, background, foreground]) =>
     SpreadsheetApp.newConditionalFormatRule()
       .whenFormulaSatisfied(`=$${letter}${FIRST_DATA_ROW}="${value}"`)
@@ -475,9 +580,29 @@ function getSheet_() {
 
 function normalizeStatus_(value) {
   const text = String(value || '').trim().toLowerCase();
+  if (text.includes('credit') || text.includes('receivable') || text.includes('reserve')) return 'Credit';
+  if (text.includes('debt') || text.includes('payable')) return 'Debt';
+  if (text.includes('transfer')) return 'Transfer';
   if (text.includes('income')) return 'Income';
-  if (text.includes('receivable') || text.includes('reserve')) return 'Receivables';
   return 'Expense';
+}
+
+function normalizeSettlementStatus_(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (text === 'settled') return 'settled';
+  if (text === 'partial') return 'partial';
+  return 'open';
+}
+
+function normalizeWalletDirection_(value, status) {
+  const parsed = Number(String(value || '').trim());
+  if (Number.isFinite(parsed) && parsed >= -1 && parsed <= 1) {
+    return parsed;
+  }
+  const normalizedStatus = normalizeStatus_(status);
+  if (normalizedStatus === 'Income' || normalizedStatus === 'Debt') return 1;
+  if (normalizedStatus === 'Expense' || normalizedStatus === 'Credit') return -1;
+  return 0;
 }
 
 function normalizeSource_(value) {

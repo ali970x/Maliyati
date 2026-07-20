@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
+import '../services/accounting_rules.dart';
 import '../services/firebase_finance_service.dart';
 import '../services/firebase_bootstrap.dart';
 import '../services/gemini_transaction_parser.dart';
@@ -1146,8 +1147,18 @@ class DashboardController extends ChangeNotifier {
     if (normalized.contains('expense')) {
       return TransactionType.expense;
     }
-    if (normalized.contains('reserve')) {
+    if (normalized.contains('credit') ||
+        normalized.contains('reserve') ||
+        normalized.contains('receivable')) {
       return TransactionType.reserveable;
+    }
+    if (normalized.contains('debt') ||
+        normalized.contains('payable') ||
+        normalized.contains('payables')) {
+      return TransactionType.debt;
+    }
+    if (normalized.contains('transfer')) {
+      return TransactionType.transfer;
     }
     return TransactionType.unknown;
   }
@@ -1287,7 +1298,7 @@ class DashboardController extends ChangeNotifier {
     if (_firebase.currentUser == null) {
       throw const FirebaseFinanceException('Sign in first.');
     }
-    final ready = _assignMissingId(transaction);
+    final ready = _assignMissingId(AccountingRules.normalize(transaction));
     final saved = await _firebase.addTransaction(ready);
     _transactions = [
       saved,
@@ -1295,6 +1306,76 @@ class DashboardController extends ChangeNotifier {
     ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
     _lastUpdated = DateTime.now();
     notifyListeners();
+  }
+
+  Future<void> addTransactions(List<FinancialTransaction> transactions) async {
+    if (transactions.isEmpty) {
+      return;
+    }
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    if (_firebase.currentUser == null) {
+      throw const FirebaseFinanceException('Sign in first.');
+    }
+    final ready = _assignMissingSequentialIds(
+      transactions.map(AccountingRules.normalize).toList(growable: false),
+    );
+    await _firebase.upsertTransactions(ready);
+    _transactions = [
+      ...ready,
+      ..._transactions,
+    ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
+    _lastUpdated = DateTime.now();
+    notifyListeners();
+  }
+
+  Future<void> addExpenseWithPaymentTiming(
+    FinancialTransaction expense, {
+    required bool paidNow,
+  }) async {
+    await addTransactions(
+      AccountingRules.expandExpensePayment(expense, paidNow: paidNow),
+    );
+  }
+
+  Future<void> addSplitIncome({
+    required FinancialTransaction income,
+    required double receivedAmount,
+    required double owedAmount,
+  }) async {
+    await addTransactions(
+      AccountingRules.splitIncome(
+        income,
+        receivedAmount: receivedAmount,
+        owedAmount: owedAmount,
+      ),
+    );
+  }
+
+  Future<void> settleTransaction(
+    FinancialTransaction transaction, {
+    required String walletId,
+    DateTime? date,
+  }) async {
+    if (!transaction.isDebt && !transaction.isCredit) {
+      throw const FirebaseFinanceException(
+        'Only Credit and Debt transactions can be settled.',
+      );
+    }
+    if (transaction.isSettled) {
+      throw const FirebaseFinanceException(
+        'This transaction is already settled.',
+      );
+    }
+    final settled = AccountingRules.markSettled(transaction);
+    final settlement = AccountingRules.settlementEntry(
+      transaction,
+      walletId: walletId.trim().isEmpty ? transaction.walletId : walletId,
+      date: date ?? DateTime.now(),
+    );
+    await updateTransaction(transaction, settled);
+    await addTransaction(settlement);
   }
 
   Future<void> archiveTransaction(FinancialTransaction transaction) async {
@@ -1870,7 +1951,9 @@ class DashboardController extends ChangeNotifier {
     if (index == -1) {
       return;
     }
-    final updatedWithId = await _firebase.updateTransaction(updated);
+    final updatedWithId = await _firebase.updateTransaction(
+      AccountingRules.normalize(updated),
+    );
     _transactions = [
       ..._transactions.take(index),
       updatedWithId,
@@ -2028,6 +2111,9 @@ class FinancialSummary {
     required this.totalReserveableUsd,
     required this.totalReserveableLbp,
     required this.totalReserveable,
+    required this.totalDebtUsd,
+    required this.totalDebtLbp,
+    required this.totalDebt,
     required this.totalNetUsd,
     required this.totalNetLbp,
     required this.totalNet,
@@ -2035,6 +2121,7 @@ class FinancialSummary {
     required this.topExpenseCategory,
     required this.topIncomeCategory,
     required this.topReserveableCategory,
+    required this.topDebtCategory,
     required this.averageDailyExpense,
     required this.transactionCount,
     required this.largestExpense,
@@ -2043,6 +2130,7 @@ class FinancialSummary {
     required this.categoryExpenseTotals,
     required this.categoryIncomeTotals,
     required this.categoryReserveableTotals,
+    required this.categoryDebtTotals,
     required this.dailyNetTotals,
     required this.dailyExpenseTotals,
     required this.dailyIncomeTotals,
@@ -2058,6 +2146,9 @@ class FinancialSummary {
   final double totalReserveableUsd;
   final double totalReserveableLbp;
   final double totalReserveable;
+  final double totalDebtUsd;
+  final double totalDebtLbp;
+  final double totalDebt;
   final double totalNetUsd;
   final double totalNetLbp;
   final double totalNet;
@@ -2065,6 +2156,7 @@ class FinancialSummary {
   final String topExpenseCategory;
   final String topIncomeCategory;
   final String topReserveableCategory;
+  final String topDebtCategory;
   final double averageDailyExpense;
   final int transactionCount;
   final FinancialTransaction? largestExpense;
@@ -2073,6 +2165,7 @@ class FinancialSummary {
   final Map<String, double> categoryExpenseTotals;
   final Map<String, double> categoryIncomeTotals;
   final Map<String, double> categoryReserveableTotals;
+  final Map<String, double> categoryDebtTotals;
   final Map<DateTime, double> dailyNetTotals;
   final Map<DateTime, double> dailyExpenseTotals;
   final Map<DateTime, double> dailyIncomeTotals;
@@ -2089,12 +2182,15 @@ class FinancialSummary {
     var incomeLbp = 0.0;
     var reserveableUsd = 0.0;
     var reserveableLbp = 0.0;
+    var debtUsd = 0.0;
+    var debtLbp = 0.0;
     FinancialTransaction? largestExpense;
     FinancialTransaction? largestIncome;
     FinancialTransaction? largestReserveable;
     final expenseByCategory = <String, double>{};
     final incomeByCategory = <String, double>{};
     final reserveableByCategory = <String, double>{};
+    final debtByCategory = <String, double>{};
     final dailyNet = <DateTime, double>{};
     final dailyExpense = <DateTime, double>{};
     final dailyIncome = <DateTime, double>{};
@@ -2110,7 +2206,7 @@ class FinancialSummary {
             )
           : null;
 
-      if (transaction.isExpense) {
+      if (transaction.affectsExpenseStats) {
         if (transaction.currency == CurrencyCode.usd) {
           expenseUsd += transaction.amount;
         } else if (transaction.currency == CurrencyCode.lbp) {
@@ -2141,7 +2237,7 @@ class FinancialSummary {
         }
       }
 
-      if (transaction.isIncome) {
+      if (transaction.affectsIncomeStats) {
         if (transaction.currency == CurrencyCode.usd) {
           incomeUsd += transaction.amount;
         } else if (transaction.currency == CurrencyCode.lbp) {
@@ -2172,7 +2268,7 @@ class FinancialSummary {
         }
       }
 
-      if (transaction.isReserveable) {
+      if (transaction.affectsReceivables) {
         if (transaction.currency == CurrencyCode.usd) {
           reserveableUsd += transaction.amount;
         } else if (transaction.currency == CurrencyCode.lbp) {
@@ -2197,11 +2293,26 @@ class FinancialSummary {
           largestReserveable = transaction;
         }
       }
+
+      if (transaction.affectsPayables) {
+        if (transaction.currency == CurrencyCode.usd) {
+          debtUsd += transaction.amount;
+        } else if (transaction.currency == CurrencyCode.lbp) {
+          debtLbp += transaction.amount;
+        }
+
+        debtByCategory.update(
+          transaction.category,
+          (value) => value + amountUsd,
+          ifAbsent: () => amountUsd,
+        );
+      }
     }
 
     final totalExpense = expenseUsd + expenseLbp / exchangeRate;
     final totalIncome = incomeUsd + incomeLbp / exchangeRate;
     final totalReserveable = reserveableUsd + reserveableLbp / exchangeRate;
+    final totalDebt = debtUsd + debtLbp / exchangeRate;
     final totalNetUsd = incomeUsd - expenseUsd;
     final totalNetLbp = incomeLbp - expenseLbp;
     final totalNet = totalIncome - totalExpense;
@@ -2217,6 +2328,9 @@ class FinancialSummary {
       totalReserveableUsd: reserveableUsd,
       totalReserveableLbp: reserveableLbp,
       totalReserveable: totalReserveable,
+      totalDebtUsd: debtUsd,
+      totalDebtLbp: debtLbp,
+      totalDebt: totalDebt,
       totalNetUsd: totalNetUsd,
       totalNetLbp: totalNetLbp,
       totalNet: totalNet,
@@ -2224,6 +2338,7 @@ class FinancialSummary {
       topExpenseCategory: _topCategory(expenseByCategory),
       topIncomeCategory: _topCategory(incomeByCategory),
       topReserveableCategory: _topCategory(reserveableByCategory),
+      topDebtCategory: _topCategory(debtByCategory),
       averageDailyExpense: totalExpense / dayCount,
       transactionCount: transactions.length,
       largestExpense: largestExpense,
@@ -2232,6 +2347,7 @@ class FinancialSummary {
       categoryExpenseTotals: _sortMap(expenseByCategory),
       categoryIncomeTotals: _sortMap(incomeByCategory),
       categoryReserveableTotals: _sortMap(reserveableByCategory),
+      categoryDebtTotals: _sortMap(debtByCategory),
       dailyNetTotals: _sortDateMap(dailyNet),
       dailyExpenseTotals: _sortDateMap(dailyExpense),
       dailyIncomeTotals: _sortDateMap(dailyIncome),
@@ -2295,21 +2411,40 @@ class WalletSummary {
     final cashTransactions = <FinancialTransaction>[];
     final wishTransactions = <FinancialTransaction>[];
     for (final transaction in transactions) {
-      final id = transaction.id?.trim() ?? '';
-      final isWish = transaction.paymentMethod.trim().toLowerCase().contains(
-        'wish',
-      );
-      if (id.isNotEmpty &&
-          (isWish
-              ? ignoredWishTransactionIds.contains(id)
-              : ignoredCashTransactionIds.contains(id))) {
+      if (transaction.isTransfer && transaction.destinationWalletId != null) {
+        final sourceRaw = Map<String, String>.from(transaction.raw)
+          ..['wallet_direction'] = '-1';
+        final destinationRaw = Map<String, String>.from(transaction.raw)
+          ..['wallet_direction'] = '1'
+          ..['wallet_id'] = transaction.destinationWalletId!;
+        final source = transaction.copyWith(raw: sourceRaw);
+        final destination = transaction.copyWith(
+          paymentMethod: transaction.destinationWalletId!,
+          raw: destinationRaw,
+        );
+        _addWalletTransaction(
+          source,
+          cashTransactions: cashTransactions,
+          wishTransactions: wishTransactions,
+          ignoredCashTransactionIds: ignoredCashTransactionIds,
+          ignoredWishTransactionIds: ignoredWishTransactionIds,
+        );
+        _addWalletTransaction(
+          destination,
+          cashTransactions: cashTransactions,
+          wishTransactions: wishTransactions,
+          ignoredCashTransactionIds: ignoredCashTransactionIds,
+          ignoredWishTransactionIds: ignoredWishTransactionIds,
+        );
         continue;
       }
-      if (isWish) {
-        wishTransactions.add(transaction);
-      } else {
-        cashTransactions.add(transaction);
-      }
+      _addWalletTransaction(
+        transaction,
+        cashTransactions: cashTransactions,
+        wishTransactions: wishTransactions,
+        ignoredCashTransactionIds: ignoredCashTransactionIds,
+        ignoredWishTransactionIds: ignoredWishTransactionIds,
+      );
     }
     return WalletSummary(
       cash: WalletAccountSummary.fromTransactions(
@@ -2323,6 +2458,28 @@ class WalletSummary {
         openingLbp: wishOpeningLbp,
       ),
     );
+  }
+
+  static void _addWalletTransaction(
+    FinancialTransaction transaction, {
+    required List<FinancialTransaction> cashTransactions,
+    required List<FinancialTransaction> wishTransactions,
+    required Set<String> ignoredCashTransactionIds,
+    required Set<String> ignoredWishTransactionIds,
+  }) {
+    final id = transaction.id?.trim() ?? '';
+    final isWish = transaction.walletId.trim().toLowerCase().contains('wish');
+    if (id.isNotEmpty &&
+        (isWish
+            ? ignoredWishTransactionIds.contains(id)
+            : ignoredCashTransactionIds.contains(id))) {
+      return;
+    }
+    if (isWish) {
+      wishTransactions.add(transaction);
+    } else {
+      cashTransactions.add(transaction);
+    }
   }
 }
 
@@ -2342,61 +2499,57 @@ class WalletAccountSummary {
   const WalletAccountSummary({
     required this.openingUsd,
     required this.openingLbp,
-    required this.incomeUsd,
-    required this.incomeLbp,
-    required this.expenseUsd,
-    required this.expenseLbp,
-    required this.reserveableUsd,
-    required this.reserveableLbp,
+    required this.inflowUsd,
+    required this.inflowLbp,
+    required this.outflowUsd,
+    required this.outflowLbp,
   });
 
   final double openingUsd;
   final double openingLbp;
-  final double incomeUsd;
-  final double incomeLbp;
-  final double expenseUsd;
-  final double expenseLbp;
-  final double reserveableUsd;
-  final double reserveableLbp;
+  final double inflowUsd;
+  final double inflowLbp;
+  final double outflowUsd;
+  final double outflowLbp;
 
-  double get balanceUsd => openingUsd + incomeUsd - expenseUsd - reserveableUsd;
-  double get balanceLbp => openingLbp + incomeLbp - expenseLbp - reserveableLbp;
+  double get incomeUsd => inflowUsd;
+  double get incomeLbp => inflowLbp;
+  double get expenseUsd => outflowUsd;
+  double get expenseLbp => outflowLbp;
+  double get reserveableUsd => 0;
+  double get reserveableLbp => 0;
+
+  double get balanceUsd => openingUsd + inflowUsd - outflowUsd;
+  double get balanceLbp => openingLbp + inflowLbp - outflowLbp;
 
   factory WalletAccountSummary.fromTransactions(
     List<FinancialTransaction> transactions, {
     required double openingUsd,
     required double openingLbp,
   }) {
-    var incomeUsd = 0.0;
-    var incomeLbp = 0.0;
-    var expenseUsd = 0.0;
-    var expenseLbp = 0.0;
-    var reserveableUsd = 0.0;
-    var reserveableLbp = 0.0;
+    var inflowUsd = 0.0;
+    var inflowLbp = 0.0;
+    var outflowUsd = 0.0;
+    var outflowLbp = 0.0;
     for (final transaction in transactions) {
       final amount = transaction.amount;
       final isUsd = transaction.currency == CurrencyCode.usd;
       final isLbp = transaction.currency == CurrencyCode.lbp;
-      if (transaction.isIncome) {
-        if (isUsd) incomeUsd += amount;
-        if (isLbp) incomeLbp += amount;
-      } else if (transaction.isExpense) {
-        if (isUsd) expenseUsd += amount;
-        if (isLbp) expenseLbp += amount;
-      } else if (transaction.isReserveable) {
-        if (isUsd) reserveableUsd += amount;
-        if (isLbp) reserveableLbp += amount;
+      if (transaction.walletDirection > 0) {
+        if (isUsd) inflowUsd += amount;
+        if (isLbp) inflowLbp += amount;
+      } else if (transaction.walletDirection < 0) {
+        if (isUsd) outflowUsd += amount;
+        if (isLbp) outflowLbp += amount;
       }
     }
     return WalletAccountSummary(
       openingUsd: openingUsd,
       openingLbp: openingLbp,
-      incomeUsd: incomeUsd,
-      incomeLbp: incomeLbp,
-      expenseUsd: expenseUsd,
-      expenseLbp: expenseLbp,
-      reserveableUsd: reserveableUsd,
-      reserveableLbp: reserveableLbp,
+      inflowUsd: inflowUsd,
+      inflowLbp: inflowLbp,
+      outflowUsd: outflowUsd,
+      outflowLbp: outflowLbp,
     );
   }
 }

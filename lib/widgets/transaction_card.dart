@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
 import 'finance_formatters.dart';
-import '../l10n/app_strings.dart';
-import 'transaction_identity.dart';
 
+/// A compact transaction row. Wallet branding deliberately stays in the
+/// wallet history screen, so a transfer does not look like a wallet card.
 class TransactionCard extends StatelessWidget {
   const TransactionCard({
     super.key,
@@ -12,6 +13,8 @@ class TransactionCard extends StatelessWidget {
     required this.exchangeRate,
     required this.strings,
     this.onTap,
+    this.onLongPress,
+    this.trailingAction,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
   });
 
@@ -19,6 +22,8 @@ class TransactionCard extends StatelessWidget {
   final double exchangeRate;
   final AppStrings strings;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final Widget? trailingAction;
   final EdgeInsetsGeometry margin;
 
   @override
@@ -28,149 +33,62 @@ class TransactionCard extends StatelessWidget {
       TransactionType.income => const Color(0xFF168A5B),
       TransactionType.expense => const Color(0xFFC74949),
       TransactionType.reserveable => const Color(0xFFD97706),
+      TransactionType.debt => const Color(0xFF7C3AED),
+      TransactionType.transfer => const Color(0xFF2563EB),
       TransactionType.unknown => theme.colorScheme.onSurfaceVariant,
     };
     final icon = switch (transaction.type) {
       TransactionType.income => Icons.trending_up_rounded,
       TransactionType.expense => Icons.trending_down_rounded,
       TransactionType.reserveable => Icons.request_quote_rounded,
+      TransactionType.debt => Icons.account_balance_rounded,
+      TransactionType.transfer => Icons.swap_horiz_rounded,
       TransactionType.unknown => Icons.help_outline_rounded,
     };
     final dateText = transaction.hasDate
         ? FinanceFormatters.date(transaction.date)
         : strings.noDateInSheet;
-    final sheetAmount = _sheetAmountText(transaction);
     final convertedAmount = FinanceFormatters.convertedAmount(
       transaction,
       exchangeRate,
     );
-    final transactionId = TransactionIdentity.shortId(transaction);
 
-    return Card(
-      elevation: 0,
-      margin: margin,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+    return Padding(
+      padding: margin,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 21,
+                  backgroundColor: color.withValues(alpha: .12),
+                  foregroundColor: color,
+                  child: Icon(icon, size: 21),
                 ),
-                child: Icon(icon, color: color),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      transaction.description.isEmpty
-                          ? transaction.category
-                          : transaction.description,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${_typeLabel(transaction.type)} - $dateText',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.tag_rounded,
-                          size: 14,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            'ID: $transactionId',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (transaction.category.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          Icon(Icons.category_rounded, size: 14, color: color),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              transaction.category,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (transaction.notes.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest
-                              .withValues(alpha: 0.58),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.sticky_note_2_rounded,
-                              size: 15,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                transaction.notes,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ] else if (transaction.paymentMethod.isNotEmpty) ...[
-                      const SizedBox(height: 6),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        transaction.paymentMethod,
+                        transaction.description.isEmpty
+                            ? transaction.category
+                            : transaction.description,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${transaction.category} · $dateText',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -178,100 +96,40 @@ class TransactionCard extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                constraints: const BoxConstraints(minWidth: 86, maxWidth: 108),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                const SizedBox(width: 12),
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerEnd,
-                        child: Text(
-                          sheetAmount,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            color: color,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
+                    Text(
+                      FinanceFormatters.amount(transaction),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                     if (convertedAmount.isNotEmpty) ...[
                       const SizedBox(height: 3),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: AlignmentDirectional.centerEnd,
-                          child: Text(
-                            '≈ $convertedAmount',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                      Text(
+                        '≈ $convertedAmount',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],
                   ],
                 ),
-              ),
-            ],
+                if (trailingAction != null) ...[
+                  const SizedBox(width: 4),
+                  trailingAction!,
+                ],
+              ],
+            ),
           ),
         ),
       ),
     );
-  }
-
-  String _typeLabel(TransactionType type) {
-    if (type == TransactionType.income) {
-      return strings.income;
-    }
-    if (type == TransactionType.expense) {
-      return strings.expense;
-    }
-    if (type == TransactionType.reserveable) {
-      return strings.reserveable;
-    }
-    return strings.noData;
-  }
-
-  String _sheetAmountText(FinancialTransaction transaction) {
-    final rawUsd = _rawValueStartingWith(transaction, 'amount_usd');
-    final rawLbp = _rawValueStartingWith(transaction, 'amount_lbp');
-
-    if (rawUsd.isNotEmpty || rawLbp.isNotEmpty) {
-      if (transaction.currency == CurrencyCode.usd && rawUsd.isNotEmpty) {
-        return rawUsd;
-      }
-      if (transaction.currency == CurrencyCode.lbp && rawLbp.isNotEmpty) {
-        return rawLbp;
-      }
-    }
-
-    return FinanceFormatters.amount(transaction);
-  }
-
-  String _rawValueStartingWith(
-    FinancialTransaction transaction,
-    String prefix,
-  ) {
-    for (final entry in transaction.raw.entries) {
-      if (entry.key.startsWith(prefix) && entry.value.trim().isNotEmpty) {
-        return entry.value.trim();
-      }
-    }
-    return '';
   }
 }

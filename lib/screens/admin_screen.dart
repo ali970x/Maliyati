@@ -53,13 +53,6 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
               const Spacer(),
-              IconButton(
-                tooltip: 'Refresh',
-                onPressed: controller.isAdminLoading
-                    ? null
-                    : () => controller.refreshAdminUsers(),
-                icon: const Icon(Icons.refresh_rounded),
-              ),
               FilledButton.icon(
                 onPressed: () => _editUser(),
                 icon: const Icon(Icons.person_add_rounded),
