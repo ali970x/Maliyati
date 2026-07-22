@@ -39,6 +39,47 @@ enum AppThemeStyle { cyberGrid }
 
 enum AppLockMethod { biometric, pin }
 
+class CategoryRule {
+  const CategoryRule({required this.name, required this.statuses});
+
+  final String name;
+  final Set<TransactionType> statuses;
+
+  bool appliesTo(TransactionType type) => statuses.contains(type);
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'statuses': statuses.map((status) => status.name).toList(),
+  };
+
+  static CategoryRule fromJson(Map<String, dynamic> json) {
+    final rawStatuses = json['statuses'];
+    return CategoryRule(
+      name: '${json['name'] ?? ''}'.trim(),
+      statuses: rawStatuses is List
+          ? rawStatuses
+                .map((value) => _typeFromName('$value'))
+                .where((value) => value != TransactionType.unknown)
+                .toSet()
+          : <TransactionType>{},
+    );
+  }
+
+  static TransactionType _typeFromName(String value) {
+    final normalized = value.trim().toLowerCase();
+    for (final type in TransactionType.values) {
+      if (type.name.toLowerCase() == normalized ||
+          type.label.toLowerCase() == normalized) {
+        return type;
+      }
+    }
+    if (normalized == 'credit' || normalized == 'receivable') {
+      return TransactionType.reserveable;
+    }
+    return TransactionType.unknown;
+  }
+}
+
 extension AppThemeStyleDetails on AppThemeStyle {
   Color get seedColor => switch (this) {
     AppThemeStyle.cyberGrid => const Color(0xFF12D9F4),
@@ -57,6 +98,7 @@ class SmartActionExecutionSummary {
     required this.added,
     required this.edited,
     required this.deleted,
+    required this.settled,
     required this.failures,
   });
 
@@ -64,9 +106,10 @@ class SmartActionExecutionSummary {
   final int added;
   final int edited;
   final int deleted;
+  final int settled;
   final List<String> failures;
 
-  int get succeeded => added + edited + deleted;
+  int get succeeded => added + edited + deleted + settled;
 
   bool get hasFailures => failures.isNotEmpty;
 }
@@ -132,6 +175,7 @@ class DashboardController extends ChangeNotifier {
       'wish_wallet_baseline_transaction_ids';
   static const _cashWalletComparisonRangeKey = 'cash_wallet_comparison_range';
   static const _wishWalletComparisonRangeKey = 'wish_wallet_comparison_range';
+  static const _categoryRulesKey = 'category_rules_v1';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
@@ -177,6 +221,7 @@ class DashboardController extends ChangeNotifier {
   FinanceUser? _user;
   List<AdminUserSnapshot> _adminUsers = const [];
   bool _isAdminLoading = false;
+  List<CategoryRule> _categoryRules = const [];
 
   List<FinancialTransaction> get transactions => List.unmodifiable(
     _transactions.where((transaction) => !transaction.isArchived),
@@ -198,7 +243,7 @@ class DashboardController extends ChangeNotifier {
       isWishMoney ? _wishWalletComparisonRange : _cashWalletComparisonRange;
 
   /// Wallet balances begin at the last reset. Categories never decide which
-  /// wallet changes; only the selected payment method (Cash or Wish Money)
+  /// wallet changes; only the selected payment method (Cash or Whish Money)
   /// does.
   WalletSummary get walletSummary => WalletSummary.fromTransactions(
     _transactions,
@@ -345,20 +390,29 @@ class DashboardController extends ChangeNotifier {
   FinanceUser? get user => _user;
 
   List<String> get categoryOptions {
-    final values =
-        _transactions
-            .map((transaction) => transaction.category.trim())
-            .where((value) => value.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    final values = {
+      for (final rule in _categoryRules) rule.name.trim(),
+      for (final transaction in _transactions) transaction.category.trim(),
+    }.where((value) => value.isNotEmpty).toList()..sort();
     return values;
+  }
+
+  List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
+
+  List<String> categoryOptionsFor(TransactionType type) {
+    final values = {
+      for (final rule in _categoryRules)
+        if (rule.appliesTo(type)) rule.name.trim(),
+      for (final transaction in _transactions)
+        if (transaction.type == type) transaction.category.trim(),
+    }.where((value) => value.isNotEmpty).toList()..sort();
+    return values.isEmpty ? ['Uncategorized'] : values;
   }
 
   List<String> get paymentMethodOptions {
     final values = <String>{
       'Cash',
-      'Wish Money',
+      'Whish Money',
       ..._transactions
           .map((transaction) => transaction.paymentMethod.trim())
           .where((value) => value.isNotEmpty),
@@ -551,6 +605,7 @@ class DashboardController extends ChangeNotifier {
         (value) => value.name == prefs.getString(_wishWalletComparisonRangeKey),
         orElse: () => WalletComparisonRange.week,
       );
+      _categoryRules = _loadCategoryRules(prefs);
       _lastAutoBackup = DateTime.tryParse(
         prefs.getString(_lastAutoBackupKey) ?? '',
       );
@@ -591,6 +646,10 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<FinancialTransaction> _cleanTransactionLabels(
+    List<FinancialTransaction> transactions,
+  ) => transactions.map(AccountingRules.normalize).toList(growable: false);
+
   Future<void> refresh({bool silentWhenSignedOut = false}) async {
     _isLoading = true;
     _errorMessage = null;
@@ -598,7 +657,9 @@ class DashboardController extends ChangeNotifier {
 
     try {
       if (_usesInjectedSheetService) {
-        _transactions = await _service.fetchTransactions(_sheetUrl);
+        _transactions = _cleanTransactionLabels(
+          await _service.fetchTransactions(_sheetUrl),
+        );
         _lastUpdated = DateTime.now();
         return;
       }
@@ -615,7 +676,9 @@ class DashboardController extends ChangeNotifier {
         return;
       }
       _user = await _firebase.loadCurrentUser() ?? basicUser;
-      _transactions = await _firebase.fetchTransactions();
+      _transactions = _cleanTransactionLabels(
+        await _firebase.fetchTransactions(),
+      );
       if (isAdmin) {
         await refreshAdminUsers(silent: true);
       }
@@ -783,7 +846,7 @@ class DashboardController extends ChangeNotifier {
       final imported = await _firebase.replaceTransactions(
         preparedTransactions,
       );
-      _transactions = imported;
+      _transactions = _cleanTransactionLabels(imported);
       _lastUpdated = DateTime.now();
       onProgress?.call(imported.length, imported.length, 'Import complete');
       return imported.length;
@@ -816,6 +879,7 @@ class DashboardController extends ChangeNotifier {
           'Google did not return an account. Please try again.',
         );
       }
+      await _ensureCurrentUserAllowed();
       _useFirestore = true;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
@@ -894,6 +958,7 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
     try {
       _user = await action();
+      await _ensureCurrentUserAllowed();
       _useFirestore = true;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
@@ -907,6 +972,27 @@ class DashboardController extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _ensureCurrentUserAllowed() async {
+    final user = _user;
+    if (user == null) {
+      return;
+    }
+    if (user.blocked) {
+      await _firebase.signOut();
+      _user = null;
+      throw const FirebaseFinanceException(
+        'This account is blocked. Contact the administrator.',
+      );
+    }
+    if (user.isTrialExpired) {
+      await _firebase.signOut();
+      _user = null;
+      throw const FirebaseFinanceException(
+        'This trial account has expired. Contact the administrator.',
+      );
     }
   }
 
@@ -925,6 +1011,77 @@ class DashboardController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_firestoreEnabledKey, false);
     notifyListeners();
+  }
+
+  Future<void> saveCategoryRules(List<CategoryRule> rules) async {
+    final cleaned = <String, CategoryRule>{};
+    for (final rule in rules) {
+      final name = rule.name.trim();
+      if (name.isEmpty || rule.statuses.isEmpty) {
+        continue;
+      }
+      cleaned[name.toLowerCase()] = CategoryRule(
+        name: name,
+        statuses: {...rule.statuses}..remove(TransactionType.unknown),
+      );
+    }
+    _categoryRules = cleaned.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _categoryRulesKey,
+      jsonEncode(_categoryRules.map((rule) => rule.toJson()).toList()),
+    );
+    notifyListeners();
+  }
+
+  List<CategoryRule> _loadCategoryRules(SharedPreferences prefs) {
+    final raw = prefs.getString(_categoryRulesKey);
+    if (raw != null && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final rules = decoded
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    CategoryRule.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .where((rule) => rule.name.isNotEmpty && rule.statuses.isNotEmpty)
+              .toList();
+          if (rules.isNotEmpty) return rules;
+        }
+      } catch (_) {}
+    }
+    return const [
+      CategoryRule(name: 'Home expenses', statuses: {TransactionType.expense}),
+      CategoryRule(name: 'Transportation', statuses: {TransactionType.expense}),
+      CategoryRule(name: 'Hospitality', statuses: {TransactionType.expense}),
+      CategoryRule(name: 'Debt payments', statuses: {TransactionType.expense}),
+      CategoryRule(name: 'Subscriptions', statuses: {TransactionType.expense}),
+      CategoryRule(
+        name: 'Small purchases',
+        statuses: {TransactionType.expense},
+      ),
+      CategoryRule(name: 'Other expense', statuses: {TransactionType.expense}),
+      CategoryRule(name: 'Internet income', statuses: {TransactionType.income}),
+      CategoryRule(name: 'Zougeib income', statuses: {TransactionType.income}),
+      CategoryRule(name: 'Other income', statuses: {TransactionType.income}),
+      CategoryRule(name: 'Aboudi income', statuses: {TransactionType.income}),
+      CategoryRule(name: 'Payables', statuses: {TransactionType.debt}),
+      CategoryRule(name: 'Debt', statuses: {TransactionType.debt}),
+      CategoryRule(name: 'Loan', statuses: {TransactionType.debt}),
+      CategoryRule(name: 'Other payable', statuses: {TransactionType.debt}),
+      CategoryRule(name: 'Receivable', statuses: {TransactionType.reserveable}),
+      CategoryRule(
+        name: 'Friend payment',
+        statuses: {TransactionType.reserveable},
+      ),
+      CategoryRule(
+        name: 'Wallet transfer',
+        statuses: {TransactionType.transfer},
+      ),
+    ];
   }
 
   Future<void> refreshAdminUsers({bool silent = false}) async {
@@ -950,6 +1107,10 @@ class DashboardController extends ChangeNotifier {
   Future<void> saveAdminUserProfile(FinanceUser user) async {
     await _firebase.saveAdminUserProfile(user);
     await refreshAdminUsers();
+  }
+
+  Future<void> sendAdminPasswordReset(String email) async {
+    await _firebase.sendPasswordResetEmail(email);
   }
 
   Future<void> deleteAdminUserData(String uid) async {
@@ -1197,6 +1358,7 @@ class DashboardController extends ChangeNotifier {
     var added = 0;
     var edited = 0;
     var deleted = 0;
+    var settled = 0;
     final failures = <String>[];
 
     for (var index = 0; index < actions.length; index += 1) {
@@ -1210,6 +1372,8 @@ class DashboardController extends ChangeNotifier {
             edited += 1;
           case SmartTransactionActionType.delete:
             deleted += 1;
+          case SmartTransactionActionType.settle:
+            settled += 1;
         }
       } catch (error) {
         failures.add('${action.label} #${index + 1}: $error');
@@ -1222,6 +1386,7 @@ class DashboardController extends ChangeNotifier {
       added: added,
       edited: edited,
       deleted: deleted,
+      settled: settled,
       failures: failures,
     );
   }
@@ -1237,7 +1402,19 @@ class DashboardController extends ChangeNotifier {
             'Add action has no transaction.',
           );
         }
-        await addTransaction(transaction);
+        if (transaction.isExpense) {
+          final timing = (transaction.raw['payment_timing'] ?? '')
+              .trim()
+              .toLowerCase();
+          final paidNow =
+              timing.isEmpty ||
+              timing == AccountingRules.paidNow.toLowerCase() ||
+              timing == 'paid_now' ||
+              timing == 'pay now';
+          await addExpenseWithPaymentTiming(transaction, paidNow: paidNow);
+        } else {
+          await addTransaction(transaction);
+        }
       case SmartTransactionActionType.edit:
         final updated = action.transaction;
         if (updated == null) {
@@ -1263,6 +1440,20 @@ class DashboardController extends ChangeNotifier {
           );
         }
         await deleteTransaction(current);
+      case SmartTransactionActionType.settle:
+        final current = _findSmartTarget(action);
+        if (current == null) {
+          throw FirebaseFinanceException(
+            'Could not find transaction to settle: ${action.targetId ?? action.targetTitle ?? ''}',
+          );
+        }
+        await settleTransaction(
+          current,
+          walletId: action.settlementWallet?.trim().isNotEmpty == true
+              ? action.settlementWallet!.trim()
+              : current.walletId,
+          date: action.settlementDate,
+        );
     }
   }
 
@@ -1299,7 +1490,9 @@ class DashboardController extends ChangeNotifier {
       throw const FirebaseFinanceException('Sign in first.');
     }
     final ready = _assignMissingId(AccountingRules.normalize(transaction));
-    final saved = await _firebase.addTransaction(ready);
+    final saved = AccountingRules.normalize(
+      await _firebase.addTransaction(ready),
+    );
     _transactions = [
       saved,
       ..._transactions,
@@ -1951,8 +2144,8 @@ class DashboardController extends ChangeNotifier {
     if (index == -1) {
       return;
     }
-    final updatedWithId = await _firebase.updateTransaction(
-      AccountingRules.normalize(updated),
+    final updatedWithId = AccountingRules.normalize(
+      await _firebase.updateTransaction(AccountingRules.normalize(updated)),
     );
     _transactions = [
       ..._transactions.take(index),
@@ -2198,6 +2391,8 @@ class FinancialSummary {
 
     for (final transaction in transactions) {
       final amountUsd = transaction.amountInUsd(exchangeRate);
+      final transactionUsd = transaction.amountUsd;
+      final transactionLbp = transaction.amountLbp;
       final day = transaction.hasDate
           ? DateTime(
               transaction.date.year,
@@ -2207,11 +2402,8 @@ class FinancialSummary {
           : null;
 
       if (transaction.affectsExpenseStats) {
-        if (transaction.currency == CurrencyCode.usd) {
-          expenseUsd += transaction.amount;
-        } else if (transaction.currency == CurrencyCode.lbp) {
-          expenseLbp += transaction.amount;
-        }
+        expenseUsd += transactionUsd;
+        expenseLbp += transactionLbp;
 
         expenseByCategory.update(
           transaction.category,
@@ -2238,11 +2430,8 @@ class FinancialSummary {
       }
 
       if (transaction.affectsIncomeStats) {
-        if (transaction.currency == CurrencyCode.usd) {
-          incomeUsd += transaction.amount;
-        } else if (transaction.currency == CurrencyCode.lbp) {
-          incomeLbp += transaction.amount;
-        }
+        incomeUsd += transactionUsd;
+        incomeLbp += transactionLbp;
 
         incomeByCategory.update(
           transaction.category,
@@ -2269,11 +2458,8 @@ class FinancialSummary {
       }
 
       if (transaction.affectsReceivables) {
-        if (transaction.currency == CurrencyCode.usd) {
-          reserveableUsd += transaction.amount;
-        } else if (transaction.currency == CurrencyCode.lbp) {
-          reserveableLbp += transaction.amount;
-        }
+        reserveableUsd += transactionUsd;
+        reserveableLbp += transactionLbp;
 
         reserveableByCategory.update(
           transaction.category,
@@ -2295,11 +2481,8 @@ class FinancialSummary {
       }
 
       if (transaction.affectsPayables) {
-        if (transaction.currency == CurrencyCode.usd) {
-          debtUsd += transaction.amount;
-        } else if (transaction.currency == CurrencyCode.lbp) {
-          debtLbp += transaction.amount;
-        }
+        debtUsd += transactionUsd;
+        debtLbp += transactionLbp;
 
         debtByCategory.update(
           transaction.category,
@@ -2532,15 +2715,12 @@ class WalletAccountSummary {
     var outflowUsd = 0.0;
     var outflowLbp = 0.0;
     for (final transaction in transactions) {
-      final amount = transaction.amount;
-      final isUsd = transaction.currency == CurrencyCode.usd;
-      final isLbp = transaction.currency == CurrencyCode.lbp;
       if (transaction.walletDirection > 0) {
-        if (isUsd) inflowUsd += amount;
-        if (isLbp) inflowLbp += amount;
+        inflowUsd += transaction.amountUsd;
+        inflowLbp += transaction.amountLbp;
       } else if (transaction.walletDirection < 0) {
-        if (isUsd) outflowUsd += amount;
-        if (isLbp) outflowLbp += amount;
+        outflowUsd += transaction.amountUsd;
+        outflowLbp += transaction.amountLbp;
       }
     }
     return WalletAccountSummary(

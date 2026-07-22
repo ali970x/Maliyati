@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../models/transaction.dart';
+import 'label_normalizer.dart';
 
 class SheetExportService {
   SheetExportService({http.Client? client}) : _client = client ?? http.Client();
@@ -175,21 +176,20 @@ class SheetExportService {
     final date = transaction.hasDate ? _dateText(transaction.date) : '';
     return {
       'Date': date,
-      'Status': transaction.isDebit ? 'Debit' : transaction.type.label,
+      'Status': transaction.type.label,
       'Title': transaction.description,
-      'Amount (\$)': transaction.currency == CurrencyCode.usd
-          ? transaction.amount
-          : 0,
-      'Amount (LBP)': transaction.currency == CurrencyCode.lbp
-          ? transaction.amount
-          : 0,
-      'Category': transaction.category,
-      'Payment Method': transaction.paymentMethod,
+      'Amount (\$)': transaction.amountUsd,
+      'Amount (LBP)': transaction.amountLbp,
+      'Category': LabelNormalizer.category(transaction.category),
+      'Payment Method': LabelNormalizer.wallet(transaction.paymentMethod),
+      'Payment Timing': transaction.raw['payment_timing'] ?? '',
       'Notes': transaction.notes,
       'Created At': _dateTimeText(transaction.createdAt ?? DateTime.now()),
       'Source': transaction.source.label,
-      'Wallet': transaction.walletId,
-      'Destination Wallet': transaction.destinationWalletId ?? '',
+      'Wallet': LabelNormalizer.wallet(transaction.walletId),
+      'Destination Wallet': LabelNormalizer.wallet(
+        transaction.destinationWalletId ?? '',
+      ),
       'Wallet Direction': transaction.walletDirection,
       'Settlement Status': transaction.settlementStatus.label,
       'Linked Transaction ID': transaction.linkedTransactionId ?? '',
@@ -203,8 +203,8 @@ class SheetExportService {
     final createdAt = _parseDateTime(row['Created At']);
     final amountUsd = _toDouble(row['Amount (\$)']);
     final amountLbp = _toDouble(row['Amount (LBP)']);
-    final currency = amountLbp > 0 ? CurrencyCode.lbp : CurrencyCode.usd;
-    final amount = currency == CurrencyCode.lbp ? amountLbp : amountUsd;
+    final currency = amountUsd > 0 ? CurrencyCode.usd : CurrencyCode.lbp;
+    final amount = currency == CurrencyCode.usd ? amountUsd : amountLbp;
     final normalizedDate = date == null
         ? DateTime.now()
         : DateTime(date.year, date.month, date.day);
@@ -215,14 +215,20 @@ class SheetExportService {
       date: normalizedDate,
       hasDate: date != null,
       type: _parseType('${row['Status'] ?? ''}'),
-      category: '${row['Category'] ?? 'Uncategorized'}'.trim(),
-      description: '${row['Title'] ?? ''}'.trim(),
+      category: LabelNormalizer.category(
+        '${row['Category'] ?? 'Uncategorized'}',
+      ),
+      description: LabelNormalizer.text('${row['Title'] ?? ''}'),
       currency: currency,
       amount: amount.abs(),
-      paymentMethod: '${row['Payment Method'] ?? ''}'.trim(),
-      notes: '${row['Notes'] ?? ''}'.trim(),
+      paymentMethod: LabelNormalizer.wallet('${row['Payment Method'] ?? ''}'),
+      notes: LabelNormalizer.text('${row['Notes'] ?? ''}'),
       raw: {
         ...row.map((key, value) => MapEntry(key, '$value')),
+        'payment_timing': _firstText(row, const [
+          'Payment Timing',
+          'payment_timing',
+        ]),
         'wallet_id': _firstText(row, const ['Wallet', 'wallet_id']),
         'destination_wallet_id': _firstText(row, const [
           'Destination Wallet',

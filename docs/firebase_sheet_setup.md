@@ -19,7 +19,7 @@ Ask Gemini to return only JSON:
   "title": "10 kg tomatoes",
   "amount_usd": 0,
   "amount_lbp": 450000,
-  "category": "Masrouf bayt",
+  "category": "Home expenses",
   "payment_method": "Cash",
   "notes": "Gemini voice entry"
 }
@@ -30,7 +30,7 @@ Ask Gemini to return only JSON:
 ```text
 Income
 Expense
-Debit
+Debt
 Credit
 ```
 

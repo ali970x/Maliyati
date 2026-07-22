@@ -150,17 +150,57 @@ class FloatingInputService : Service() {
         val density = resources.displayMetrics.density
 
         return FrameLayout(this).apply {
-            alpha = 1f
-            elevation = 16f
+            alpha = 0.96f
+            elevation = 18f
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 18 * density
+                setColor(Color.WHITE)
+                setStroke((1.2f * density).toInt(), Color.argb(72, 88, 99, 117))
+            }
 
             addView(
-                ImageView(this@FloatingInputService).apply {
-                    setImageResource(R.drawable.vak_floating_logo_d)
-                    scaleType = ImageView.ScaleType.CENTER_CROP
+                TextView(this@FloatingInputService).apply {
+                    text = "G"
+                    textSize = 25f
+                    gravity = Gravity.CENTER
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    setTextColor(Color.rgb(66, 133, 244))
                 },
                 FrameLayout.LayoutParams(
-                    size - (4 * density).toInt(),
-                    size - (4 * density).toInt(),
+                    (34 * density).toInt(),
+                    (34 * density).toInt(),
+                    Gravity.START or Gravity.CENTER_VERTICAL,
+                ).apply {
+                    leftMargin = (8 * density).toInt()
+                },
+            )
+            addView(
+                TextView(this@FloatingInputService).apply {
+                    text = "文"
+                    textSize = 18f
+                    gravity = Gravity.CENTER
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    setTextColor(Color.rgb(95, 99, 104))
+                },
+                FrameLayout.LayoutParams(
+                    (28 * density).toInt(),
+                    (28 * density).toInt(),
+                    Gravity.END or Gravity.CENTER_VERTICAL,
+                ).apply {
+                    rightMargin = (8 * density).toInt()
+                },
+            )
+            addView(
+                TextView(this@FloatingInputService).apply {
+                    text = "↔"
+                    textSize = 14f
+                    gravity = Gravity.CENTER
+                    setTextColor(Color.rgb(52, 168, 83))
+                },
+                FrameLayout.LayoutParams(
+                    (22 * density).toInt(),
+                    (22 * density).toInt(),
                     Gravity.CENTER,
                 ),
             )

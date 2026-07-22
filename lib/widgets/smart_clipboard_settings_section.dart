@@ -77,14 +77,14 @@ class _SmartClipboardSettingsSectionState
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
-                    Icons.content_paste_search_rounded,
+                    Icons.translate_rounded,
                     color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Floating Quick Input',
+                    'Floating script button',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w900,
                     ),
@@ -101,7 +101,7 @@ class _SmartClipboardSettingsSectionState
             const SizedBox(height: 10),
             Text(
               _service.isSupported
-                  ? 'Keep a draggable Maliyati button above other apps. Copy any text, then tap it to open Input by code. Long-press the bubble to hide it.'
+                  ? 'Keep a Google Translate style button above other apps. Copy JSON/script text, then tap it to paste the clipboard into Input by script and stop at the Run confirmation.'
                   : 'This Android-only action is unavailable on this platform.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

@@ -2,6 +2,7 @@ import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
 
 import '../models/transaction.dart';
+import 'label_normalizer.dart';
 
 class CsvParser {
   List<FinancialTransaction> parse(String csvText) {
@@ -65,32 +66,41 @@ class CsvParser {
       ]);
       final sheetDescription = _valueAny(map, const ['description', 'details']);
       final description = title;
-      final category = _fallback(
-        _valueAny(map, const ['category', 'categories', 'cat']),
-        _fallback(description, 'Uncategorized'),
+      final category = LabelNormalizer.category(
+        _fallback(
+          _valueAny(map, const ['category', 'categories', 'cat']),
+          _fallback(description, 'Uncategorized'),
+        ),
       );
       final requestedPaymentMethod = _valueAny(map, const [
         'payment_method',
         'payment',
         'method',
       ]);
-      final paymentMethod =
-          statusText.toLowerCase().contains('debit') &&
-              requestedPaymentMethod.isEmpty
-          ? 'Debit'
-          : requestedPaymentMethod;
-      final notes = _fallback(
-        _valueAny(map, const ['notes', 'note', 'remarks']),
-        title.isNotEmpty &&
-                sheetDescription.isNotEmpty &&
-                title != sheetDescription
-            ? sheetDescription
-            : '',
+      final paymentMethod = LabelNormalizer.wallet(requestedPaymentMethod);
+      final notes = LabelNormalizer.text(
+        _fallback(
+          _valueAny(map, const ['notes', 'note', 'remarks']),
+          title.isNotEmpty &&
+                  sheetDescription.isNotEmpty &&
+                  title != sheetDescription
+              ? sheetDescription
+              : '',
+        ),
       );
 
       final amount = _parseAmount(_value(map, 'amount'));
       if (amount != null && amount != 0) {
         final currency = _parseCurrency(_value(map, 'currency'));
+        final usdFromRow = currency == CurrencyCode.usd ? amount : 0.0;
+        final lbpFromRow = currency == CurrencyCode.lbp ? amount : 0.0;
+        final raw = {
+          ...map,
+          'amount_usd': usdFromRow.toString(),
+          'amount_lbp': lbpFromRow.toString(),
+          'Amount (\$)': usdFromRow.toString(),
+          'Amount (LBP)': lbpFromRow.toString(),
+        };
         transactions.add(
           _transaction(
             date: date,
@@ -104,7 +114,7 @@ class CsvParser {
             amount: amount,
             paymentMethod: paymentMethod,
             notes: notes,
-            raw: map,
+            raw: raw,
             id: _valueAny(map, const ['id', 'transaction_id']),
             createdAt: createdAt,
             source: source,
@@ -116,7 +126,17 @@ class CsvParser {
       final usdAmount = _parseAmount(_valueStartingWith(map, 'amount_usd'));
       final lbpAmount = _parseAmount(_valueStartingWith(map, 'amount_lbp'));
 
-      if (usdAmount != null && usdAmount != 0) {
+      if ((usdAmount != null && usdAmount != 0) ||
+          (lbpAmount != null && lbpAmount != 0)) {
+        final normalizedUsd = usdAmount ?? 0;
+        final normalizedLbp = lbpAmount ?? 0;
+        final raw = {
+          ...map,
+          'amount_usd': normalizedUsd.toString(),
+          'amount_lbp': normalizedLbp.toString(),
+          'Amount (\$)': normalizedUsd.toString(),
+          'Amount (LBP)': normalizedLbp.toString(),
+        };
         transactions.add(
           _transaction(
             date: date,
@@ -124,31 +144,11 @@ class CsvParser {
             type: type,
             category: category,
             description: description,
-            currency: CurrencyCode.usd,
-            amount: usdAmount,
+            currency: normalizedUsd > 0 ? CurrencyCode.usd : CurrencyCode.lbp,
+            amount: normalizedUsd > 0 ? normalizedUsd : normalizedLbp,
             paymentMethod: paymentMethod,
             notes: notes,
-            raw: map,
-            id: _valueAny(map, const ['id', 'transaction_id']),
-            createdAt: createdAt,
-            source: source,
-          ),
-        );
-      }
-
-      if (lbpAmount != null && lbpAmount != 0) {
-        transactions.add(
-          _transaction(
-            date: date,
-            hasDate: hasDate,
-            type: type,
-            category: category,
-            description: description,
-            currency: CurrencyCode.lbp,
-            amount: lbpAmount,
-            paymentMethod: paymentMethod,
-            notes: notes,
-            raw: map,
+            raw: raw,
             id: _valueAny(map, const ['id', 'transaction_id']),
             createdAt: createdAt,
             source: source,

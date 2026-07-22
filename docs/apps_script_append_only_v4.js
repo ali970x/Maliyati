@@ -1,9 +1,11 @@
 const SECRET = 'maliyati-2026';
+const SCRIPT_VERSION = '1.4.5';
 const SHEET_NAME = '';
 const FIRST_DATA_ROW = 2;
 const SOURCE_VALUES = ['application', 'Google Sheet', 'script'];
 const STATUS_VALUES = ['Income', 'Expense', 'Credit', 'Debt', 'Transfer'];
 const SETTLEMENT_VALUES = ['open', 'partial', 'settled'];
+const PAYMENT_TIMING_VALUES = ['Paid Now', 'On Credit'];
 
 function setupSheetMetadata() {
   const sheet = getSheet_();
@@ -12,6 +14,7 @@ function setupSheetMetadata() {
   applySourceDropdown_(sheet, columns.source);
   applyStatusDropdown_(sheet, columns.status);
   applySettlementDropdown_(sheet, columns.settlementStatus);
+  applyPaymentTimingDropdown_(sheet, columns.paymentTiming);
   applySourceColors_(sheet, columns.source);
   applyStatusColors_(sheet, columns.status);
 }
@@ -23,8 +26,8 @@ function doGet(e) {
       const sheet = getSheet_();
       return json_({ ok: true, rows: listTransactions_(sheet) });
     }
-    return ContentService
-      .createTextOutput('Maliyati Apps Script is running. Use POST from the app.')
+      return ContentService
+      .createTextOutput(`Maliyati Apps Script ${SCRIPT_VERSION} is running. Use POST from the app.`)
       .setMimeType(ContentService.MimeType.TEXT);
   } catch (error) {
     return json_({
@@ -46,9 +49,25 @@ function doPost(e) {
     if (action === 'list_transactions') {
       return json_({ ok: true, rows: listTransactions_(sheet) });
     }
-    if (action === 'add_transaction' || action === 'upsert_transaction') {
+    if (
+      action === 'add_transaction' ||
+      action === 'insert_transaction' ||
+      action === 'insert' ||
+      action === 'upsert_transaction' ||
+      action === 'update_transaction' ||
+      action === 'edit_transaction' ||
+      action === 'update_now'
+    ) {
       const result = upsertTransaction_(sheet, payload.row || payload);
       return json_({ ok: true, row: result.row, id: result.id });
+    }
+    if (action === 'delete_transaction' || action === 'delete' || action === 'remove_transaction') {
+      const result = deleteTransaction_(sheet, payload.row || payload);
+      return json_({ ok: true, ...result });
+    }
+    if (action === 'settle_transaction' || action === 'settle' || action === 'collect_credit' || action === 'pay_debt') {
+      const result = settleTransaction_(sheet, payload.row || payload);
+      return json_({ ok: true, ...result });
     }
     if (action === 'sync_transactions') {
       const result = syncTransactions_(sheet, payload.rows || []);
@@ -76,8 +95,9 @@ function testAppendSample() {
           Title: 'Test from Apps Script',
           'Amount ($)': 1.25,
           'Amount (LBP)': 0,
-          Category: 'Masrouf bayt',
+          Category: 'Home expenses',
           'Payment Method': 'Cash',
+          'Payment Timing': 'Paid Now',
           Notes: 'Delete this row after test',
           'Created At': new Date(),
           Source: 'script',
@@ -162,6 +182,50 @@ function syncTransactions_(sheet, rows) {
   };
 }
 
+function deleteTransaction_(sheet, input) {
+  const columns = ensureSheetColumns_(sheet);
+  const id = String(value_(input, [
+    'ID',
+    'id',
+    'Transaction ID',
+    'transaction_id',
+    'target_id',
+    'targetId'
+  ]) || '').trim();
+  if (!id) {
+    throw new Error('delete_transaction needs ID or target_id.');
+  }
+  const row = findRowById_(sheet, columns.id, id);
+  if (!row) {
+    throw new Error(`Transaction not found: ${id}`);
+  }
+  sheet.deleteRow(row);
+  return { id, deleted: 1 };
+}
+
+function settleTransaction_(sheet, input) {
+  const columns = ensureSheetColumns_(sheet);
+  const id = String(value_(input, [
+    'ID',
+    'id',
+    'Transaction ID',
+    'transaction_id',
+    'target_id',
+    'targetId'
+  ]) || '').trim();
+  if (!id) {
+    throw new Error('settle_transaction needs ID or target_id.');
+  }
+  const row = findRowById_(sheet, columns.id, id);
+  if (!row) {
+    throw new Error(`Transaction not found: ${id}`);
+  }
+  sheet.getRange(row, columns.settlementStatus).setValue('settled');
+  const source = normalizeSource_(value_(input, ['Source', 'source']) || 'script');
+  sheet.getRange(row, columns.source).setValue(source);
+  return { id, row, settled: 1 };
+}
+
 function listTransactions_(sheet) {
   const columns = ensureSheetColumns_(sheet);
   const lastRow = sheet.getLastRow();
@@ -211,6 +275,7 @@ function listTransactions_(sheet) {
       'Amount (LBP)': number_(row[columns.amountLbp - 1]),
       Category: row[columns.category - 1] || '',
       'Payment Method': row[columns.paymentMethod - 1] || '',
+      'Payment Timing': row[columns.paymentTiming - 1] || '',
       Notes: row[columns.notes - 1] || '',
       'Created At': dateTimeText_(createdAt),
       Source: source,
@@ -233,17 +298,24 @@ function buildRowObject_(input) {
     title: value_(input, ['Title', 'title', 'description']),
     amountUsd: number_(value_(input, ['Amount ($)', 'Amount USD', 'amount_usd', 'amountUsd'])),
     amountLbp: number_(value_(input, ['Amount (LBP)', 'Amount (LBP )', 'Amount LBP', 'amount_lbp', 'amountLbp'])),
-    category: value_(input, ['Category', 'category']),
-    paymentMethod: value_(input, ['Payment Method', 'payment_method', 'paymentMethod']),
+    category: normalizeCategory_(value_(input, ['Category', 'category'])),
+    paymentMethod: normalizeWalletLabel_(value_(input, ['Payment Method', 'payment_method', 'paymentMethod'])),
+    paymentTiming: normalizePaymentTiming_(value_(input, [
+      'Payment Timing',
+      'payment_timing',
+      'paymentTiming',
+      'paid_now',
+      'paidNow'
+    ])),
     notes: value_(input, ['Notes', 'notes']),
-    wallet: value_(input, ['Wallet', 'wallet', 'wallet_id', 'walletId']) ||
-      value_(input, ['Payment Method', 'payment_method', 'paymentMethod']),
-    destinationWallet: value_(input, [
+    wallet: normalizeWalletLabel_(value_(input, ['Wallet', 'wallet', 'wallet_id', 'walletId']) ||
+      value_(input, ['Payment Method', 'payment_method', 'paymentMethod'])),
+    destinationWallet: normalizeWalletLabel_(value_(input, [
       'Destination Wallet',
       'destination_wallet',
       'destination_wallet_id',
       'destinationWalletId'
-    ]),
+    ])),
     walletDirection: normalizeWalletDirection_(value_(input, [
       'Wallet Direction',
       'wallet_direction',
@@ -271,6 +343,7 @@ function writeTransactionRow_(sheet, row, columns, values) {
   sheet.getRange(row, columns.amountLbp).setValue(values.amountLbp);
   sheet.getRange(row, columns.category).setValue(values.category);
   sheet.getRange(row, columns.paymentMethod).setValue(values.paymentMethod);
+  sheet.getRange(row, columns.paymentTiming).setValue(values.paymentTiming);
   sheet.getRange(row, columns.notes).setValue(values.notes);
   sheet.getRange(row, columns.wallet).setValue(values.wallet);
   sheet.getRange(row, columns.destinationWallet).setValue(values.destinationWallet);
@@ -304,7 +377,9 @@ function ensureSheetColumns_(sheet) {
   columns = getColumnMap_(sheet);
   const paymentMethod = columns.payment_method || createColumnAfter_(sheet, columns.category, 'Payment Method');
   columns = getColumnMap_(sheet);
-  const notes = columns.notes || createColumnAfter_(sheet, columns.payment_method, 'Notes');
+  const paymentTiming = columns.payment_timing || columns.paymenttiming || createColumnAfter_(sheet, columns.payment_method, 'Payment Timing');
+  columns = getColumnMap_(sheet);
+  const notes = columns.notes || createColumnAfter_(sheet, columns.payment_timing || columns.paymenttiming, 'Notes');
   columns = getColumnMap_(sheet);
   const source = columns.source || createColumnAfter_(sheet, columns.notes, 'Source');
   columns = getColumnMap_(sheet);
@@ -330,6 +405,7 @@ function ensureSheetColumns_(sheet) {
     amountLbp: refreshed.amount_lbp,
     category: refreshed.category,
     paymentMethod: refreshed.payment_method,
+    paymentTiming: refreshed.payment_timing || refreshed.paymenttiming,
     notes: refreshed.notes,
     source: refreshed.source,
     createdAt: refreshed.created_at || refreshed.created || refreshed.createdat,
@@ -348,6 +424,7 @@ function ensureSheetColumns_(sheet) {
   sheet.getRange(1, result.amountLbp).setValue('Amount (LBP)');
   sheet.getRange(1, result.category).setValue('Category');
   sheet.getRange(1, result.paymentMethod).setValue('Payment Method');
+  sheet.getRange(1, result.paymentTiming).setValue('Payment Timing');
   sheet.getRange(1, result.notes).setValue('Notes');
   sheet.getRange(1, result.source).setValue('Source');
   sheet.getRange(1, result.createdAt).setValue('Created At');
@@ -493,6 +570,15 @@ function applySettlementDropdown_(sheet, settlementColumn) {
   range.setDataValidation(rule);
 }
 
+function applyPaymentTimingDropdown_(sheet, paymentTimingColumn) {
+  const range = sheet.getRange(FIRST_DATA_ROW, paymentTimingColumn, sheet.getMaxRows() - FIRST_DATA_ROW + 1, 1);
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(PAYMENT_TIMING_VALUES, true)
+    .setAllowInvalid(true)
+    .build();
+  range.setDataValidation(rule);
+}
+
 function applyCreatedAtFormat_(sheet, createdAtColumn) {
   const range = sheet.getRange(FIRST_DATA_ROW, createdAtColumn, sheet.getMaxRows() - FIRST_DATA_ROW + 1, 1);
   try {
@@ -592,6 +678,76 @@ function normalizeSettlementStatus_(value) {
   if (text === 'settled') return 'settled';
   if (text === 'partial') return 'partial';
   return 'open';
+}
+
+function normalizePaymentTiming_(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return '';
+  if (text === 'false' || text.includes('credit') || text.includes('later')) {
+    return 'On Credit';
+  }
+  return 'Paid Now';
+}
+
+function normalizeWalletLabel_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const key = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (key.includes('whish') || key.includes('wesh') || key.includes('wish')) {
+    return 'Whish Money';
+  }
+  if (key === 'mywallet' || key === 'wallet' || key === 'cash') {
+    return 'Cash';
+  }
+  return normalizeText_(raw);
+}
+
+function normalizeCategory_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const key = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const aliases = {
+    masroufbayt: 'Home expenses',
+    masrofbayt: 'Home expenses',
+    homeexpense: 'Home expenses',
+    homeexpenses: 'Home expenses',
+    dyefe: 'Hospitality',
+    diyafe: 'Hospitality',
+    dyoune: 'Debt payments',
+    dyoun: 'Debt payments',
+    dion: 'Debt payments',
+    eshtiraket: 'Subscriptions',
+    ishtiraket: 'Subscriptions',
+    na2rashe: 'Small purchases',
+    nakrashe: 'Small purchases',
+    incomeinternet: 'Internet income',
+    incomezougeib: 'Zougeib income',
+    incomezougaib: 'Zougeib income',
+    incomeother: 'Other income',
+    incomeaboudi: 'Aboudi income',
+    wishmoney: 'Whish Money',
+    whishmoney: 'Whish Money',
+    weshmoney: 'Whish Money',
+    wishtopup: 'Whish top up',
+    whishtopup: 'Whish top up',
+    wishreceived: 'Whish received',
+    whishreceived: 'Whish received',
+    wishtransfer: 'Whish transfer',
+    whishtransfer: 'Whish transfer',
+    wishexchange: 'Whish exchange',
+    whishexchange: 'Whish exchange'
+  };
+  return aliases[key] || normalizeText_(raw);
+}
+
+function normalizeText_(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\bwhish\s+money\b/gi, 'Whish Money')
+    .replace(/\bwesh\s+money\b/gi, 'Whish Money')
+    .replace(/\bwish\s+money\b/gi, 'Whish Money')
+    .replace(/\bwhish\b/gi, 'Whish')
+    .replace(/\bwesh\b/gi, 'Whish');
 }
 
 function normalizeWalletDirection_(value, status) {

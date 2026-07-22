@@ -34,21 +34,33 @@ class FinanceFormatters {
       DateFormat('MMM d, yyyy - h:mm a', localeCode).format(value);
 
   static String amount(FinancialTransaction transaction) {
-    if (transaction.currency == CurrencyCode.lbp) {
-      return lbp(transaction.amount);
+    final parts = <String>[];
+    if (transaction.amountUsd > 0) {
+      parts.add(usd(transaction.amountUsd));
     }
-    return usd(transaction.amount);
+    if (transaction.amountLbp > 0) {
+      parts.add(lbp(transaction.amountLbp));
+    }
+    if (parts.isEmpty) {
+      return transaction.currency == CurrencyCode.lbp
+          ? lbp(transaction.amount)
+          : usd(transaction.amount);
+    }
+    return parts.join(' + ');
   }
 
   static String convertedAmount(
     FinancialTransaction transaction,
     double exchangeRate,
   ) {
-    if (transaction.currency == CurrencyCode.usd) {
-      return lbp(transaction.amount * exchangeRate);
+    if (transaction.hasMixedAmounts) {
+      return usd(transaction.amountInUsd(exchangeRate));
     }
-    if (transaction.currency == CurrencyCode.lbp) {
-      return usd(transaction.amount / exchangeRate);
+    if (transaction.amountUsd > 0) {
+      return lbp(transaction.amountUsd * exchangeRate);
+    }
+    if (transaction.amountLbp > 0) {
+      return usd(transaction.amountLbp / exchangeRate);
     }
     return '';
   }

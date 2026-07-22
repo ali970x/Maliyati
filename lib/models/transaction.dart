@@ -126,12 +126,54 @@ class FinancialTransaction {
 
   bool get affectsWallet => walletDirection != 0 || isTransfer;
 
-  double amountInUsd(double exchangeRate) {
-    if (currency == CurrencyCode.usd) {
-      return amount;
+  double get amountUsd {
+    final rawAmount = _rawAmount(const [
+      'amount_usd',
+      'amountUsd',
+      'Amount (\$)',
+      'Amount USD',
+    ]);
+    if (rawAmount > 0) {
+      return rawAmount;
     }
-    if (currency == CurrencyCode.lbp) {
-      return amount / exchangeRate;
+    return currency == CurrencyCode.usd ? amount : 0;
+  }
+
+  double get amountLbp {
+    final rawAmount = _rawAmount(const [
+      'amount_lbp',
+      'amountLbp',
+      'Amount (LBP)',
+      'Amount LBP',
+    ]);
+    if (rawAmount > 0) {
+      return rawAmount;
+    }
+    return currency == CurrencyCode.lbp ? amount : 0;
+  }
+
+  bool get hasMixedAmounts => amountUsd > 0 && amountLbp > 0;
+
+  double amountInUsd(double exchangeRate) {
+    return amountUsd + amountLbp / exchangeRate;
+  }
+
+  double _rawAmount(List<String> keys) {
+    for (final key in keys) {
+      final value = raw[key]?.trim() ?? '';
+      if (value.isEmpty) {
+        continue;
+      }
+      final parsed = double.tryParse(
+        value
+            .replaceAll(',', '')
+            .replaceAll(r'$', '')
+            .replaceAll(RegExp('lbp|usd', caseSensitive: false), '')
+            .trim(),
+      );
+      if (parsed != null && parsed > 0) {
+        return parsed;
+      }
     }
     return 0;
   }

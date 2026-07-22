@@ -16,6 +16,7 @@ class SmartClipboardService {
 
   SharedPreferences? _preferences;
   FutureOr<void> Function(String script)? _onOpenSmartInput;
+  Timer? _tapWatcher;
 
   bool get isSupported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -32,6 +33,7 @@ class SmartClipboardService {
     if (await isEnabled) {
       await _showBubble();
     }
+    _startTapWatcher();
     await _openClipboardAfterBubbleTap();
   }
 
@@ -40,7 +42,10 @@ class SmartClipboardService {
     await prefs.setBool(enabledKey, enabled);
     if (enabled) {
       await _showBubble();
+      _startTapWatcher();
     } else if (isSupported) {
+      _tapWatcher?.cancel();
+      _tapWatcher = null;
       await _channel.invokeMethod<void>('hide');
     }
   }
@@ -62,7 +67,19 @@ class SmartClipboardService {
     }
   }
 
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    _tapWatcher?.cancel();
+    _tapWatcher = null;
+  }
+
+  void _startTapWatcher() {
+    if (!isSupported || _tapWatcher != null) {
+      return;
+    }
+    _tapWatcher = Timer.periodic(const Duration(milliseconds: 700), (_) {
+      _openClipboardAfterBubbleTap();
+    });
+  }
 
   Future<SharedPreferences> get _prefs async =>
       _preferences ??= await SharedPreferences.getInstance();
@@ -85,8 +102,6 @@ class SmartClipboardService {
     await prefs.remove(bubbleTapKey);
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text?.trim() ?? '';
-    if (text.isNotEmpty) {
-      await _onOpenSmartInput?.call(text);
-    }
+    await _onOpenSmartInput?.call(text);
   }
 }

@@ -2,6 +2,11 @@ class AppConfig {
   const AppConfig._();
 
   static const appName = 'Maliyati';
+  static const appVersion = '1.4.5';
+  static const buildNumber = '21';
+  static const fullVersion = '$appVersion+$buildNumber';
+  static const serverVersion = '1.4.5';
+  static const flutterVersion = '1.4.5';
 
   static const defaultGoogleSheetUrl =
       'https://docs.google.com/spreadsheets/d/1CMtELArv48IVjIo_u5wKSPR8Bqe7JfFqMI0qLLG5Zck/edit?usp=sharing';

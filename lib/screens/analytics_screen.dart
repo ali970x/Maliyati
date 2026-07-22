@@ -49,7 +49,7 @@ class _WalletAnalyticsCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: _WalletAnalyticValue(
-                    label: 'Wish Money',
+                    label: 'Whish Money',
                     usd: wallets.wish.balanceUsd,
                     lbp: wallets.wish.balanceLbp,
                     color: const Color(0xFF6D28D9),

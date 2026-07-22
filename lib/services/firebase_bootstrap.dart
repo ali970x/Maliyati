@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +28,11 @@ class FirebaseBootstrap {
       registerFirebaseWebPlugins();
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
+      ).timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {
+          throw TimeoutException('Firebase web scripts took too long to load.');
+        },
       );
       _lastError = null;
       return true;
@@ -36,6 +43,9 @@ class FirebaseBootstrap {
       _lastError = error;
       return false;
     } on FirebaseException catch (error) {
+      _lastError = error;
+      return false;
+    } on TimeoutException catch (error) {
       _lastError = error;
       return false;
     } catch (error) {

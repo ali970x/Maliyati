@@ -13,6 +13,8 @@ class FinanceUser {
     this.email,
     this.displayName,
     this.photoUrl,
+    this.blocked = false,
+    this.trialEndsAt,
   });
 
   final String uid;
@@ -20,6 +22,13 @@ class FinanceUser {
   final String? email;
   final String? displayName;
   final String? photoUrl;
+  final bool blocked;
+  final DateTime? trialEndsAt;
+
+  bool get isTrialExpired {
+    final end = trialEndsAt;
+    return end != null && DateTime.now().isAfter(end);
+  }
 }
 
 class AdminUserSnapshot {
@@ -86,11 +95,11 @@ class FirebaseFinanceService {
     // Authentication must be able to restore independently of Firestore.
     // A missing profile document should never prevent the login screen from
     // opening, especially on the web after a Google redirect/popup.
-    return _toBasicFinanceUser(user);
+    return _toFinanceUser(user, includeProfile: true);
   }
 
   Future<FinanceUser?> loadCurrentUser() async {
-    return _toBasicFinanceUser(_auth.currentUser);
+    return _toFinanceUser(_auth.currentUser, includeProfile: true);
   }
 
   Future<bool> isAccountIdAvailable(String accountId) async {
@@ -173,7 +182,7 @@ class FirebaseFinanceService {
         try {
           await _ensureUserProfile(user);
         } catch (_) {}
-        return _toBasicFinanceUser(user);
+        return _toFinanceUser(user, includeProfile: true);
       } on FirebaseAuthException catch (error) {
         throw FirebaseFinanceException(_googleWebErrorMessage(error));
       } on FirebaseFinanceException {
@@ -181,7 +190,7 @@ class FirebaseFinanceService {
       } catch (error) {
         final existingUser = _auth.currentUser;
         if (existingUser != null) {
-          return _toBasicFinanceUser(existingUser);
+          return _toFinanceUser(existingUser, includeProfile: true);
         }
         throw FirebaseFinanceException(_googleUnexpectedWebError(error));
       }
@@ -253,6 +262,8 @@ class FirebaseFinanceService {
             email: '${data['email'] ?? ''}'.trim(),
             displayName: '${data['displayName'] ?? ''}'.trim(),
             photoUrl: '${data['photoUrl'] ?? ''}'.trim(),
+            blocked: data['blocked'] == true,
+            trialEndsAt: _toNullableDate(data['trialEndsAt']),
           ),
           transactions: transactions.docs
               .map((doc) => _fromFirestore(doc.data(), fallbackId: doc.id))
@@ -287,6 +298,10 @@ class FirebaseFinanceService {
       'email': user.email ?? '',
       'displayName': user.displayName ?? '',
       'photoUrl': user.photoUrl ?? '',
+      'blocked': user.blocked,
+      'trialEndsAt': user.trialEndsAt == null
+          ? null
+          : Timestamp.fromDate(user.trialEndsAt!),
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
     await batch.commit();
@@ -633,8 +648,14 @@ class FirebaseFinanceService {
       return null;
     }
     String? accountId;
+    var blocked = false;
+    DateTime? trialEndsAt;
     if (includeProfile) {
       accountId = await _currentAccountId(user);
+      final snapshot = await _firestore.collection('users').doc(user.uid).get();
+      final data = snapshot.data();
+      blocked = data?['blocked'] == true;
+      trialEndsAt = _toNullableDate(data?['trialEndsAt']);
     }
     return FinanceUser(
       uid: user.uid,
@@ -642,7 +663,16 @@ class FirebaseFinanceService {
       email: user.email,
       displayName: user.displayName,
       photoUrl: user.photoURL,
+      blocked: blocked,
+      trialEndsAt: trialEndsAt,
     );
+  }
+
+  DateTime? _toNullableDate(Object? value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> _toFirestore(FinancialTransaction transaction) {
@@ -659,12 +689,8 @@ class FirebaseFinanceService {
       'hasDate': transaction.hasDate,
       'status': transaction.type.label,
       'title': transaction.description,
-      'amountUsd': transaction.currency == CurrencyCode.usd
-          ? transaction.amount
-          : 0,
-      'amountLbp': transaction.currency == CurrencyCode.lbp
-          ? transaction.amount
-          : 0,
+      'amountUsd': transaction.amountUsd,
+      'amountLbp': transaction.amountLbp,
       'currency': transaction.currency.label,
       'amount': transaction.amount,
       'category': transaction.category,
@@ -702,12 +728,15 @@ class FirebaseFinanceService {
         : DateTime.tryParse('${data['createdAt'] ?? ''}');
     final amountUsd = _toDouble(data['amountUsd']);
     final amountLbp = _toDouble(data['amountLbp']);
-    final currency = amountLbp > 0 ? CurrencyCode.lbp : CurrencyCode.usd;
-    final amount = currency == CurrencyCode.lbp
-        ? amountLbp
+    final storedCurrency = _parseStoredCurrency('${data['currency'] ?? ''}');
+    final currency = storedCurrency != CurrencyCode.unknown
+        ? storedCurrency
         : amountUsd > 0
-        ? amountUsd
-        : _toDouble(data['amount']);
+        ? CurrencyCode.usd
+        : CurrencyCode.lbp;
+    final amount = currency == CurrencyCode.usd
+        ? (amountUsd > 0 ? amountUsd : _toDouble(data['amount']))
+        : (amountLbp > 0 ? amountLbp : _toDouble(data['amount']));
     final raw = <String, String>{
       'date': _dateText(date),
       'status': '${data['status'] ?? ''}',
@@ -879,6 +908,17 @@ class FirebaseFinanceService {
       return value.toDouble();
     }
     return double.tryParse('$value'.replaceAll(',', '').trim()) ?? 0;
+  }
+
+  CurrencyCode _parseStoredCurrency(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'usd' || normalized.contains('dollar')) {
+      return CurrencyCode.usd;
+    }
+    if (normalized == 'lbp' || normalized.contains('lebanese')) {
+      return CurrencyCode.lbp;
+    }
+    return CurrencyCode.unknown;
   }
 
   String _dateText(DateTime date) {

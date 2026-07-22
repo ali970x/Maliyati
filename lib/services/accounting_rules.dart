@@ -1,4 +1,5 @@
 import '../models/transaction.dart';
+import 'label_normalizer.dart';
 
 class AccountingRules {
   const AccountingRules._();
@@ -8,7 +9,28 @@ class AccountingRules {
 
   static FinancialTransaction normalize(FinancialTransaction transaction) {
     final raw = Map<String, String>.from(transaction.raw);
-    raw.putIfAbsent('wallet_id', () => transaction.walletId);
+    final category = LabelNormalizer.category(transaction.category);
+    final paymentMethod = LabelNormalizer.wallet(transaction.paymentMethod);
+    final walletId = LabelNormalizer.wallet(transaction.walletId);
+    final destinationWalletId = LabelNormalizer.wallet(
+      transaction.destinationWalletId ?? '',
+    );
+    final amountUsd = transaction.amountUsd;
+    final amountLbp = transaction.amountLbp;
+    raw['category'] = category;
+    raw['Category'] = category;
+    raw['amount_usd'] = amountUsd.toString();
+    raw['amount_lbp'] = amountLbp.toString();
+    raw['Amount (\$)'] = amountUsd.toString();
+    raw['Amount (LBP)'] = amountLbp.toString();
+    raw['payment_method'] = paymentMethod;
+    raw['Payment Method'] = paymentMethod;
+    raw['wallet_id'] = walletId;
+    raw['walletId'] = walletId;
+    if (destinationWalletId.isNotEmpty) {
+      raw['destination_wallet_id'] = destinationWalletId;
+      raw['destinationWalletId'] = destinationWalletId;
+    }
     raw.putIfAbsent('settlement_status', () {
       if (transaction.isCredit || transaction.isDebt) {
         return AccountingSettlementStatus.open.label;
@@ -35,7 +57,13 @@ class AccountingRules {
       'affects_payables',
       () => transaction.isDebt ? 'true' : 'false',
     );
-    return transaction.copyWith(raw: raw);
+    return transaction.copyWith(
+      category: category,
+      description: LabelNormalizer.text(transaction.description),
+      paymentMethod: paymentMethod,
+      notes: LabelNormalizer.text(transaction.notes),
+      raw: raw,
+    );
   }
 
   static List<FinancialTransaction> expandExpensePayment(

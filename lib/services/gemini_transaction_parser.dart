@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import '../models/transaction.dart';
+import 'label_normalizer.dart';
 
-enum SmartTransactionActionType { add, edit, delete }
+enum SmartTransactionActionType { add, edit, delete, settle }
 
 class SmartTransactionAction {
   const SmartTransactionAction({
@@ -10,18 +11,23 @@ class SmartTransactionAction {
     this.transaction,
     this.targetId,
     this.targetTitle,
+    this.settlementWallet,
+    this.settlementDate,
   });
 
   final SmartTransactionActionType type;
   final FinancialTransaction? transaction;
   final String? targetId;
   final String? targetTitle;
+  final String? settlementWallet;
+  final DateTime? settlementDate;
 
   String get label {
     return switch (type) {
       SmartTransactionActionType.add => 'Add',
       SmartTransactionActionType.edit => 'Edit',
       SmartTransactionActionType.delete => 'Delete',
+      SmartTransactionActionType.settle => 'Settle',
     };
   }
 }
@@ -101,7 +107,8 @@ class GeminiTransactionParser {
     }
 
     final action = _parseActionType(_string(item, 'action'));
-    if (action == SmartTransactionActionType.delete) {
+    if (action == SmartTransactionActionType.delete ||
+        action == SmartTransactionActionType.settle) {
       final targetId = _stringAny(item, const [
         'id',
         'transaction_id',
@@ -117,14 +124,31 @@ class GeminiTransactionParser {
         'Description',
       ]);
       if (targetId.isEmpty && targetTitle.isEmpty) {
-        throw const GeminiTransactionParseException(
-          'Delete action needs id or target_title.',
+        throw GeminiTransactionParseException(
+          '${_actionLabel(action)} action needs id or target_title.',
         );
       }
       return SmartTransactionAction(
         type: action,
         targetId: targetId.isEmpty ? null : targetId,
         targetTitle: targetTitle.isEmpty ? null : targetTitle,
+        settlementWallet: _stringAny(item, const [
+          'wallet',
+          'Wallet',
+          'wallet_id',
+          'walletId',
+          'payment_method',
+          'paymentMethod',
+          'Payment Method',
+        ]),
+        settlementDate: _parseDateOrNull(
+          _stringAny(item, const [
+            'date',
+            'Date',
+            'settlement_date',
+            'settlementDate',
+          ]),
+        ),
       );
     }
 
@@ -149,8 +173,8 @@ class GeminiTransactionParser {
       'amountLbp',
       'Amount (LBP)',
     ]);
-    final currency = amountLbp > 0 ? CurrencyCode.lbp : CurrencyCode.usd;
-    final amount = currency == CurrencyCode.lbp ? amountLbp : amountUsd;
+    final currency = amountUsd > 0 ? CurrencyCode.usd : CurrencyCode.lbp;
+    final amount = currency == CurrencyCode.usd ? amountUsd : amountLbp;
     if (amount <= 0) {
       throw const GeminiTransactionParseException(
         'Amount must be greater than zero.',
@@ -176,9 +200,11 @@ class GeminiTransactionParser {
       'Title',
       'Description',
     ]);
-    final category = _fallback(
-      _stringAny(item, const ['category', 'Category']),
-      'Uncategorized',
+    final category = LabelNormalizer.category(
+      _fallback(
+        _stringAny(item, const ['category', 'Category']),
+        'Uncategorized',
+      ),
     );
     final requestedPaymentMethod = _stringAny(item, const [
       'payment_method',
@@ -188,12 +214,17 @@ class GeminiTransactionParser {
       'Wallet',
       'wallet_id',
     ]);
-    final paymentMethod =
-        statusText.trim().toLowerCase().contains('debit') &&
-            requestedPaymentMethod.isEmpty
-        ? 'Debit'
-        : requestedPaymentMethod;
-    final notes = _stringAny(item, const ['notes', 'Notes']);
+    final paymentMethod = LabelNormalizer.wallet(requestedPaymentMethod);
+    final notes = LabelNormalizer.text(
+      _stringAny(item, const ['notes', 'Notes']),
+    );
+    final paymentTiming = _stringAny(item, const [
+      'payment_timing',
+      'paymentTiming',
+      'Payment Timing',
+      'paid_now',
+      'paidNow',
+    ]);
     final createdAt =
         _parseDateTime(
           _stringAny(item, const ['created_at', 'createdAt', 'Created At']),
@@ -203,20 +234,24 @@ class GeminiTransactionParser {
     final raw = <String, String>{
       'date': _dateText(date),
       'status': type.label,
-      'title': title,
+      'title': LabelNormalizer.text(title),
       'amount_usd': amountUsd.toString(),
       'amount_lbp': amountLbp.toString(),
       'category': category,
       'payment_method': paymentMethod,
-      'wallet_id': _fallback(
-        _stringAny(item, const ['wallet_id', 'walletId', 'Wallet']),
-        paymentMethod,
+      'wallet_id': LabelNormalizer.wallet(
+        _fallback(
+          _stringAny(item, const ['wallet_id', 'walletId', 'Wallet']),
+          paymentMethod,
+        ),
       ),
-      'destination_wallet_id': _stringAny(item, const [
-        'destination_wallet_id',
-        'destinationWalletId',
-        'Destination Wallet',
-      ]),
+      'destination_wallet_id': LabelNormalizer.wallet(
+        _stringAny(item, const [
+          'destination_wallet_id',
+          'destinationWalletId',
+          'Destination Wallet',
+        ]),
+      ),
       'wallet_direction': _stringAny(item, const [
         'wallet_direction',
         'walletDirection',
@@ -232,6 +267,7 @@ class GeminiTransactionParser {
         'linkedTransactionId',
         'Linked Transaction ID',
       ]),
+      'payment_timing': _normalizePaymentTiming(paymentTiming),
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
       'source': source.label,
@@ -260,13 +296,18 @@ class GeminiTransactionParser {
         normalized == 'add' ||
         normalized == 'add_transaction' ||
         normalized == 'create' ||
-        normalized == 'create_transaction') {
+        normalized == 'create_transaction' ||
+        normalized == 'insert' ||
+        normalized == 'insert_transaction' ||
+        normalized == 'upsert' ||
+        normalized == 'upsert_transaction') {
       return SmartTransactionActionType.add;
     }
     if (normalized == 'edit' ||
         normalized == 'update' ||
         normalized == 'edit_transaction' ||
-        normalized == 'update_transaction') {
+        normalized == 'update_transaction' ||
+        normalized == 'update_now') {
       return SmartTransactionActionType.edit;
     }
     if (normalized == 'delete' ||
@@ -275,7 +316,25 @@ class GeminiTransactionParser {
         normalized == 'remove_transaction') {
       return SmartTransactionActionType.delete;
     }
+    if (normalized == 'settle' ||
+        normalized == 'settle_transaction' ||
+        normalized == 'paid' ||
+        normalized == 'mark_paid' ||
+        normalized == 'collect' ||
+        normalized == 'collect_credit' ||
+        normalized == 'pay_debt') {
+      return SmartTransactionActionType.settle;
+    }
     throw GeminiTransactionParseException('Unsupported action: $value');
+  }
+
+  String _actionLabel(SmartTransactionActionType action) {
+    return switch (action) {
+      SmartTransactionActionType.add => 'Add',
+      SmartTransactionActionType.edit => 'Edit',
+      SmartTransactionActionType.delete => 'Delete',
+      SmartTransactionActionType.settle => 'Settle',
+    };
   }
 
   String? _targetId(Map item, FinancialTransaction transaction) {
@@ -342,6 +401,17 @@ class GeminiTransactionParser {
     return DateTime(now.year, now.month, now.day);
   }
 
+  DateTime? _parseDateOrNull(String value) {
+    if (value.trim().isEmpty) {
+      return null;
+    }
+    final parsed = DateTime.tryParse(value.trim());
+    if (parsed == null) {
+      return null;
+    }
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
   DateTime? _parseDateTime(String value) {
     final parsed = DateTime.tryParse(value.trim().replaceFirst(' ', 'T'));
     return parsed;
@@ -391,6 +461,20 @@ class GeminiTransactionParser {
 
   String _fallback(String value, String fallback) {
     return value.trim().isEmpty ? fallback : value.trim();
+  }
+
+  String _normalizePaymentTiming(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return '';
+    }
+    if (normalized == 'false' ||
+        normalized.contains('credit') ||
+        normalized.contains('later') ||
+        normalized.contains('دين')) {
+      return 'On Credit';
+    }
+    return 'Paid Now';
   }
 
   String _dateText(DateTime date) {

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
 import '../services/gemini_transaction_parser.dart';
+import '../widgets/amount_limit_input_formatter.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_identity.dart';
@@ -15,11 +16,13 @@ class AddTransactionScreen extends StatefulWidget {
     required this.controller,
     this.initialScript,
     this.autoRunInitialScript = false,
+    this.scriptOnly = false,
   });
 
   final DashboardController controller;
   final String? initialScript;
   final bool autoRunInitialScript;
+  final bool scriptOnly;
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -47,6 +50,13 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.scriptOnly) {
+      return _ScriptAddForm(
+        controller: widget.controller,
+        initialScript: widget.initialScript,
+        autoRunInitialScript: widget.autoRunInitialScript,
+      );
+    }
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
@@ -95,21 +105,6 @@ class _ManualAddForm extends StatefulWidget {
 enum _ManualStatus { expense, income, credit, debt, transfer }
 
 class _ManualAddFormState extends State<_ManualAddForm> {
-  static const _expenseCategories = [
-    'Masrouf bayt',
-    'Transportation',
-    'Dyefe',
-    'Dyoune',
-    'Eshtiraket',
-    'Na2rashe',
-    'Other expense',
-  ];
-  static const _incomeCategories = [
-    'Income internet',
-    'Income zougeib',
-    'Income other',
-    'Income aboudi',
-  ];
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _amountUsdController = TextEditingController();
@@ -123,8 +118,17 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   TransactionType _type = TransactionType.expense;
   _ManualStatus _status = _ManualStatus.expense;
   TransactionSource _source = TransactionSource.application;
+  AccountingSettlementStatus _settlementStatus =
+      AccountingSettlementStatus.open;
   bool _paidNow = true;
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _paymentMethodController.text = 'Cash';
+    _destinationWalletController.text = 'Whish Money';
+  }
 
   @override
   void dispose() {
@@ -206,6 +210,12 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                             _ManualStatus.transfer => TransactionType.transfer,
                             _ManualStatus.expense => TransactionType.expense,
                           };
+                          if (_type == TransactionType.transfer &&
+                              _destinationWalletController.text
+                                  .trim()
+                                  .isEmpty) {
+                            _destinationWalletController.text = 'Whish Money';
+                          }
                           final allowed = _categoryOptionsFor(_type);
                           if (!allowed.contains(
                             _categoryController.text.trim(),
@@ -236,6 +246,37 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           setState(() => _paidNow = value.first),
                     ),
                   ],
+                  if (_showsSettlementStatus) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<AccountingSettlementStatus>(
+                      initialValue: _settlementStatus,
+                      decoration: _coloredDecoration(
+                        context,
+                        labelText: 'Settlement Status',
+                        icon: Icons.verified_rounded,
+                        color: const Color(0xFF0F766E),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: AccountingSettlementStatus.open,
+                          child: Text('open'),
+                        ),
+                        DropdownMenuItem(
+                          value: AccountingSettlementStatus.partial,
+                          child: Text('partial'),
+                        ),
+                        DropdownMenuItem(
+                          value: AccountingSettlementStatus.settled,
+                          child: Text('settled'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _settlementStatus = value);
+                        }
+                      },
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _titleController,
@@ -257,9 +298,13 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          inputFormatters: _amountInputFormatters(
+                            CurrencyCode.usd,
+                          ),
                           decoration: _coloredDecoration(
                             context,
                             labelText: 'Amount (\$)',
+                            hintText: _amountUsdHint(),
                             icon: Icons.attach_money_rounded,
                             color: const Color(0xFF2563EB),
                           ),
@@ -272,9 +317,13 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           keyboardType: const TextInputType.numberWithOptions(
                             decimal: true,
                           ),
+                          inputFormatters: _amountInputFormatters(
+                            CurrencyCode.lbp,
+                          ),
                           decoration: _coloredDecoration(
                             context,
                             labelText: 'Amount (LBP)',
+                            hintText: _amountLbpHint(),
                             icon: Icons.payments_rounded,
                             color: const Color(0xFF7C3AED),
                           ),
@@ -319,14 +368,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: _WalletDestinationChoice(
-                          label: 'Wish Money',
+                          label: 'Whish Money',
                           selected: _paymentMethodController.text
                               .trim()
                               .toLowerCase()
                               .contains('wish'),
                           imageAsset: 'assets/branding/wish_money_logo.jpg',
                           onTap: () => setState(
-                            () => _paymentMethodController.text = 'Wish Money',
+                            () => _paymentMethodController.text = 'Whish Money',
                           ),
                         ),
                       ),
@@ -359,7 +408,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: _WalletDestinationChoice(
-                            label: 'Wish Money',
+                            label: 'Whish Money',
                             selected: _destinationWalletController.text
                                 .trim()
                                 .toLowerCase()
@@ -367,7 +416,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                             imageAsset: 'assets/branding/wish_money_logo.jpg',
                             onTap: () => setState(
                               () => _destinationWalletController.text =
-                                  'Wish Money',
+                                  'Whish Money',
                             ),
                           ),
                         ),
@@ -468,9 +517,20 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         return;
       }
     }
+    if (_type == TransactionType.expense && _paidNow) {
+      final balance = _selectedWalletBalance();
+      if (usd > balance.balanceUsd || lbp > balance.balanceLbp) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Paid Now cannot be more than ${FinanceFormatters.usd(balance.balanceUsd)} or ${FinanceFormatters.lbp(balance.balanceLbp)} in ${_selectedWalletName()}.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
 
-    final currency = lbp > 0 ? CurrencyCode.lbp : CurrencyCode.usd;
-    final amount = lbp > 0 ? lbp : usd;
     final category = _categoryController.text.trim().isEmpty
         ? 'Uncategorized'
         : _categoryController.text.trim();
@@ -487,23 +547,18 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'Source': _source.label,
       'wallet_id': _paymentMethodController.text.trim(),
       'destination_wallet_id': _destinationWalletController.text.trim(),
+      'settlement_status': _showsSettlementStatus
+          ? _settlementStatus.label
+          : '',
       'wallet_direction': _type == TransactionType.expense
           ? (_paidNow ? '-1' : '0')
           : '',
     };
-    final transaction = FinancialTransaction(
-      createdAt: _createdAt,
-      source: _source,
-      date: _date,
-      hasDate: true,
-      type: _type,
+    final transaction = _buildTransaction(
+      baseRaw: raw,
       category: category,
-      description: _titleController.text.trim(),
-      currency: currency,
-      amount: amount,
-      paymentMethod: _paymentMethodController.text.trim(),
-      notes: _notesController.text.trim(),
-      raw: raw,
+      usd: usd,
+      lbp: lbp,
     );
 
     setState(() => _isSaving = true);
@@ -542,14 +597,16 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     _amountLbpController.clear();
     _categoryController.clear();
     _paymentMethodController.clear();
-    _destinationWalletController.clear();
     _notesController.clear();
+    _paymentMethodController.text = 'Cash';
+    _destinationWalletController.text = 'Whish Money';
     setState(() {
       _date = DateTime.now();
       _createdAt = DateTime.now();
       _type = TransactionType.expense;
       _status = _ManualStatus.expense;
       _source = TransactionSource.application;
+      _settlementStatus = AccountingSettlementStatus.open;
       _paidNow = true;
     });
   }
@@ -559,18 +616,56 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   List<String> _categoryOptionsFor(TransactionType type) {
-    return switch (type) {
-      TransactionType.income => [..._incomeCategories, ..._expenseCategories],
-      TransactionType.expense => [..._incomeCategories, ..._expenseCategories],
-      TransactionType.reserveable => [
-        ..._incomeCategories,
-        ..._expenseCategories,
-      ],
-      TransactionType.debt => ['Payables', 'Debt', 'Loan', 'Other payable'],
-      TransactionType.transfer => ['Wallet transfer'],
-      TransactionType.unknown => const ['Uncategorized'],
-    };
+    return widget.controller.categoryOptionsFor(type);
   }
+
+  FinancialTransaction _buildTransaction({
+    required Map<String, String> baseRaw,
+    required String category,
+    required double usd,
+    required double lbp,
+  }) {
+    final primaryCurrency = usd > 0 ? CurrencyCode.usd : CurrencyCode.lbp;
+    final primaryAmount = usd > 0 ? usd : lbp;
+    final raw = Map<String, String>.from(baseRaw)
+      ..['amount_usd'] = usd.toString()
+      ..['amount_lbp'] = lbp.toString()
+      ..['Amount (\$)'] = usd.toString()
+      ..['Amount (LBP)'] = lbp.toString();
+    return FinancialTransaction(
+      createdAt: _createdAt,
+      source: _source,
+      date: _date,
+      hasDate: true,
+      type: _type,
+      category: category,
+      description: _titleController.text.trim(),
+      currency: primaryCurrency,
+      amount: primaryAmount,
+      paymentMethod: _paymentMethodController.text.trim(),
+      notes: _notesController.text.trim(),
+      raw: raw,
+    );
+  }
+
+  WalletAccountSummary _selectedWalletBalance() {
+    final usesWish = _paymentMethodController.text
+        .trim()
+        .toLowerCase()
+        .contains('wish');
+    return usesWish
+        ? widget.controller.walletSummary.wish
+        : widget.controller.walletSummary.cash;
+  }
+
+  String _selectedWalletName() {
+    return _paymentMethodController.text.trim().toLowerCase().contains('wish')
+        ? 'Whish Money'
+        : 'My Wallet';
+  }
+
+  bool get _showsSettlementStatus =>
+      _type == TransactionType.debt || _type == TransactionType.reserveable;
 
   Color _typeColor(TransactionType type) {
     return switch (type) {
@@ -586,12 +681,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   InputDecoration _coloredDecoration(
     BuildContext context, {
     required String labelText,
+    String? hintText,
     required IconData icon,
     required Color color,
   }) {
     final theme = Theme.of(context);
     return InputDecoration(
       labelText: labelText,
+      hintText: hintText,
       prefixIcon: Icon(icon, color: color),
       filled: true,
       fillColor: Color.alphaBlend(
@@ -607,6 +704,32 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         borderSide: BorderSide(color: color, width: 1.5),
       ),
     );
+  }
+
+  String? _amountUsdHint() {
+    if (_type == TransactionType.expense && _paidNow) {
+      return compactUsdLimit(_selectedWalletBalance().balanceUsd);
+    }
+    return null;
+  }
+
+  String? _amountLbpHint() {
+    if (_type == TransactionType.expense && _paidNow) {
+      return compactLbpLimit(_selectedWalletBalance().balanceLbp);
+    }
+    return null;
+  }
+
+  List<TextInputFormatter> _amountInputFormatters(CurrencyCode currency) {
+    if (_type != TransactionType.expense || !_paidNow) {
+      return const [];
+    }
+    final balance = _selectedWalletBalance();
+    return [
+      AmountLimitInputFormatter(
+        currency == CurrencyCode.usd ? balance.balanceUsd : balance.balanceLbp,
+      ),
+    ];
   }
 }
 
@@ -745,7 +868,7 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
                 decoration: const InputDecoration(
                   alignLabelWithHint: true,
                   hintText:
-                      'Paste one transaction JSON or a batch here.\nStatuses: Expense, Income, Debit, Credit.',
+                      'Paste one transaction JSON or a batch here.\nActions: add, edit, delete, settle.\nStatuses: Expense, Income, Credit, Debt, Transfer.',
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -898,6 +1021,7 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
             Text('Added: ${result.added}'),
             Text('Edited: ${result.edited}'),
             Text('Deleted: ${result.deleted}'),
+            Text('Settled: ${result.settled}'),
             if (result.failures.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text('Not completed:'),
@@ -941,6 +1065,9 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
     final delete = _preview
         .where((item) => item.type == SmartTransactionActionType.delete)
         .length;
+    final settle = _preview
+        .where((item) => item.type == SmartTransactionActionType.settle)
+        .length;
     final approved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -964,6 +1091,7 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
                     _ActionCountChip(label: 'Add', value: add),
                     _ActionCountChip(label: 'Edit', value: edit),
                     _ActionCountChip(label: 'Delete', value: delete),
+                    _ActionCountChip(label: 'Settle', value: settle),
                     _ActionCountChip(label: 'Income', value: income),
                     _ActionCountChip(label: 'Expense', value: expense),
                     _ActionCountChip(label: 'Credit', value: reserveable),
@@ -1054,6 +1182,7 @@ class _ConfirmActionRow extends StatelessWidget {
       SmartTransactionActionType.add => const Color(0xFF168A5B),
       SmartTransactionActionType.edit => const Color(0xFF2563EB),
       SmartTransactionActionType.delete => const Color(0xFFC74949),
+      SmartTransactionActionType.settle => const Color(0xFF0F766E),
     };
     final title =
         transaction?.description ??
@@ -1174,11 +1303,13 @@ class _ActionPreviewTile extends StatelessWidget {
       SmartTransactionActionType.add => const Color(0xFF168A5B),
       SmartTransactionActionType.edit => const Color(0xFF2563EB),
       SmartTransactionActionType.delete => const Color(0xFFC74949),
+      SmartTransactionActionType.settle => const Color(0xFF0F766E),
     };
     final icon = switch (action.type) {
       SmartTransactionActionType.add => Icons.add_task_rounded,
       SmartTransactionActionType.edit => Icons.edit_note_rounded,
       SmartTransactionActionType.delete => Icons.delete_outline_rounded,
+      SmartTransactionActionType.settle => Icons.verified_rounded,
     };
     final title =
         transaction?.description ??

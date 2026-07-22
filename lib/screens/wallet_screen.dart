@@ -27,21 +27,26 @@ class _WalletScreenState extends State<WalletScreen> {
   bool _saving = false;
 
   bool get _isWish => widget.wallet == WalletKind.wishMoney;
-  String get _title => _isWish ? 'Wish Money' : 'My Wallet';
-  Color get _accent => _isWish ? const Color(0xFF7C3AED) : const Color(0xFF5B1E9A);
+  String get _title => _isWish ? 'Whish Money' : 'My Wallet';
+  Color get _accent =>
+      _isWish ? const Color(0xFF7C3AED) : const Color(0xFF5B1E9A);
 
   @override
   void initState() {
     super.initState();
     _usd = TextEditingController(
-      text: _numberText(_isWish
-          ? widget.controller.wishWalletOpeningUsd
-          : widget.controller.walletOpeningUsd),
+      text: _numberText(
+        _isWish
+            ? widget.controller.wishWalletOpeningUsd
+            : widget.controller.walletOpeningUsd,
+      ),
     );
     _lbp = TextEditingController(
-      text: _numberText(_isWish
-          ? widget.controller.wishWalletOpeningLbp
-          : widget.controller.walletOpeningLbp),
+      text: _numberText(
+        _isWish
+            ? widget.controller.wishWalletOpeningLbp
+            : widget.controller.walletOpeningLbp,
+      ),
     );
   }
 
@@ -71,9 +76,9 @@ class _WalletScreenState extends State<WalletScreen> {
     }
     if (!mounted) return;
     setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$_title balances saved.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('$_title balances saved.')));
   }
 
   Future<void> _reset() async {
@@ -112,7 +117,9 @@ class _WalletScreenState extends State<WalletScreen> {
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$_title tracking now starts from these balances.')),
+      SnackBar(
+        content: Text('$_title tracking now starts from these balances.'),
+      ),
     );
   }
 
@@ -174,9 +181,11 @@ class _WalletScreenState extends State<WalletScreen> {
                       const SizedBox(height: 4),
                       Text(
                         _isWish
-                            ? 'Manage your Wish Money balance and tracking separately.'
+                            ? 'Manage your Whish Money balance and tracking separately.'
                             : 'Manage your personal wallet balance and tracking separately.',
-                        style: TextStyle(color: Colors.white.withValues(alpha: .82)),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: .82),
+                        ),
                       ),
                     ],
                   ),
@@ -185,34 +194,67 @@ class _WalletScreenState extends State<WalletScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          Text('Current balance', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+          Text(
+            'Current balance',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 8),
           _BalanceReadout(summary: summary, accent: _accent),
           const SizedBox(height: 22),
-          Text('Set starting balance', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+          Text(
+            'Set starting balance',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 5),
           Text(
             'Change only $_title. Saving preserves its current tracking; reset starts new tracking from the values below.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 14),
           Row(
             children: [
-              Expanded(child: _AmountField(label: 'USD', controller: _usd, icon: Icons.attach_money_rounded)),
+              Expanded(
+                child: _AmountField(
+                  label: 'USD',
+                  controller: _usd,
+                  icon: Icons.attach_money_rounded,
+                ),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: _AmountField(label: 'LBP', controller: _lbp, icon: Icons.payments_rounded)),
+              Expanded(
+                child: _AmountField(
+                  label: 'LBP',
+                  controller: _lbp,
+                  icon: Icons.payments_rounded,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          Text('Dashboard comparison', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900)),
+          Text(
+            'Dashboard comparison',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 5),
           Text(
             'Choose what the $_title card compares its live balance against.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 10),
           DropdownButtonFormField<WalletComparisonRange>(
-            initialValue: widget.controller.walletComparisonRange(isWishMoney: _isWish),
+            initialValue: widget.controller.walletComparisonRange(
+              isWishMoney: _isWish,
+            ),
             decoration: const InputDecoration(
               labelText: 'Compare with',
               prefixIcon: Icon(Icons.compare_arrows_rounded),
@@ -245,7 +287,9 @@ class _WalletScreenState extends State<WalletScreen> {
           const SizedBox(height: 8),
           Text(
             'Reset applies only to $_title. The other wallet, its balance, and its tracking remain unchanged.',
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -260,32 +304,46 @@ class _BalanceReadout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: .09),
-          borderRadius: BorderRadius.circular(16),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: .09),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          FinanceFormatters.usd(summary.balanceUsd),
+          style: TextStyle(
+            color: accent,
+            fontWeight: FontWeight.w900,
+            fontSize: 24,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(FinanceFormatters.usd(summary.balanceUsd), style: TextStyle(color: accent, fontWeight: FontWeight.w900, fontSize: 24)),
-            const SizedBox(height: 3),
-            Text(FinanceFormatters.lbp(summary.balanceLbp), style: const TextStyle(fontWeight: FontWeight.w700)),
-          ],
+        const SizedBox(height: 3),
+        Text(
+          FinanceFormatters.lbp(summary.balanceLbp),
+          style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _AmountField extends StatelessWidget {
-  const _AmountField({required this.label, required this.controller, required this.icon});
+  const _AmountField({
+    required this.label,
+    required this.controller,
+    required this.icon,
+  });
   final String label;
   final TextEditingController controller;
   final IconData icon;
 
   @override
   Widget build(BuildContext context) => TextField(
-        controller: controller,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
-      );
+    controller: controller,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
+  );
 }

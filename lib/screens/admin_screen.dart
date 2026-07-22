@@ -53,6 +53,20 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ),
               const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  await controller.signOut();
+                  if (context.mounted) {
+                    Navigator.of(
+                      context,
+                      rootNavigator: true,
+                    ).popUntil((route) => route.isFirst);
+                  }
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Logout'),
+              ),
+              const SizedBox(width: 10),
               FilledButton.icon(
                 onPressed: () => _editUser(),
                 icon: const Icon(Icons.person_add_rounded),
@@ -83,6 +97,15 @@ class _AdminScreenState extends State<AdminScreen> {
                             return _AdminUserPanel(
                               snapshot: active,
                               onEditUser: () => _editUser(active.user),
+                              onSaveUser: (user) async {
+                                await widget.controller.saveAdminUserProfile(
+                                  user,
+                                );
+                                await widget.controller.refreshAdminUsers();
+                                setState(() => _selectedUid = user.uid);
+                              },
+                              onSendPasswordReset: (email) =>
+                                  _sendPasswordReset(email),
                               onDeleteUser: () => _deleteUser(active.user),
                               onEditTransaction: (transaction) =>
                                   _editTransaction(
@@ -142,6 +165,21 @@ class _AdminScreenState extends State<AdminScreen> {
       await widget.controller.deleteAdminUserData(user.uid);
       setState(() => _selectedUid = null);
     }
+  }
+
+  Future<void> _sendPasswordReset(String? email) async {
+    final trimmed = email?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('This user has no email.')));
+      return;
+    }
+    await widget.controller.sendAdminPasswordReset(trimmed);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Password reset email sent to $trimmed.')),
+    );
   }
 
   Future<void> _editTransaction(
@@ -219,6 +257,8 @@ class _AdminUserPanel extends StatelessWidget {
   const _AdminUserPanel({
     required this.snapshot,
     required this.onEditUser,
+    required this.onSaveUser,
+    required this.onSendPasswordReset,
     required this.onDeleteUser,
     required this.onEditTransaction,
     required this.onDeleteTransaction,
@@ -226,6 +266,8 @@ class _AdminUserPanel extends StatelessWidget {
 
   final AdminUserSnapshot snapshot;
   final VoidCallback onEditUser;
+  final ValueChanged<FinanceUser> onSaveUser;
+  final ValueChanged<String?> onSendPasswordReset;
   final VoidCallback onDeleteUser;
   final ValueChanged<FinancialTransaction> onEditTransaction;
   final ValueChanged<FinancialTransaction> onDeleteTransaction;
@@ -261,6 +303,12 @@ class _AdminUserPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        _AdminAccessCard(
+          user: snapshot.user,
+          onSaveUser: onSaveUser,
+          onSendPasswordReset: onSendPasswordReset,
+        ),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 10,
           runSpacing: 10,
@@ -380,6 +428,117 @@ class _StatTile extends StatelessWidget {
   }
 }
 
+class _AdminAccessCard extends StatelessWidget {
+  const _AdminAccessCard({
+    required this.user,
+    required this.onSaveUser,
+    required this.onSendPasswordReset,
+  });
+
+  final FinanceUser user;
+  final ValueChanged<FinanceUser> onSaveUser;
+  final ValueChanged<String?> onSendPasswordReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final trial = user.trialEndsAt;
+    final trialLabel = trial == null
+        ? 'No trial limit'
+        : '${trial.year}-${trial.month.toString().padLeft(2, '0')}-${trial.day.toString().padLeft(2, '0')}';
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            FilterChip(
+              avatar: Icon(
+                user.blocked
+                    ? Icons.block_rounded
+                    : Icons.verified_user_rounded,
+              ),
+              label: Text(user.blocked ? 'Blocked' : 'Active'),
+              selected: user.blocked,
+              onSelected: (selected) => onSaveUser(
+                FinanceUser(
+                  uid: user.uid,
+                  accountId: user.accountId,
+                  email: user.email,
+                  displayName: user.displayName,
+                  photoUrl: user.photoUrl,
+                  blocked: selected,
+                  trialEndsAt: user.trialEndsAt,
+                ),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => onSendPasswordReset(user.email),
+              icon: const Icon(Icons.password_rounded),
+              label: const Text('Reset password'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate:
+                      user.trialEndsAt ??
+                      DateTime.now().add(const Duration(days: 7)),
+                  firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                  lastDate: DateTime.now().add(const Duration(days: 3650)),
+                );
+                if (picked == null) return;
+                onSaveUser(
+                  FinanceUser(
+                    uid: user.uid,
+                    accountId: user.accountId,
+                    email: user.email,
+                    displayName: user.displayName,
+                    photoUrl: user.photoUrl,
+                    blocked: user.blocked,
+                    trialEndsAt: DateTime(
+                      picked.year,
+                      picked.month,
+                      picked.day,
+                      23,
+                      59,
+                      59,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.event_available_rounded),
+              label: Text('Trial: $trialLabel'),
+            ),
+            TextButton.icon(
+              onPressed: trial == null
+                  ? null
+                  : () => onSaveUser(
+                      FinanceUser(
+                        uid: user.uid,
+                        accountId: user.accountId,
+                        email: user.email,
+                        displayName: user.displayName,
+                        photoUrl: user.photoUrl,
+                        blocked: user.blocked,
+                      ),
+                    ),
+              icon: const Icon(Icons.all_inclusive_rounded),
+              label: const Text('No limit'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _UserDialog extends StatefulWidget {
   const _UserDialog({this.user});
 
@@ -398,6 +557,8 @@ class _UserDialogState extends State<_UserDialog> {
   late final _name = TextEditingController(
     text: widget.user?.displayName ?? '',
   );
+  late bool _blocked = widget.user?.blocked ?? false;
+  late DateTime? _trialEndsAt = widget.user?.trialEndsAt;
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +588,41 @@ class _UserDialogState extends State<_UserDialog> {
               controller: _name,
               decoration: const InputDecoration(labelText: 'Name'),
             ),
+            const SizedBox(height: 10),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Blocked'),
+              subtitle: const Text('Blocked users cannot enter the app.'),
+              value: _blocked,
+              onChanged: (value) => setState(() => _blocked = value),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event_available_rounded),
+              title: const Text('Trial ends at'),
+              subtitle: Text(
+                _trialEndsAt == null
+                    ? 'No trial limit'
+                    : '${_trialEndsAt!.year}-${_trialEndsAt!.month.toString().padLeft(2, '0')}-${_trialEndsAt!.day.toString().padLeft(2, '0')}',
+              ),
+              trailing: Wrap(
+                children: [
+                  IconButton(
+                    tooltip: 'Pick date',
+                    onPressed: _pickTrialDate,
+                    icon: const Icon(Icons.calendar_month_rounded),
+                  ),
+                  IconButton(
+                    tooltip: 'Clear',
+                    onPressed: _trialEndsAt == null
+                        ? null
+                        : () => setState(() => _trialEndsAt = null),
+                    icon: const Icon(Icons.clear_rounded),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -443,12 +639,34 @@ class _UserDialogState extends State<_UserDialog> {
               accountId: _accountId.text.trim(),
               email: _email.text.trim(),
               displayName: _name.text.trim(),
+              blocked: _blocked,
+              trialEndsAt: _trialEndsAt,
             ),
           ),
           child: const Text('Save'),
         ),
       ],
     );
+  }
+
+  Future<void> _pickTrialDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _trialEndsAt ?? DateTime.now().add(const Duration(days: 7)),
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 3650)),
+    );
+    if (picked == null) return;
+    setState(() {
+      _trialEndsAt = DateTime(
+        picked.year,
+        picked.month,
+        picked.day,
+        23,
+        59,
+        59,
+      );
+    });
   }
 }
 

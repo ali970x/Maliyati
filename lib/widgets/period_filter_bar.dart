@@ -115,7 +115,8 @@ class PeriodFilterBar extends StatelessWidget {
       context,
       controller,
       initialMonth:
-          controller.selectedMonth ?? DateTime(DateTime.now().year, DateTime.now().month - 1),
+          controller.selectedMonth ??
+          DateTime(DateTime.now().year, DateTime.now().month - 1),
     );
     if (month != null) {
       controller.selectMonth(month);
@@ -127,7 +128,8 @@ class PeriodFilterBar extends StatelessWidget {
       context,
       controller,
       initialMonth:
-          controller.referenceMonth ?? DateTime(DateTime.now().year, DateTime.now().month - 1),
+          controller.referenceMonth ??
+          DateTime(DateTime.now().year, DateTime.now().month - 1),
     );
     if (month != null) {
       controller.selectReferenceMonth(month);

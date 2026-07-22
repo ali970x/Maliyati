@@ -31,7 +31,7 @@ class AppStrings {
   String get incomeCategoryRanking =>
       isArabic ? 'ترتيب فئات الدخل' : 'Income category ranking';
   String get reserveableCategoryRanking =>
-      isArabic ? 'ترتيب فئات المستحقات' : 'Reserveable category ranking';
+      isArabic ? 'ترتيب فئات المستحقات' : 'Receivable category ranking';
   String get paymentMethodRanking =>
       isArabic ? 'ترتيب طرق الدفع' : 'Payment method ranking';
   String get incomePaymentMethodRanking =>
@@ -40,7 +40,7 @@ class AppStrings {
       isArabic ? 'ترتيب طرق دفع المصاريف' : 'Expense payment method ranking';
   String get reserveablePaymentMethodRanking => isArabic
       ? 'ترتيب طرق دفع المستحقات'
-      : 'Reserveable payment method ranking';
+      : 'Receivable payment method ranking';
   String get noPaymentMethodData => isArabic
       ? 'لا توجد طرق دفع ضمن هذه الفترة.'
       : 'No payment method data in this period.';
@@ -86,7 +86,7 @@ class AppStrings {
   String get showExpenseTransactions =>
       isArabic ? 'عمليات المصاريف' : 'Expense transactions';
   String get showReserveableTransactions =>
-      isArabic ? 'عمليات المستحقات' : 'Reserveable transactions';
+      isArabic ? 'عمليات المستحقات' : 'Credit transactions';
   String get tapIncomeOrExpenses => isArabic
       ? 'اضغط على كرت الدخل أو المصاريف لعرض العمليات هنا.'
       : 'Tap Income or Expenses to review the matching transactions here.';
@@ -94,7 +94,7 @@ class AppStrings {
       isArabic ? 'لا يوجد دخل ضمن هذه الفترة.' : 'No income in this period.';
   String get noReserveablesInPeriod => isArabic
       ? 'لا توجد مستحقات ضمن هذه الفترة.'
-      : 'No reserveables in this period.';
+      : 'No credits in this period.';
   String get expensesFocus => isArabic ? 'تركيز المصاريف' : 'Expenses focus';
   String get expenseUsd => isArabic ? 'مصاريف USD' : 'Expense USD';
   String get expenseLbp => isArabic ? 'مصاريف LBP' : 'Expense LBP';
@@ -118,14 +118,14 @@ class AppStrings {
   String get topIncomeCategory =>
       isArabic ? 'أعلى فئة دخل' : 'Top income category';
   String get topReserveableCategory =>
-      isArabic ? 'أعلى فئة مستحقات' : 'Top reserveable category';
+      isArabic ? 'أعلى فئة مستحقات' : 'Top receivable category';
   String get averageDailySpend =>
       isArabic ? 'متوسط الصرف اليومي' : 'Average daily spend';
   String get transactionCount => isArabic ? 'عدد العمليات' : 'Transactions';
   String get largestExpense => isArabic ? 'أكبر مصروف' : 'Largest expense';
   String get largestIncome => isArabic ? 'أكبر دخل' : 'Largest income';
   String get largestReserveable =>
-      isArabic ? 'أكبر عملية مستحقات' : 'Largest reserveable';
+      isArabic ? 'أكبر عملية مستحقات' : 'Largest credit';
   String get noData => isArabic ? 'لا توجد بيانات' : 'No data';
   String get noDateInSheet =>
       isArabic ? 'لا يوجد تاريخ في الجدول' : 'No date in sheet';
@@ -160,7 +160,7 @@ class AppStrings {
   String get incomeByCategory =>
       isArabic ? 'الدخل حسب الفئة' : 'Income by category';
   String get reserveablesByCategory =>
-      isArabic ? 'المستحقات حسب الفئة' : 'Reserveables by category';
+      isArabic ? 'المستحقات حسب الفئة' : 'Credits by category';
   String get weeklySummary => isArabic ? 'ملخص أسبوعي' : 'Weekly summary';
   String get monthlySummary => isArabic ? 'ملخص شهري' : 'Monthly summary';
   String weekOf(String value) => isArabic ? 'أسبوع $value' : 'Week of $value';

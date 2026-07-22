@@ -138,7 +138,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                         SizedBox(
                           width: cardWidth,
                           child: Dismissible(
-                            key: ValueKey(transaction.id ?? '${transaction.date}-${transaction.description}'),
+                            key: ValueKey(
+                              transaction.id ??
+                                  '${transaction.date}-${transaction.description}',
+                            ),
                             background: _SwipeAction(
                               color: const Color(0xFFC74949),
                               icon: Icons.delete_outline_rounded,
@@ -168,7 +171,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               strings: controller.strings,
                               margin: isWide
                                   ? const EdgeInsets.symmetric(vertical: 6)
-                                  : const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                  : const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 6,
+                                    ),
                               onTap: () => _openDetail(context, transaction),
                               onLongPress: () => _openDetail(
                                 context,
@@ -203,11 +209,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             return false;
           }
         case TransactionTypeFilter.expense:
-          if (!transaction.isExpense || transaction.isDebit) {
+          if (!transaction.isExpense) {
             return false;
           }
         case TransactionTypeFilter.debit:
-          if (!transaction.isDebit) {
+          if (!transaction.isDebt) {
             return false;
           }
         case TransactionTypeFilter.credit:
@@ -219,11 +225,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
 
       switch (_currencyFilter) {
         case TransactionCurrencyFilter.usd:
-          if (transaction.currency != CurrencyCode.usd) {
+          if (transaction.amountUsd <= 0) {
             return false;
           }
         case TransactionCurrencyFilter.lbp:
-          if (transaction.currency != CurrencyCode.lbp) {
+          if (transaction.amountLbp <= 0) {
             return false;
           }
         case TransactionCurrencyFilter.all:
@@ -302,12 +308,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     return confirmed ?? false;
   }
 
-  Future<void> _showArchived(BuildContext context) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (_) => _ArchivedTransactionsSheet(controller: widget.controller),
-  );
+  Future<void> _showArchived(BuildContext context) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) =>
+            _ArchivedTransactionsSheet(controller: widget.controller),
+      );
 
   Widget _transactionMenu(
     BuildContext context,
@@ -334,15 +342,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     itemBuilder: (context) => const [
       PopupMenuItem(
         value: _TransactionMenuAction.update,
-        child: ListTile(leading: Icon(Icons.edit_rounded), title: Text('Update')),
+        child: ListTile(
+          leading: Icon(Icons.edit_rounded),
+          title: Text('Update'),
+        ),
       ),
       PopupMenuItem(
         value: _TransactionMenuAction.archive,
-        child: ListTile(leading: Icon(Icons.archive_outlined), title: Text('Archive')),
+        child: ListTile(
+          leading: Icon(Icons.archive_outlined),
+          title: Text('Archive'),
+        ),
       ),
       PopupMenuItem(
         value: _TransactionMenuAction.delete,
-        child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Delete')),
+        child: ListTile(
+          leading: Icon(Icons.delete_outline_rounded),
+          title: Text('Delete'),
+        ),
       ),
     ],
   );
@@ -377,7 +394,10 @@ class _SwipeAction extends StatelessWidget {
         const SizedBox(height: 3),
         Text(
           label,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
         ),
       ],
     ),
@@ -407,7 +427,10 @@ class _ArchivedTransactionsSheet extends StatelessWidget {
                   const Expanded(
                     child: Text(
                       'Archived transactions',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                   Text('${transactions.length}'),
@@ -434,7 +457,8 @@ class _ArchivedTransactionsSheet extends StatelessWidget {
                             ),
                             IconButton(
                               tooltip: 'Restore',
-                              onPressed: () => controller.restoreTransaction(transaction),
+                              onPressed: () =>
+                                  controller.restoreTransaction(transaction),
                               icon: const Icon(Icons.unarchive_rounded),
                             ),
                             const SizedBox(width: 4),
@@ -466,7 +490,7 @@ class _ResultsSummary extends StatelessWidget {
     var income = 0.0;
     var expenses = 0.0;
     var credits = 0.0;
-    var debits = 0.0;
+    var debt = 0.0;
     for (final transaction in transactions) {
       final amount = transaction.amountInUsd(exchangeRate);
       if (transaction.isIncome) {
@@ -475,9 +499,8 @@ class _ResultsSummary extends StatelessWidget {
         expenses += amount;
       } else if (transaction.isReserveable) {
         credits += amount;
-      }
-      if (transaction.isDebit) {
-        debits += amount;
+      } else if (transaction.isDebt) {
+        debt += amount;
       }
     }
     final net = income - expenses;
@@ -513,8 +536,8 @@ class _ResultsSummary extends StatelessWidget {
               color: const Color(0xFFD97706),
             ),
             _SummaryPill(
-              label: 'Debit',
-              value: FinanceFormatters.compactUsd(debits),
+              label: 'Debt',
+              value: FinanceFormatters.compactUsd(debt),
               color: const Color(0xFF2563EB),
             ),
             _SummaryPill(
@@ -663,7 +686,9 @@ class _Filters extends StatelessWidget {
               IconButton(
                 tooltip: showAdvancedFilters ? 'Hide filters' : 'Show filters',
                 onPressed: onToggleAdvancedFilters,
-                style: IconButton.styleFrom(backgroundColor: Colors.transparent),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                ),
                 icon: Icon(
                   showAdvancedFilters
                       ? Icons.filter_alt_off_rounded
@@ -674,7 +699,9 @@ class _Filters extends StatelessWidget {
               IconButton(
                 tooltip: 'Archived transactions',
                 onPressed: onShowArchived,
-                style: IconButton.styleFrom(backgroundColor: Colors.transparent),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                ),
                 icon: const Icon(Icons.archive_outlined),
               ),
             ],
@@ -703,133 +730,136 @@ class _Filters extends StatelessWidget {
             PeriodFilterBar(controller: controller),
             const SizedBox(height: 12),
             _FilterPanel(
-            children: [
-              DropdownButtonFormField<TransactionTypeFilter>(
-                initialValue: typeFilter,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  labelText: strings.type,
-                  prefixIcon: const Icon(Icons.tune_rounded),
-                  isDense: true,
-                ),
-                items: TransactionTypeFilter.values.map((value) {
-                  final label = switch (value) {
-                    TransactionTypeFilter.all => strings.allTypes,
-                    TransactionTypeFilter.income => strings.income,
-                    TransactionTypeFilter.expense => strings.expense,
-                    TransactionTypeFilter.debit => 'Debit',
-                    TransactionTypeFilter.credit => 'Credit',
-                  };
-                  return DropdownMenuItem(value: value, child: Text(label));
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) onTypeChanged(value);
-                },
-              ),
-              _SegmentedFilter<TransactionCurrencyFilter>(
-                label: strings.value,
-                values: TransactionCurrencyFilter.values,
-                selected: currencyFilter,
-                labelFor: (value) => switch (value) {
-                  TransactionCurrencyFilter.all => strings.allCurrencies,
-                  TransactionCurrencyFilter.usd => 'USD',
-                  TransactionCurrencyFilter.lbp => 'LBP',
-                },
-                iconFor: (value) => switch (value) {
-                  TransactionCurrencyFilter.all => Icons.payments_rounded,
-                  TransactionCurrencyFilter.usd => Icons.attach_money_rounded,
-                  TransactionCurrencyFilter.lbp => Icons.money_rounded,
-                },
-                onSelected: onCurrencyChanged,
-              ),
-              DropdownButtonFormField<TransactionSource?>(
-                initialValue: sourceFilter,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Source',
-                  prefixIcon: Icon(Icons.source_rounded),
-                  isDense: true,
-                ),
-                items: [
-                  const DropdownMenuItem<TransactionSource?>(
-                    value: null,
-                    child: Text('All sources'),
-                  ),
-                  ...TransactionSource.values.map(
-                    (source) => DropdownMenuItem<TransactionSource?>(
-                      value: source,
-                      child: Text(source.label),
-                    ),
-                  ),
-                ],
-                onChanged: onSourceChanged,
-              ),
-            ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String?>(
-                  initialValue: categoryFilter,
+              children: [
+                DropdownButtonFormField<TransactionTypeFilter>(
+                  initialValue: typeFilter,
                   isExpanded: true,
                   decoration: InputDecoration(
-                    labelText: strings.category,
-                    prefixIcon: const Icon(Icons.category_rounded),
+                    labelText: strings.type,
+                    prefixIcon: const Icon(Icons.tune_rounded),
                     isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 11,
-                    ),
+                  ),
+                  items: TransactionTypeFilter.values.map((value) {
+                    final label = switch (value) {
+                      TransactionTypeFilter.all => strings.allTypes,
+                      TransactionTypeFilter.income => strings.income,
+                      TransactionTypeFilter.expense => strings.expense,
+                      TransactionTypeFilter.debit => 'Debt',
+                      TransactionTypeFilter.credit => 'Credit',
+                    };
+                    return DropdownMenuItem(value: value, child: Text(label));
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) onTypeChanged(value);
+                  },
+                ),
+                _SegmentedFilter<TransactionCurrencyFilter>(
+                  label: strings.value,
+                  values: TransactionCurrencyFilter.values,
+                  selected: currencyFilter,
+                  labelFor: (value) => switch (value) {
+                    TransactionCurrencyFilter.all => strings.allCurrencies,
+                    TransactionCurrencyFilter.usd => 'USD',
+                    TransactionCurrencyFilter.lbp => 'LBP',
+                  },
+                  iconFor: (value) => switch (value) {
+                    TransactionCurrencyFilter.all => Icons.payments_rounded,
+                    TransactionCurrencyFilter.usd => Icons.attach_money_rounded,
+                    TransactionCurrencyFilter.lbp => Icons.money_rounded,
+                  },
+                  onSelected: onCurrencyChanged,
+                ),
+                DropdownButtonFormField<TransactionSource?>(
+                  initialValue: sourceFilter,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Source',
+                    prefixIcon: Icon(Icons.source_rounded),
+                    isDense: true,
                   ),
                   items: [
-                    DropdownMenuItem<String?>(
+                    const DropdownMenuItem<TransactionSource?>(
                       value: null,
-                      child: Text(strings.allCategories),
+                      child: Text('All sources'),
                     ),
-                    ...categories.map(
-                      (category) => DropdownMenuItem<String?>(
-                        value: category,
-                        child: Text(category, overflow: TextOverflow.ellipsis),
+                    ...TransactionSource.values.map(
+                      (source) => DropdownMenuItem<TransactionSource?>(
+                        value: source,
+                        child: Text(source.label),
                       ),
                     ),
                   ],
-                  onChanged: onCategoryChanged,
+                  onChanged: onSourceChanged,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<TransactionSort>(
-                  initialValue: sort,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: strings.sort,
-                    prefixIcon: const Icon(Icons.sort_rounded),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 11,
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String?>(
+                    initialValue: categoryFilter,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: strings.category,
+                      prefixIcon: const Icon(Icons.category_rounded),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 11,
+                      ),
                     ),
-                  ),
-                  items: TransactionSort.values
-                      .map(
-                        (item) => DropdownMenuItem(
-                          value: item,
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(strings.allCategories),
+                      ),
+                      ...categories.map(
+                        (category) => DropdownMenuItem<String?>(
+                          value: category,
                           child: Text(
-                            _sortLabel(item, strings),
+                            category,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      onSortChanged(value);
-                    }
-                  },
+                      ),
+                    ],
+                    onChanged: onCategoryChanged,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DropdownButtonFormField<TransactionSort>(
+                    initialValue: sort,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: strings.sort,
+                      prefixIcon: const Icon(Icons.sort_rounded),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 11,
+                      ),
+                    ),
+                    items: TransactionSort.values
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(
+                              _sortLabel(item, strings),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        onSortChanged(value);
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ],

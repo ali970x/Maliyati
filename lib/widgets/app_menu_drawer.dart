@@ -6,8 +6,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../config/app_config.dart';
 import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
+import '../models/transaction.dart';
 import '../services/app_lock_service.dart';
 import '../services/google_drive_backup_service.dart';
 import '../services/smart_clipboard_service.dart';
@@ -67,6 +69,18 @@ class AppMenuScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _SettingsCard(
+            icon: Icons.category_rounded,
+            title: 'Categories',
+            subtitle: 'Rename, add and choose where each category appears',
+            onTap: () =>
+                _open(context, CategorySettingsScreen(controller: controller)),
+          ),
+          const SizedBox(height: 12),
+          if (!kIsWeb) ...[
+            const _FloatingQuickInputSettingsCard(),
+            const SizedBox(height: 12),
+          ],
+          _SettingsCard(
             icon: Icons.currency_exchange_rounded,
             title: 'Exchange rate',
             subtitle: 'LBP value used for conversion',
@@ -123,7 +137,7 @@ class AppMenuScreen extends StatelessWidget {
           _SettingsCard(
             icon: Icons.info_outline_rounded,
             title: 'About application',
-            subtitle: 'Version, privacy and information',
+            subtitle: 'Version ${AppConfig.fullVersion}',
             onTap: () => _open(context, const AboutApplicationScreen()),
           ),
           const SizedBox(height: 18),
@@ -192,15 +206,34 @@ class AboutApplicationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-              'Version 1.4.0',
+                    'Version ${AppConfig.fullVersion}',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: const [
+                      _VersionPill(
+                        label: 'Flutter',
+                        value: AppConfig.fullVersion,
+                      ),
+                      _VersionPill(
+                        label: 'Server',
+                        value: AppConfig.fullVersion,
+                      ),
+                      _VersionPill(
+                        label: 'Build',
+                        value: AppConfig.buildNumber,
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 18),
                   Text(
-                    'Maliyati helps you manage income, expenses, Cash and Wish Money wallets, backups, and financial insights in one private place.',
+                    'Maliyati helps you manage income, expenses, Cash and Whish Money wallets, backups, and financial insights in one private place.',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
@@ -267,6 +300,32 @@ class _AboutLinkCard extends StatelessWidget {
   );
 }
 
+class _VersionPill extends StatelessWidget {
+  const _VersionPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$label $value',
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: theme.colorScheme.onPrimaryContainer,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
 class LanguagePickerScreen extends StatelessWidget {
   const LanguagePickerScreen({super.key, required this.controller});
   final DashboardController controller;
@@ -287,10 +346,12 @@ class LanguagePickerScreen extends StatelessWidget {
             icon: language == AppLanguage.english
                 ? Icons.language_rounded
                 : Icons.translate_rounded,
-            title: language == AppLanguage.english ? 'English' : 'العربية',
+            title: language == AppLanguage.english
+                ? 'English'
+                : 'Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©',
             subtitle: language == AppLanguage.english
                 ? 'Use the app in English'
-                : 'استخدم التطبيق باللغة العربية',
+                : 'Ø§Ø³ØªØ®Ø¯Ù… Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¨Ø§Ù„Ù„ØºØ© Ø§Ù„Ø¹Ø±Ø¨ÙŠØ©',
             trailing: controller.language == language
                 ? const Icon(
                     Icons.check_circle_rounded,
@@ -368,12 +429,12 @@ class _FloatingQuickInputSettingsCardState
 
   @override
   Widget build(BuildContext context) => _SettingsCard(
-    icon: Icons.open_in_new_rounded,
-    title: 'Floating quick input',
+    icon: Icons.translate_rounded,
+    title: 'Floating script button',
     subtitle: _service.isSupported
         ? (_enabled
-              ? 'Floating button is on'
-              : 'Show a button above other apps')
+              ? 'On: tap it to paste clipboard into Input by script'
+              : 'Show a Google Translate style button above other apps')
         : 'Available on Android only',
     trailing: Switch(
       value: _enabled,
@@ -414,6 +475,273 @@ class AccountSettingsScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LegacyCategorySettingsScreen extends StatefulWidget {
+  const _LegacyCategorySettingsScreen({required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  State<_LegacyCategorySettingsScreen> createState() =>
+      _LegacyCategorySettingsScreenState();
+}
+
+class _LegacyCategorySettingsScreenState
+    extends State<_LegacyCategorySettingsScreen> {
+  late List<CategoryRule> _rules;
+  final _newNameController = TextEditingController();
+  final Set<TransactionType> _newStatuses = {TransactionType.expense};
+
+  @override
+  void initState() {
+    super.initState();
+    _rules = widget.controller.categoryRules.toList();
+  }
+
+  @override
+  void dispose() {
+    _newNameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Categories')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: [
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: const BorderSide(color: Color(0xFFD8E2EA)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Add category',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _newNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Category name',
+                      prefixIcon: Icon(Icons.category_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _StatusPicker(
+                    selected: _newStatuses,
+                    onChanged: (values) =>
+                        setState(() => _replaceStatuses(_newStatuses, values)),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _addCategory,
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('Add category'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          for (var index = 0; index < _rules.length; index += 1) ...[
+            _CategoryRuleCard(
+              key: ValueKey('${_rules[index].name}-$index'),
+              rule: _rules[index],
+              onChanged: (rule) => _updateRule(index, rule),
+              onDelete: () => _deleteRule(index),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _addCategory() {
+    final name = _newNameController.text.trim();
+    if (name.isEmpty || _newStatuses.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a name and choose a status.')),
+      );
+      return;
+    }
+    if (_rules.any((rule) => rule.name.toLowerCase() == name.toLowerCase())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This category already exists.')),
+      );
+      return;
+    }
+    setState(() {
+      _rules = [
+        ..._rules,
+        CategoryRule(name: name, statuses: {..._newStatuses}),
+      ]..sort((a, b) => a.name.compareTo(b.name));
+      _newNameController.clear();
+      _newStatuses
+        ..clear()
+        ..add(TransactionType.expense);
+    });
+    _save();
+  }
+
+  void _updateRule(int index, CategoryRule rule) {
+    setState(() {
+      _rules[index] = rule;
+      _rules.sort((a, b) => a.name.compareTo(b.name));
+    });
+    _save();
+  }
+
+  void _deleteRule(int index) {
+    setState(() => _rules.removeAt(index));
+    _save();
+  }
+
+  void _replaceStatuses(
+    Set<TransactionType> target,
+    Set<TransactionType> values,
+  ) {
+    target
+      ..clear()
+      ..addAll(values);
+  }
+
+  Future<void> _save() => widget.controller.saveCategoryRules(_rules);
+}
+
+class _CategoryRuleCard extends StatefulWidget {
+  const _CategoryRuleCard({
+    super.key,
+    required this.rule,
+    required this.onChanged,
+    required this.onDelete,
+  });
+
+  final CategoryRule rule;
+  final ValueChanged<CategoryRule> onChanged;
+  final VoidCallback onDelete;
+
+  @override
+  State<_CategoryRuleCard> createState() => _CategoryRuleCardState();
+}
+
+class _CategoryRuleCardState extends State<_CategoryRuleCard> {
+  late final TextEditingController _nameController;
+  late Set<TransactionType> _statuses;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.rule.name);
+    _statuses = {...widget.rule.statuses};
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFD8E2EA)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Name',
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _emitChange(),
+                    onEditingComplete: _emitChange,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Delete',
+                  onPressed: widget.onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _StatusPicker(
+              selected: _statuses,
+              onChanged: (values) {
+                setState(() => _statuses = values);
+                _emitChange();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _emitChange() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty || _statuses.isEmpty) return;
+    widget.onChanged(CategoryRule(name: name, statuses: _statuses));
+  }
+}
+
+class _StatusPicker extends StatelessWidget {
+  const _StatusPicker({required this.selected, required this.onChanged});
+
+  final Set<TransactionType> selected;
+  final ValueChanged<Set<TransactionType>> onChanged;
+
+  static const _types = [
+    TransactionType.expense,
+    TransactionType.income,
+    TransactionType.reserveable,
+    TransactionType.debt,
+    TransactionType.transfer,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final type in _types)
+          FilterChip(
+            label: Text(type.label),
+            selected: selected.contains(type),
+            onSelected: (isSelected) {
+              final next = {...selected};
+              if (isSelected) {
+                next.add(type);
+              } else {
+                next.remove(type);
+              }
+              onChanged(next);
+            },
+          ),
+      ],
     );
   }
 }
@@ -475,9 +803,9 @@ class _SheetConnectionScreenState extends State<SheetConnectionScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google Sheet error: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Google Sheet error: $error')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -539,8 +867,8 @@ class _SheetConnectionScreenState extends State<SheetConnectionScreen> {
           onPressed: _saving
               ? null
               : () => _runSheetAction(
-                    widget.controller.importGoogleSheetToFirestore,
-                  ),
+                  widget.controller.importGoogleSheetToFirestore,
+                ),
           icon: const Icon(Icons.download_rounded),
           label: const Text('Import from Google Sheet'),
         ),
@@ -549,14 +877,205 @@ class _SheetConnectionScreenState extends State<SheetConnectionScreen> {
           onPressed: _saving
               ? null
               : () => _runSheetAction(
-                    widget.controller.exportCurrentTransactionsToSheet,
-                  ),
+                  widget.controller.exportCurrentTransactionsToSheet,
+                ),
           icon: const Icon(Icons.upload_rounded),
           label: const Text('Export to Google Sheet'),
         ),
       ],
     ),
   );
+}
+
+class CategorySettingsScreen extends StatefulWidget {
+  const CategorySettingsScreen({super.key, required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  State<CategorySettingsScreen> createState() => _CategorySettingsScreenState();
+}
+
+class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
+  late List<_EditableCategoryRule> _rules;
+
+  static const _statusOptions = [
+    TransactionType.expense,
+    TransactionType.income,
+    TransactionType.reserveable,
+    TransactionType.debt,
+    TransactionType.transfer,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _rules = widget.controller.categoryRules
+        .map(
+          (rule) => _EditableCategoryRule(
+            controller: TextEditingController(text: rule.name),
+            statuses: {...rule.statuses},
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    for (final rule in _rules) {
+      rule.controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    await widget.controller.saveCategoryRules(
+      _rules
+          .map(
+            (rule) => CategoryRule(
+              name: rule.controller.text,
+              statuses: rule.statuses,
+            ),
+          )
+          .toList(),
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Categories saved.')));
+  }
+
+  void _addCategory() {
+    setState(() {
+      _rules.insert(
+        0,
+        _EditableCategoryRule(
+          controller: TextEditingController(),
+          statuses: {TransactionType.expense},
+        ),
+      );
+    });
+  }
+
+  void _removeCategory(int index) {
+    setState(() {
+      final removed = _rules.removeAt(index);
+      removed.controller.dispose();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => _PlainSettingsScaffold(
+    title: 'Categories',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Choose where every category appears. Expense categories will show only when you add an Expense, income categories only with Income, and so on.',
+          style: TextStyle(color: Color(0xFF77717D)),
+        ),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _addCategory,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add category'),
+        ),
+        const SizedBox(height: 14),
+        for (var index = 0; index < _rules.length; index += 1) ...[
+          _CategoryRuleEditor(
+            rule: _rules[index],
+            statusOptions: _statusOptions,
+            onChanged: () => setState(() {}),
+            onRemove: () => _removeCategory(index),
+          ),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: _save,
+          icon: const Icon(Icons.save_rounded),
+          label: const Text('Save categories'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _EditableCategoryRule {
+  _EditableCategoryRule({required this.controller, required this.statuses});
+
+  final TextEditingController controller;
+  final Set<TransactionType> statuses;
+}
+
+class _CategoryRuleEditor extends StatelessWidget {
+  const _CategoryRuleEditor({
+    required this.rule,
+    required this.statusOptions,
+    required this.onChanged,
+    required this.onRemove,
+  });
+
+  final _EditableCategoryRule rule;
+  final List<TransactionType> statusOptions;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFFFF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE6E0EC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: rule.controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Category name',
+                    prefixIcon: Icon(Icons.category_rounded),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: 'Remove',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final status in statusOptions)
+                FilterChip(
+                  label: Text(status.label),
+                  selected: rule.statuses.contains(status),
+                  onSelected: (selected) {
+                    if (selected) {
+                      rule.statuses.add(status);
+                    } else {
+                      rule.statuses.remove(status);
+                    }
+                    onChanged();
+                  },
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class ExchangeRateScreen extends StatefulWidget {
@@ -1150,7 +1669,6 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
   List<GoogleDriveBackupFile> _driveBackups = const [];
   List<Map<String, dynamic>> _localBackups = const [];
   bool _busy = false;
-  int _section = 0;
   double _progress = 0;
   String _progressLabel = '';
 
@@ -1164,56 +1682,36 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     setState(() {
       _busy = true;
       _progress = .15;
-      _progressLabel = 'Preparing Google Drive backup…';
+      _progressLabel = 'Preparing Google Drive backup...';
     });
     try {
       setState(() {
         _progress = .55;
-        _progressLabel = 'Uploading to Google Drive…';
+        _progressLabel = 'Uploading to Google Drive...';
       });
       await widget.controller.createGoogleDriveBackup();
       await _load();
-      if (mounted) {
-        setState(() {
-          _progress = 1;
-          _progressLabel = 'Google Drive backup complete';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google Drive backup created.')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        final raw = error.toString();
-        final message =
-            raw.contains('Drive API has not been used') ||
-                raw.contains('Drive API is disabled')
-            ? 'Google Drive API is disabled for this project. Enable it in Google Cloud, then try again.'
-            : raw;
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
-    }
-  }
-
-  Future<void> _load() async {
-    final local = await widget.controller.localBackups();
-    List<GoogleDriveBackupFile> drive = const [];
-    try {
-      drive = await widget.controller.googleDriveBackups();
-    } catch (_) {
-      // The local backup list remains usable while Drive is unavailable.
-    }
-    if (mounted) {
+      if (!mounted) return;
       setState(() {
-        _localBackups = local;
-        _driveBackups = drive;
+        _progress = 1;
+        _progressLabel = 'Google Drive backup complete';
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Drive backup created.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      final raw = error.toString();
+      final message =
+          raw.contains('Drive API has not been used') ||
+              raw.contains('Drive API is disabled')
+          ? 'Google Drive API is disabled for this project. Enable it in Google Cloud, then try again.'
+          : raw;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -1221,14 +1719,14 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     setState(() {
       _busy = true;
       _progress = .15;
-      _progressLabel = 'Preparing local backup…';
+      _progressLabel = 'Preparing local backup...';
     });
     try {
       final now = DateTime.now().toIso8601String().replaceAll(':', '-');
       final json = widget.controller.createBackupJson();
       setState(() {
         _progress = .55;
-        _progressLabel = 'Choose where to save the backup…';
+        _progressLabel = 'Choose where to save the backup...';
       });
       final savedPath = await FilePicker.platform.saveFile(
         dialogTitle: 'Save Maliyati backup',
@@ -1240,66 +1738,89 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       if (savedPath == null) return;
       await widget.controller.createLocalBackup();
       await _load();
-      if (mounted) {
-        setState(() {
-          _progress = 1;
-          _progressLabel = 'Local backup saved successfully';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Local backup saved successfully.')),
-        );
-      }
+      if (!mounted) return;
+      setState(() {
+        _progress = 1;
+        _progressLabel = 'Local backup saved successfully';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Local backup saved successfully.')),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _restore(GoogleDriveBackupFile backup) async {
-    setState(() => _busy = true);
+  Future<void> _load() async {
+    final local = await widget.controller.localBackups();
+    List<GoogleDriveBackupFile> drive = const [];
+    try {
+      drive = await widget.controller.googleDriveBackups();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _localBackups = local;
+      _driveBackups = drive;
+    });
+  }
+
+  Future<void> _restoreDriveBackup(GoogleDriveBackupFile backup) async {
+    setState(() {
+      _busy = true;
+      _progress = .45;
+      _progressLabel = 'Restoring Google Drive backup...';
+    });
     try {
       final count = await widget.controller.restoreGoogleDriveBackup(backup.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Restored $count transactions.')),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-      }
+      if (!mounted) return;
+      setState(() {
+        _progress = 1;
+        _progressLabel = 'Restored $count transactions';
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Restored $count transactions.')));
     } finally {
-      if (mounted) {
-        setState(() => _busy = false);
-      }
+      if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _restoreLocal(String id) async {
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _progress = .45;
+      _progressLabel = 'Restoring local backup...';
+    });
     try {
       final count = await widget.controller.restoreLocalBackup(id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Restored $count transactions from local backup.'),
-          ),
-        );
-      }
+      if (!mounted) return;
+      setState(() {
+        _progress = 1;
+        _progressLabel = 'Restored $count transactions';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Restored $count transactions from local backup.'),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _browseLocalBackup() async {
+  Future<void> _browseBackupFile({required bool fromGoogleDrive}) async {
     setState(() {
       _busy = true;
       _progress = .2;
-      _progressLabel = 'Choose a local Maliyati backup…';
+      _progressLabel = fromGoogleDrive
+          ? 'Open Google Drive and choose a Maliyati backup...'
+          : 'Choose a local Maliyati backup...';
     });
     try {
       final result = await FilePicker.platform.pickFiles(
+        dialogTitle: fromGoogleDrive
+            ? 'Choose Maliyati backup from Google Drive'
+            : 'Choose local Maliyati backup',
         type: FileType.custom,
         allowedExtensions: const ['json'],
         withData: true,
@@ -1308,7 +1829,9 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
       if (bytes == null) return;
       setState(() {
         _progress = .65;
-        _progressLabel = 'Restoring local backup…';
+        _progressLabel = fromGoogleDrive
+            ? 'Restoring Google Drive backup...'
+            : 'Restoring local backup...';
       });
       final count = await widget.controller.restoreBackupJson(
         utf8.decode(bytes),
@@ -1319,14 +1842,19 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         _progressLabel = 'Restored $count transactions';
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Restored $count transactions from file.')),
+        SnackBar(
+          content: Text(
+            fromGoogleDrive
+                ? 'Restored $count transactions from Google Drive file.'
+                : 'Restored $count transactions from local file.',
+          ),
+        ),
       );
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Restore failed: $error')));
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Restore failed: $error')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1340,21 +1868,49 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
         children: [
           ListTile(
             leading: const Icon(Icons.cloud_download_rounded),
-            title: const Text('Google Drive backup'),
-            subtitle: const Text('Browse backups saved in Google Drive'),
+            title: const Text('Restore Google Drive Backup'),
+            subtitle: const Text('Open Drive and choose a JSON backup file'),
             onTap: () {
               Navigator.pop(sheetContext);
-              setState(() => _section = 2);
-              _load();
+              _browseBackupFile(fromGoogleDrive: true);
             },
           ),
           ListTile(
             leading: const Icon(Icons.folder_open_rounded),
-            title: const Text('Local backup file'),
+            title: const Text('Restore Local Backup'),
             subtitle: const Text('Choose a JSON backup from this device'),
             onTap: () {
               Navigator.pop(sheetContext);
-              _browseLocalBackup();
+              _browseBackupFile(fromGoogleDrive: false);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _chooseBackupTarget() => showModalBottomSheet<void>(
+    context: context,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.cloud_upload_rounded),
+            title: const Text('Backup to Google Drive'),
+            subtitle: const Text('Upload a cloud copy to your account'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _backup();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.save_alt_rounded),
+            title: const Text('Local Backup'),
+            subtitle: const Text('Save a JSON file on this device'),
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _backupLocal();
             },
           ),
         ],
@@ -1364,159 +1920,80 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.controller.user;
     return Scaffold(
       appBar: AppBar(title: const Text('Backup and Restore')),
-      body: Row(
+      body: ListView(
+        padding: const EdgeInsets.all(20),
         children: [
-          NavigationRail(
-            selectedIndex: _section,
-            labelType: NavigationRailLabelType.all,
-            onDestinationSelected: (index) => setState(() => _section = index),
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.cloud_outlined),
-                selectedIcon: Icon(Icons.cloud_rounded),
-                label: Text('Drive'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.phone_android_outlined),
-                selectedIcon: Icon(Icons.phone_android_rounded),
-                label: Text('Local'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.restore_rounded),
-                selectedIcon: Icon(Icons.restore_rounded),
-                label: Text('Restore'),
-              ),
-            ],
+          if (_progressLabel.isNotEmpty) ...[
+            LinearProgressIndicator(value: _progress),
+            const SizedBox(height: 8),
+            Text(_progressLabel),
+            const SizedBox(height: 16),
+          ],
+          _BackupRow(
+            title: 'Backup',
+            subtitle: 'Choose Google Drive or local file',
+            onTap: _busy ? null : _chooseBackupTarget,
+            trailing: _busy
+                ? const CircularProgressIndicator()
+                : const Icon(Icons.backup_rounded),
           ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                if (_progressLabel.isNotEmpty) ...[
-                  LinearProgressIndicator(value: _progress),
-                  const SizedBox(height: 8),
-                  Text(_progressLabel),
-                  const SizedBox(height: 16),
-                ],
-                if (_section == 0) ...[
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundImage:
-                            (user?.photoUrl?.trim().isNotEmpty ?? false)
-                            ? NetworkImage(user!.photoUrl!)
-                            : null,
-                        child: (user?.photoUrl?.trim().isNotEmpty ?? false)
-                            ? null
-                            : const Icon(
-                                Icons.account_circle_rounded,
-                                size: 34,
-                              ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Google Drive',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            Text(user?.email ?? 'Connect your Google account'),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _BackupRow(
-                    title: 'Back up to Google Drive',
-                    subtitle: 'Create a secure cloud copy',
-                    onTap: _busy ? null : _backup,
-                    trailing: _busy
-                        ? const CircularProgressIndicator()
-                        : const Icon(Icons.cloud_upload_rounded),
-                  ),
-                  SwitchListTile.adaptive(
-                    title: const Text('Auto backup'),
-                    subtitle: const Text(
-                      'Back up when Maliyati is opened after midnight.',
-                    ),
-                    value: widget.controller.isAutoBackupEnabled,
-                    onChanged: _busy
-                        ? null
-                        : widget.controller.updateAutoBackupEnabled,
-                  ),
-                ] else if (_section == 1) ...[
-                  const Text(
-                    'Local backup',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text('Save a private copy only on this device.'),
-                  const SizedBox(height: 20),
-                  _BackupRow(
-                    title: 'Create local backup',
-                    subtitle: 'This device only',
-                    onTap: _busy ? null : _backupLocal,
-                    trailing: const Icon(Icons.save_alt_rounded),
-                  ),
-                ] else ...[
-                  _BackupRow(
-                    title: 'Restore a backup',
-                    subtitle: 'Choose Google Drive or a local JSON file',
-                    onTap: _busy ? null : _chooseRestoreSource,
-                    trailing: const Icon(Icons.folder_open_rounded),
-                  ),
-                  const SizedBox(height: 12),
-                  _BackupRow(
-                    title: 'Refresh backups',
-                    subtitle: 'Load local and Google Drive backup lists',
-                    onTap: _busy ? null : _load,
-                    trailing: const Icon(Icons.refresh_rounded),
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Google Drive backups',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  for (final backup in _driveBackups)
-                    ListTile(
-                      leading: const Icon(Icons.cloud_done_rounded),
-                      title: Text(backup.name),
-                      trailing: TextButton(
-                        onPressed: _busy ? null : () => _restore(backup),
-                        child: const Text('Restore'),
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Local backups',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  for (final backup in _localBackups)
-                    ListTile(
-                      leading: const Icon(Icons.phone_android_rounded),
-                      title: Text('${backup['label'] ?? 'Local backup'}'),
-                      trailing: TextButton(
-                        onPressed: _busy
-                            ? null
-                            : () => _restoreLocal('${backup['id']}'),
-                        child: const Text('Restore'),
-                      ),
-                    ),
-                ],
-              ],
+          const SizedBox(height: 12),
+          _BackupRow(
+            title: 'Restore Backup',
+            subtitle: 'Choose Google Drive Backup or Local Backup',
+            onTap: _busy ? null : _chooseRestoreSource,
+            trailing: const Icon(Icons.folder_open_rounded),
+          ),
+          const SizedBox(height: 12),
+          _BackupRow(
+            title: 'Refresh Backups',
+            subtitle: 'Load backup lists again',
+            onTap: _busy ? null : _load,
+            trailing: const Icon(Icons.refresh_rounded),
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile.adaptive(
+            title: const Text('Auto backup'),
+            subtitle: const Text(
+              'Back up when Maliyati is opened after midnight.',
             ),
+            value: widget.controller.isAutoBackupEnabled,
+            onChanged: _busy ? null : widget.controller.updateAutoBackupEnabled,
           ),
+          const SizedBox(height: 16),
+          const Text(
+            'Google Drive backups',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          for (final backup in _driveBackups)
+            ListTile(
+              leading: const Icon(Icons.cloud_done_rounded),
+              title: Text(backup.name),
+              subtitle: Text(backup.modifiedAt?.toLocal().toString() ?? ''),
+              trailing: TextButton(
+                onPressed: _busy ? null : () => _restoreDriveBackup(backup),
+                child: const Text('Restore'),
+              ),
+            ),
+          const SizedBox(height: 12),
+          const Text(
+            'Local backups',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          for (final backup in _localBackups)
+            ListTile(
+              leading: const Icon(Icons.phone_android_rounded),
+              title: Text('${backup['label'] ?? 'Local backup'}'),
+              subtitle: Text('${backup['savedAt'] ?? ''}'),
+              trailing: TextButton(
+                onPressed: _busy
+                    ? null
+                    : () => _restoreLocal('${backup['id']}'),
+                child: const Text('Restore'),
+              ),
+            ),
         ],
       ),
     );

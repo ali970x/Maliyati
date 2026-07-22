@@ -31,7 +31,11 @@ Future<void> startFinanceTrackerApp({
 }) async {
   WidgetsFlutterBinding.ensureInitialized();
   registerPlatformPlugins?.call();
-  await FirebaseBootstrap.initializeIfConfigured();
+  if (kIsWeb) {
+    unawaited(FirebaseBootstrap.initializeIfConfigured());
+  } else {
+    await FirebaseBootstrap.initializeIfConfigured();
+  }
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle.dark.copyWith(
       statusBarColor: Colors.transparent,
@@ -72,7 +76,7 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) => MaterialApp(
-        title: AppConfig.appName,
+        title: '${AppConfig.appName} ${AppConfig.fullVersion}',
         debugShowCheckedModeBanner: false,
         supportedLocales: const [Locale('en'), Locale('ar')],
         localizationsDelegates: const [
@@ -237,9 +241,6 @@ class FinanceHome extends StatefulWidget {
 class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   final _appLock = AppLockService();
   int _selectedIndex = 0;
-  int _smartInputRequest = 0;
-  String? _smartInputScript;
-  bool _smartInputAutoRun = false;
   final _smartClipboard = SmartClipboardService.instance;
   StreamSubscription<SharedMedia>? _shareSubscription;
   bool _isAppLocked = false;
@@ -309,12 +310,63 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _selectedIndex = 2;
-      _smartInputScript = script;
-      _smartInputAutoRun = autoRun;
-      _smartInputRequest += 1;
-    });
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        return FractionallySizedBox(
+          heightFactor: 0.92,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 10, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.data_object_rounded,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Input by script',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: AddTransactionScreen(
+                  controller: widget.controller,
+                  initialScript: script,
+                  autoRunInitialScript: autoRun,
+                  scriptOnly: true,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _initializeShareHandler() async {
@@ -418,12 +470,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
         final screens = [
           DashboardScreen(controller: controller, onOpenMenu: _openMenu),
           TransactionsScreen(controller: controller),
-          AddTransactionScreen(
-            key: ValueKey('smart-input-$_smartInputRequest'),
-            controller: controller,
-            initialScript: _smartInputScript,
-            autoRunInitialScript: _smartInputAutoRun,
-          ),
+          AddTransactionScreen(controller: controller),
           AnalyticsScreen(controller: controller),
           SpendingAlertsScreen(controller: controller),
           if (controller.isAdmin) AdminScreen(controller: controller),
@@ -439,8 +486,13 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
         );
         final navigationBar = _CyberNavigationBar(
           selectedIndex: activeIndex,
-          onDestinationSelected: (index) =>
-              setState(() => _selectedIndex = index),
+          onDestinationSelected: (index) {
+            if (index == 2) {
+              _showAddOptions();
+              return;
+            }
+            setState(() => _selectedIndex = index);
+          },
           items: [
             _CyberNavData(
               icon: Icons.dashboard_outlined,
@@ -551,6 +603,41 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
                         child: navigationBar,
                       ),
                     ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showAddOptions() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.edit_note_rounded),
+                  title: const Text('Manual transaction'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    setState(() => _selectedIndex = 2);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.data_object_rounded),
+                  title: const Text('Input by script'),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _openSmartInput('', autoRun: false);
+                  },
+                ),
+              ],
             ),
           ),
         );

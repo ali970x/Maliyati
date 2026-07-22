@@ -1,0 +1,99 @@
+import '../models/transaction.dart';
+
+class LabelNormalizer {
+  const LabelNormalizer._();
+
+  static const cash = 'Cash';
+  static const wishMoney = 'Whish Money';
+
+  static String wallet(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final normalized = _key(trimmed);
+    if (normalized.contains('whish') ||
+        normalized.contains('wesh') ||
+        normalized.contains('wish')) {
+      return wishMoney;
+    }
+    if (normalized == 'mywallet' || normalized == 'wallet') {
+      return cash;
+    }
+    if (normalized == 'cash') {
+      return cash;
+    }
+    return text(trimmed);
+  }
+
+  static String category(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    return switch (_key(trimmed)) {
+      'masroufbayt' ||
+      'masrofbayt' ||
+      'houseexpense' ||
+      'homeexpense' => 'Home expenses',
+      'dyefe' || 'diyafe' || 'hospitality' => 'Hospitality',
+      'dyoune' || 'dyoun' || 'dion' || 'debts' => 'Debt payments',
+      'eshtiraket' || 'ishtiraket' || 'subscriptions' => 'Subscriptions',
+      'na2rashe' ||
+      'nakrashe' ||
+      'smallpurchase' ||
+      'smallpurchases' => 'Small purchases',
+      'incomeinternet' => 'Internet income',
+      'incomezougeib' || 'incomezougaib' => 'Zougeib income',
+      'incomeother' => 'Other income',
+      'incomeaboudi' => 'Aboudi income',
+      'wishmoney' || 'whishmoney' || 'weshmoney' => wishMoney,
+      'wishtopup' || 'whishtopup' => 'Whish top up',
+      'wishreceived' || 'whishreceived' => 'Whish received',
+      'wishtransfer' || 'whishtransfer' => 'Whish transfer',
+      'wishexchange' || 'whishexchange' => 'Whish exchange',
+      _ => text(trimmed),
+    };
+  }
+
+  static String source(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'app') {
+      return TransactionSource.application.label;
+    }
+    if (normalized == 'google sheet' || normalized == 'sheet') {
+      return TransactionSource.googleSheet.label;
+    }
+    if (normalized == 'gemini' || normalized == 'manual') {
+      return TransactionSource.script.label;
+    }
+    return text(value.trim());
+  }
+
+  static String text(String value) {
+    var output = value.trim();
+    output = output.replaceAll(
+      RegExp(r'\bwhish\s+money\b', caseSensitive: false),
+      wishMoney,
+    );
+    output = output.replaceAll(
+      RegExp(r'\bwesh\s+money\b', caseSensitive: false),
+      wishMoney,
+    );
+    output = output.replaceAll(
+      RegExp(r'\bwish\s+money\b', caseSensitive: false),
+      wishMoney,
+    );
+    output = output.replaceAll(
+      RegExp(r'\bwhish\b', caseSensitive: false),
+      'Whish',
+    );
+    return output.replaceAll(
+      RegExp(r'\bwesh\b', caseSensitive: false),
+      'Whish',
+    );
+  }
+
+  static String _key(String value) =>
+      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '');
+}

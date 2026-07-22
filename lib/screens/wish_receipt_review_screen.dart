@@ -18,7 +18,8 @@ class WishReceiptReviewScreen extends StatefulWidget {
   final String imagePath;
 
   @override
-  State<WishReceiptReviewScreen> createState() => _WishReceiptReviewScreenState();
+  State<WishReceiptReviewScreen> createState() =>
+      _WishReceiptReviewScreenState();
 }
 
 class _WishReceiptReviewScreenState extends State<WishReceiptReviewScreen> {
@@ -38,7 +39,7 @@ class _WishReceiptReviewScreenState extends State<WishReceiptReviewScreen> {
       final draft = await _service.read(widget.imagePath);
       if (mounted) setState(() => _draft = draft);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not read this Wish receipt.');
+      if (mounted) setState(() => _error = 'Could not read this Whish receipt.');
     }
   }
 
@@ -60,14 +61,17 @@ class _WishReceiptReviewScreenState extends State<WishReceiptReviewScreen> {
     final draft = _draft;
     if (draft == null || draft.amount <= 0 || _saving) return;
     if (draft.id.isNotEmpty &&
-        widget.controller.transactions.any((item) => item.id?.trim() == draft.id)) {
+        widget.controller.transactions.any(
+          (item) => item.id?.trim() == draft.id,
+        )) {
       setState(() => _error = 'This Wish Transaction ID was already added.');
       return;
     }
     setState(() => _saving = true);
     try {
       final image = await _service.persistImage(draft);
-      if (draft.kind == WishReceiptKind.exchange && draft.exchangeRate != null) {
+      if (draft.kind == WishReceiptKind.exchange &&
+          draft.exchangeRate != null) {
         await widget.controller.updateExchangeRate(draft.exchangeRate!);
       }
       await widget.controller.addTransaction(
@@ -75,7 +79,10 @@ class _WishReceiptReviewScreenState extends State<WishReceiptReviewScreen> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Could not add this receipt. Please try again.');
+      if (mounted)
+        setState(
+          () => _error = 'Could not add this receipt. Please try again.',
+        );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -85,29 +92,49 @@ class _WishReceiptReviewScreenState extends State<WishReceiptReviewScreen> {
   Widget build(BuildContext context) {
     final draft = _draft;
     return Scaffold(
-      appBar: AppBar(title: const Text('Review Wish receipt')),
+      appBar: AppBar(title: const Text('Review Whish receipt')),
       body: draft == null
-          ? Center(child: _error == null ? const CircularProgressIndicator() : Text(_error!))
+          ? Center(
+              child: _error == null
+                  ? const CircularProgressIndicator()
+                  : Text(_error!),
+            )
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Image.file(File(draft.imagePath), height: 180, fit: BoxFit.cover),
+                  child: Image.file(
+                    File(draft.imagePath),
+                    height: 180,
+                    fit: BoxFit.cover,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   draft.kind == WishReceiptKind.exchange
                       ? 'Currency exchange — neutral record'
                       : 'Confirm the extracted details before adding.',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 const SizedBox(height: 10),
-                _ReviewField(label: 'Transaction ID', value: draft.id.isEmpty ? 'Not found' : draft.id),
-                _ReviewField(label: 'Wallet', value: 'Wish Money'),
-                _ReviewField(label: 'Amount', value: '${draft.amount} ${draft.currency.label}'),
+                _ReviewField(
+                  label: 'Transaction ID',
+                  value: draft.id.isEmpty ? 'Not found' : draft.id,
+                ),
+                _ReviewField(label: 'Wallet', value: 'Whish Money'),
+                _ReviewField(
+                  label: 'Amount',
+                  value: '${draft.amount} ${draft.currency.label}',
+                ),
                 if (draft.exchangeRate != null)
-                  _ReviewField(label: 'Wish exchange rate', value: '1 USD = ${draft.exchangeRate!.toStringAsFixed(0)} LBP'),
+                  _ReviewField(
+                    label: 'Whish exchange rate',
+                    value:
+                        '1 USD = ${draft.exchangeRate!.toStringAsFixed(0)} LBP',
+                  ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.calendar_month_rounded),
@@ -122,32 +149,53 @@ class _WishReceiptReviewScreenState extends State<WishReceiptReviewScreen> {
                 ),
                 DropdownButtonFormField<TransactionType>(
                   initialValue: draft.type,
-                  decoration: const InputDecoration(labelText: 'Effect on Wish balance'),
+                  decoration: const InputDecoration(
+                    labelText: 'Effect on Wish balance',
+                  ),
                   items: const [
-                    DropdownMenuItem(value: TransactionType.income, child: Text('Money received (+)')),
-                    DropdownMenuItem(value: TransactionType.expense, child: Text('Money sent / spent (−)')),
-                    DropdownMenuItem(value: TransactionType.unknown, child: Text('Neutral — do not change balance')),
+                    DropdownMenuItem(
+                      value: TransactionType.income,
+                      child: Text('Money received (+)'),
+                    ),
+                    DropdownMenuItem(
+                      value: TransactionType.expense,
+                      child: Text('Money sent / spent (−)'),
+                    ),
+                    DropdownMenuItem(
+                      value: TransactionType.unknown,
+                      child: Text('Neutral — do not change balance'),
+                    ),
                   ],
                   onChanged: (value) {
-                    if (value != null) setState(() => _draft = draft.copyWith(type: value));
+                    if (value != null)
+                      setState(() => _draft = draft.copyWith(type: value));
                   },
                 ),
                 const SizedBox(height: 16),
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
-                    child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ),
                 FilledButton.icon(
                   onPressed: _saving ? null : _save,
                   icon: _saving
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Icon(Icons.add_task_rounded),
                   label: const Text('Add to Maliyati Wallet'),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'The Wish receipt image is saved with this transaction. The share time is kept in its notes.',
+                  'The Whish receipt image is saved with this transaction. The share time is kept in its notes.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -163,12 +211,18 @@ class _ReviewField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          children: [
-            SizedBox(width: 130, child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800))),
-            Expanded(child: Text(value)),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 5),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 130,
+          child: Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
         ),
-      );
+        Expanded(child: Text(value)),
+      ],
+    ),
+  );
 }
