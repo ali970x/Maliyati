@@ -631,7 +631,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
     setState(() => _isSaving = true);
     try {
-      await widget.controller.settleTransaction(
+      final updatedTransaction = await widget.controller.settleTransaction(
         _transaction,
         walletId: request.walletId,
         amountUsd: request.amountUsd,
@@ -639,15 +639,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         conversionRate: widget.controller.exchangeRate,
       );
       if (mounted) {
-        final updated = widget.controller.transactions.where(
-          (item) => item.id == _transaction.id,
-        );
-        if (updated.isNotEmpty) {
-          setState(() {
-            _transaction = updated.first;
-            _loadFormValues(_transaction);
-          });
-        }
+        setState(() {
+          _transaction = updatedTransaction;
+          _loadFormValues(_transaction);
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

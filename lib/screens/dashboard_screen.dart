@@ -564,7 +564,7 @@ class _LightAccountsState extends State<_LightAccounts> {
             title: 'My Wallet',
             usd: widget.wallets.cash.balanceUsd,
             lbp: widget.wallets.cash.balanceLbp,
-            icon: Icons.account_balance_wallet_rounded,
+            imageAsset: 'assets/branding/maliyati_wallet_icon_v2.png',
             color: const Color(0xFF5B1E9A),
             visible: _cashVisible,
             onToggleVisibility: () =>
@@ -2113,8 +2113,12 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
             );
           }
           final transaction = transactions[index - 1];
-          final color = transaction.isIncome
+          final isIncomeFlow = transaction.affectsIncomeStats;
+          final isExpenseFlow = transaction.affectsExpenseStats;
+          final color = isIncomeFlow
               ? const Color(0xFF168A5B)
+              : isExpenseFlow
+              ? const Color(0xFFC74949)
               : transaction.isReserveable
               ? const Color(0xFFD97706)
               : const Color(0xFFC74949);
@@ -2127,8 +2131,10 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
               backgroundColor: color.withValues(alpha: .12),
               foregroundColor: color,
               child: Icon(
-                transaction.isIncome
+                isIncomeFlow
                     ? Icons.south_west_rounded
+                    : isExpenseFlow
+                    ? Icons.north_east_rounded
                     : transaction.isReserveable
                     ? Icons.request_quote_rounded
                     : Icons.north_east_rounded,
@@ -2157,6 +2163,18 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
                   builder: (_) => TransactionDetailScreen(
                     controller: widget.controller,
                     transaction: transaction,
+                  ),
+                ),
+              );
+              if (mounted) setState(() {});
+            },
+            onLongPress: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => TransactionDetailScreen(
+                    controller: widget.controller,
+                    transaction: transaction,
+                    startEditing: true,
                   ),
                 ),
               );
@@ -2227,9 +2245,12 @@ class _WalletHistoryHeader extends StatelessWidget {
                     fit: BoxFit.cover,
                   ),
                 )
-              : Icon(
-                  Icons.account_balance_wallet_rounded,
-                  color: Theme.of(context).colorScheme.primary,
+              : ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.asset(
+                    'assets/branding/maliyati_wallet_icon_v2.png',
+                    fit: BoxFit.cover,
+                  ),
                 ),
         ),
         const SizedBox(width: 13),

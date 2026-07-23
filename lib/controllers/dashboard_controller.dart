@@ -252,12 +252,12 @@ class DashboardController extends ChangeNotifier {
   WalletSummary _walletSummaryFor(List<FinancialTransaction> transactions) =>
       WalletSummary.fromTransactions(
         transactions,
-    cashOpeningUsd: _walletOpeningUsd,
-    cashOpeningLbp: _walletOpeningLbp,
-    wishOpeningUsd: _wishWalletOpeningUsd,
-    wishOpeningLbp: _wishWalletOpeningLbp,
-    ignoredCashTransactionIds: _cashWalletBaselineTransactionIds,
-    ignoredWishTransactionIds: _wishWalletBaselineTransactionIds,
+        cashOpeningUsd: _walletOpeningUsd,
+        cashOpeningLbp: _walletOpeningLbp,
+        wishOpeningUsd: _wishWalletOpeningUsd,
+        wishOpeningLbp: _wishWalletOpeningLbp,
+        ignoredCashTransactionIds: _cashWalletBaselineTransactionIds,
+        ignoredWishTransactionIds: _wishWalletBaselineTransactionIds,
       );
 
   /// Wallet balance shown on the dashboard follows the selected time filter.
@@ -1538,7 +1538,7 @@ class DashboardController extends ChangeNotifier {
     );
   }
 
-  Future<void> settleTransaction(
+  Future<FinancialTransaction> settleTransaction(
     FinancialTransaction transaction, {
     required String walletId,
     DateTime? date,
@@ -1599,6 +1599,14 @@ class DashboardController extends ChangeNotifier {
     );
     await updateTransaction(transaction, settled);
     await addTransaction(settlement);
+    final id = transaction.id?.trim() ?? '';
+    if (id.isEmpty) {
+      return settled;
+    }
+    return _transactions.firstWhere(
+      (item) => item.id?.trim() == id,
+      orElse: () => settled,
+    );
   }
 
   Future<void> archiveTransaction(FinancialTransaction transaction) async {
