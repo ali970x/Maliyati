@@ -120,8 +120,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   _ManualStatus _status = _ManualStatus.expense;
   bool _useWishMoney = false;
   TransactionSource _source = TransactionSource.application;
-  AccountingSettlementStatus _settlementStatus =
-      AccountingSettlementStatus.open;
+  FinancialTransaction? _settlementTarget;
   bool _paidNow = true;
   bool _isSaving = false;
 
@@ -212,6 +211,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                             _ManualStatus.transfer => TransactionType.transfer,
                             _ManualStatus.expense => TransactionType.expense,
                           };
+                          _settlementTarget = null;
                           if (_type == TransactionType.transfer &&
                               _destinationWalletController.text
                                   .trim()
@@ -248,36 +248,30 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           setState(() => _paidNow = value.first),
                     ),
                   ],
-                  if (_showsSettlementStatus) ...[
+                  if (_type == TransactionType.expense ||
+                      _type == TransactionType.income) ...[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<AccountingSettlementStatus>(
-                      initialValue: _settlementStatus,
-                      decoration: _coloredDecoration(
-                        context,
-                        labelText: 'Settlement Status',
-                        icon: Icons.verified_rounded,
-                        color: const Color(0xFF0F766E),
+                    OutlinedButton.icon(
+                      onPressed: _chooseSettlementTarget,
+                      icon: Icon(
+                        _type == TransactionType.expense
+                            ? Icons.payments_rounded
+                            : Icons.savings_rounded,
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: AccountingSettlementStatus.open,
-                          child: Text('open'),
-                        ),
-                        DropdownMenuItem(
-                          value: AccountingSettlementStatus.partial,
-                          child: Text('partial'),
-                        ),
-                        DropdownMenuItem(
-                          value: AccountingSettlementStatus.settled,
-                          child: Text('settled'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _settlementStatus = value);
-                        }
-                      },
+                      label: Text(
+                        _type == TransactionType.expense
+                            ? 'Pay an existing debt'
+                            : 'Collect an existing credit',
+                      ),
                     ),
+                    if (_settlementTarget != null) ...[
+                      const SizedBox(height: 8),
+                      _SettlementTargetTile(
+                        target: _settlementTarget!,
+                        isDebt: _type == TransactionType.expense,
+                        onClear: () => setState(() => _settlementTarget = null),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 12),
                   TextFormField(
@@ -502,6 +496,37 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       ).showSnackBar(const SnackBar(content: Text('Enter USD or LBP amount.')));
       return;
     }
+    final settlementTarget = _settlementTarget;
+    if (settlementTarget != null) {
+      setState(() => _isSaving = true);
+      try {
+        await widget.controller.settleTransaction(
+          settlementTarget,
+          walletId: _selectedWalletId,
+          date: _date,
+          amountUsd: usd,
+          amountLbp: lbp,
+          conversionRate: widget.controller.exchangeRate,
+        );
+        if (!mounted) return;
+        final message = settlementTarget.isDebt
+            ? 'Debt payment saved.'
+            : 'Credit collection saved.';
+        _clear();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.toString())));
+        }
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
+      }
+      return;
+    }
     if (_type == TransactionType.transfer) {
       final sourceWallet = _paymentMethodController.text.trim();
       final destinationWallet = _destinationWalletController.text.trim();
@@ -546,8 +571,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'Source': _source.label,
       'wallet_id': _selectedWalletId,
       'destination_wallet_id': _destinationWalletController.text.trim(),
-      'settlement_status': _showsSettlementStatus
-          ? _settlementStatus.label
+      'settlement_status':
+          _type == TransactionType.debt || _type == TransactionType.reserveable
+          ? AccountingSettlementStatus.open.label
           : '',
       'wallet_direction': switch (_type) {
         TransactionType.income => '1',
@@ -618,7 +644,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       _type = TransactionType.expense;
       _status = _ManualStatus.expense;
       _source = TransactionSource.application;
-      _settlementStatus = AccountingSettlementStatus.open;
+      _settlementTarget = null;
       _paidNow = true;
       _useWishMoney = false;
     });
@@ -672,9 +698,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   String get _selectedWalletId => _useWishMoney ? 'Whish Money' : 'My Wallet';
-
-  bool get _showsSettlementStatus =>
-      _type == TransactionType.debt || _type == TransactionType.reserveable;
 
   Color _typeColor(TransactionType type) {
     return switch (type) {
@@ -744,6 +767,133 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   bool get _requiresWalletFunds =>
       _type == TransactionType.reserveable ||
       (_type == TransactionType.expense && _paidNow);
+
+  Future<void> _chooseSettlementTarget() async {
+    final isDebt = _type == TransactionType.expense;
+    final candidates =
+        widget.controller.transactions
+            .where(
+              (transaction) =>
+                  !transaction.isSettlementEntry &&
+                  transaction.hasOutstandingBalance &&
+                  (isDebt ? transaction.isDebt : transaction.isCredit),
+            )
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    final target = await showModalBottomSheet<FinancialTransaction>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .64,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                child: Text(
+                  isDebt ? 'Choose debt to pay' : 'Choose credit to collect',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ),
+              Expanded(
+                child: candidates.isEmpty
+                    ? Center(
+                        child: Text(
+                          isDebt
+                              ? 'No open debts to pay.'
+                              : 'No open credits to collect.',
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: candidates.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = candidates[index];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              child: Icon(
+                                isDebt
+                                    ? Icons.payments_rounded
+                                    : Icons.savings_rounded,
+                              ),
+                            ),
+                            title: Text(
+                              item.description.isEmpty
+                                  ? item.category
+                                  : item.description,
+                            ),
+                            subtitle: Text(
+                              '${FinanceFormatters.shortDate(item.date)} · ${item.category}',
+                            ),
+                            trailing: Text(
+                              '${FinanceFormatters.usd(item.remainingAmountUsd)}\n${FinanceFormatters.lbp(item.remainingAmountLbp)}',
+                              textAlign: TextAlign.end,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            onTap: () => Navigator.of(context).pop(item),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (target == null || !mounted) return;
+    setState(() {
+      _settlementTarget = target;
+      _titleController.text = target.isDebt
+          ? 'Debt payment: ${target.description}'
+          : 'Credit collection: ${target.description}';
+      _categoryController.text = target.category;
+      _amountUsdController.text = _amountText(target.remainingAmountUsd);
+      _amountLbpController.text = _amountText(target.remainingAmountLbp);
+    });
+  }
+
+  String _amountText(double value) => value <= 0
+      ? ''
+      : value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+}
+
+class _SettlementTargetTile extends StatelessWidget {
+  const _SettlementTargetTile({
+    required this.target,
+    required this.isDebt,
+    required this.onClear,
+  });
+
+  final FinancialTransaction target;
+  final bool isDebt;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
+    color: Theme.of(context).colorScheme.primaryContainer,
+    child: ListTile(
+      leading: Icon(isDebt ? Icons.payments_rounded : Icons.savings_rounded),
+      title: Text(
+        target.description.isEmpty ? target.category : target.description,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text(
+        'Remaining: ${FinanceFormatters.usd(target.remainingAmountUsd)} | ${FinanceFormatters.lbp(target.remainingAmountLbp)}',
+      ),
+      trailing: IconButton(
+        tooltip: 'Choose another',
+        onPressed: onClear,
+        icon: const Icon(Icons.close_rounded),
+      ),
+    ),
+  );
 }
 
 class _ScriptAddForm extends StatefulWidget {
