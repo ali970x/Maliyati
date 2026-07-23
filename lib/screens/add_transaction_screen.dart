@@ -393,14 +393,20 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                   ),
                   if (_isCreditOrDebt) ...[
                     const SizedBox(height: 10),
-                    _WalletDestinationChoice(
-                      label: 'Service',
-                      icon: Icons.miscellaneous_services_rounded,
-                      selected: _usesService,
-                      onTap: () => setState(() {
-                        _useWishMoney = false;
-                        _paymentMethodController.text = LabelNormalizer.service;
-                      }),
+                    Center(
+                      child: SizedBox(
+                        width: 190,
+                        child: _WalletDestinationChoice(
+                          label: 'Service',
+                          icon: Icons.miscellaneous_services_rounded,
+                          selected: _usesService,
+                          onTap: () => setState(() {
+                            _useWishMoney = false;
+                            _paymentMethodController.text =
+                                LabelNormalizer.service;
+                          }),
+                        ),
+                      ),
                     ),
                   ],
                   if (_type == TransactionType.transfer) ...[

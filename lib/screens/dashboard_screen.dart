@@ -584,8 +584,7 @@ class _LightAccountsState extends State<_LightAccounts> {
             onTap: () => _handleTap(context, isWishMoney: false),
             onDoubleTap: () =>
                 setState(() => _cashDisplay = _nextDisplay(_cashDisplay)),
-            onLongPress: () =>
-                _showAvailableBalance(context, isWishMoney: false),
+            onLongPress: _cycleCombinedBalance,
             displayMode: _cashDisplay,
             exchangeRate: widget.controller.exchangeRate,
             comparison: widget.controller.walletBalanceComparison(
@@ -607,8 +606,7 @@ class _LightAccountsState extends State<_LightAccounts> {
             onTap: () => _handleTap(context, isWishMoney: true),
             onDoubleTap: () =>
                 setState(() => _wishDisplay = _nextDisplay(_wishDisplay)),
-            onLongPress: () =>
-                _showAvailableBalance(context, isWishMoney: true),
+            onLongPress: _cycleCombinedBalance,
             displayMode: _wishDisplay,
             exchangeRate: widget.controller.exchangeRate,
             comparison: widget.controller.walletBalanceComparison(
@@ -664,46 +662,6 @@ class _LightAccountsState extends State<_LightAccounts> {
       ),
     ),
   );
-
-  void _showAvailableBalance(
-    BuildContext context, {
-    required bool isWishMoney,
-  }) {
-    final balance = isWishMoney ? widget.wallets.wish : widget.wallets.cash;
-    final title = isWishMoney ? 'Whish Money' : 'My Wallet';
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Available balance',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              Text(title),
-              const SizedBox(height: 16),
-              Text(
-                FinanceFormatters.usd(balance.balanceUsd),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(FinanceFormatters.lbp(balance.balanceLbp)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Future<void> _chooseTime(
     BuildContext context, {

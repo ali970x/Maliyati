@@ -1453,14 +1453,19 @@ class _EditBody extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    _WalletSelectionButton(
-                      label: 'Service',
-                      isService: true,
-                      selected:
-                          state._selectedPaymentMethodOption ==
-                          LabelNormalizer.service,
-                      onTap: () => state._persistSettlementWallet(
-                        LabelNormalizer.service,
+                    Center(
+                      child: SizedBox(
+                        width: 190,
+                        child: _WalletSelectionButton(
+                          label: 'Service',
+                          isService: true,
+                          selected:
+                              state._selectedPaymentMethodOption ==
+                              LabelNormalizer.service,
+                          onTap: () => state._persistSettlementWallet(
+                            LabelNormalizer.service,
+                          ),
+                        ),
                       ),
                     ),
                   ],
