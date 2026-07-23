@@ -121,7 +121,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   bool _useWishMoney = false;
   TransactionSource _source = TransactionSource.application;
   FinancialTransaction? _settlementTarget;
-  bool _paidNow = true;
   bool _isSaving = false;
 
   @override
@@ -232,26 +231,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                       }
                     },
                   ),
-                  if (_type == TransactionType.expense) ...[
-                    const SizedBox(height: 12),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: true,
-                          icon: Icon(Icons.payments_rounded),
-                          label: Text('Paid Now'),
-                        ),
-                        ButtonSegment(
-                          value: false,
-                          icon: Icon(Icons.schedule_rounded),
-                          label: Text('On Credit'),
-                        ),
-                      ],
-                      selected: {_paidNow},
-                      onSelectionChanged: (value) =>
-                          setState(() => _paidNow = value.first),
-                    ),
-                  ],
                   if (_type == TransactionType.expense ||
                       _type == TransactionType.income) ...[
                     const SizedBox(height: 12),
@@ -585,7 +564,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
           : '',
       'wallet_direction': switch (_type) {
         TransactionType.income => '1',
-        TransactionType.expense => _paidNow ? '-1' : '0',
+        TransactionType.expense => '-1',
         // A credit is money advanced from the selected wallet.  Keeping the
         // direction explicit makes My Wallet and Whish Money behave identically.
         TransactionType.reserveable => '-1',
@@ -605,7 +584,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       if (_type == TransactionType.expense) {
         await widget.controller.addExpenseWithPaymentTiming(
           transaction,
-          paidNow: _paidNow,
+          paidNow: true,
         );
       } else {
         await widget.controller.addTransaction(transaction);
@@ -653,7 +632,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       _status = _ManualStatus.expense;
       _source = TransactionSource.application;
       _settlementTarget = null;
-      _paidNow = true;
       _useWishMoney = false;
     });
   }
@@ -773,8 +751,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   bool get _requiresWalletFunds =>
-      _type == TransactionType.reserveable ||
-      (_type == TransactionType.expense && _paidNow);
+      _type == TransactionType.reserveable || _type == TransactionType.expense;
 
   bool get _isCreditOrDebt =>
       _type == TransactionType.reserveable || _type == TransactionType.debt;

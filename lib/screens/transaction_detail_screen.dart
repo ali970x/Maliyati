@@ -355,7 +355,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late TransactionSource _selectedSource;
   late DateTime _selectedDate;
   late bool _hasDate;
-  late bool _paidNow;
   late AccountingSettlementStatus _settlementStatus;
   bool _isEditing = false;
   bool _isSaving = false;
@@ -493,9 +492,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _selectedSource = transaction.source;
     _selectedDate = transaction.date;
     _hasDate = transaction.hasDate;
-    _paidNow =
-        transaction.type != TransactionType.expense ||
-        transaction.walletDirection < 0;
     _settlementStatus = transaction.settlementStatus;
     _descriptionController.text = transaction.description;
     _categoryController.text = transaction.category;
@@ -576,7 +572,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           : ''
       ..['wallet_direction'] = switch (_selectedType) {
         TransactionType.income => '1',
-        TransactionType.expense => _paidNow ? '-1' : '0',
+        TransactionType.expense => '-1',
         TransactionType.reserveable => '-1',
         TransactionType.debt => '1',
         TransactionType.transfer || TransactionType.unknown => '0',
@@ -859,10 +855,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     setState(() => _destinationWalletController.text = walletId);
   }
 
-  void _updatePaidNow(bool paidNow) {
-    setState(() => _paidNow = paidNow);
-  }
-
   void _updateSettlementStatus(AccountingSettlementStatus status) {
     setState(() => _settlementStatus = status);
   }
@@ -931,7 +923,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   bool get _requiresWalletFunds =>
       _selectedType == TransactionType.reserveable ||
-      (_selectedType == TransactionType.expense && _paidNow);
+      _selectedType == TransactionType.expense;
 
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
@@ -1316,26 +1308,6 @@ class _EditBody extends StatelessWidget {
                       }
                     },
                   ),
-                  if (state._selectedType == TransactionType.expense) ...[
-                    const SizedBox(height: 12),
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: true,
-                          icon: Icon(Icons.payments_rounded),
-                          label: Text('Paid Now'),
-                        ),
-                        ButtonSegment(
-                          value: false,
-                          icon: Icon(Icons.schedule_rounded),
-                          label: Text('On Credit'),
-                        ),
-                      ],
-                      selected: {state._paidNow},
-                      onSelectionChanged: (value) =>
-                          state._updatePaidNow(value.first),
-                    ),
-                  ],
                   const SizedBox(height: 14),
                   DropdownButtonFormField<TransactionSource>(
                     initialValue: state._selectedSource,
