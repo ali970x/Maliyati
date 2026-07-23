@@ -1,9 +1,16 @@
 import 'package:finance_tracker/controllers/dashboard_controller.dart';
 import 'package:finance_tracker/models/transaction.dart';
 import 'package:finance_tracker/services/accounting_rules.dart';
+import 'package:finance_tracker/services/label_normalizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('wallet choices remain distinct for credit and debt settlements', () {
+    expect(LabelNormalizer.wallet('Cash'), 'Cash');
+    expect(LabelNormalizer.wallet('My Wallet'), 'My Wallet');
+    expect(LabelNormalizer.wallet('Whish Money'), 'Whish Money');
+  });
+
   test('reserveables are tracked separately and do not change net balance', () {
     final date = DateTime(2026, 7, 13);
     final transactions = [

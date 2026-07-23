@@ -1452,6 +1452,18 @@ class _RecentDashboardRow extends StatelessWidget {
           builder: (_) => TransactionDetailScreen(
             controller: controller,
             transaction: transaction,
+            openSettlement:
+                (transaction.isDebt || transaction.isCredit) &&
+                !transaction.isSettled,
+          ),
+        ),
+      ),
+      onLongPress: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TransactionDetailScreen(
+            controller: controller,
+            transaction: transaction,
+            startEditing: true,
           ),
         ),
       ),
@@ -1580,13 +1592,17 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => TransactionDetailScreen(
-                        controller: controller,
-                        transaction: transaction,
-                      ),
-                    ),
+                  onTap: () => _openTransaction(
+                    context,
+                    transaction,
+                    openSettlement:
+                        (transaction.isDebt || transaction.isCredit) &&
+                        !transaction.isSettled,
+                  ),
+                  onLongPress: () => _openTransaction(
+                    context,
+                    transaction,
+                    startEditing: true,
                   ),
                 );
               },
@@ -1602,6 +1618,22 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     _DashboardMetricKind.debit =>
       transaction.isDebt && !transaction.isSettlementEntry,
   };
+
+  void _openTransaction(
+    BuildContext context,
+    FinancialTransaction transaction, {
+    bool openSettlement = false,
+    bool startEditing = false,
+  }) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => TransactionDetailScreen(
+        controller: controller,
+        transaction: transaction,
+        startEditing: startEditing,
+        openSettlement: openSettlement,
+      ),
+    ),
+  );
 }
 
 class _CategoryFocusList extends StatelessWidget {
@@ -3016,6 +3048,9 @@ class _TransactionRow extends StatelessWidget {
               builder: (_) => TransactionDetailScreen(
                 controller: controller,
                 transaction: transaction,
+                openSettlement:
+                    (transaction.isDebt || transaction.isCredit) &&
+                    !transaction.isSettled,
               ),
             ),
           ),

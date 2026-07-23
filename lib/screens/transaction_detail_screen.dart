@@ -48,9 +48,12 @@ class _SettlementSheetState extends State<_SettlementSheet> {
     _lbpController = TextEditingController(
       text: _amountText(widget.target.remainingAmountLbp),
     );
-    _walletId = widget.initialWalletId.trim().toLowerCase().contains('wish')
+    final initial = widget.initialWalletId.trim().toLowerCase();
+    _walletId = initial.contains('wish')
         ? 'Whish Money'
-        : 'Cash';
+        : initial == 'cash'
+        ? 'Cash'
+        : 'My Wallet';
   }
 
   @override
@@ -142,7 +145,8 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                 prefixIcon: Icon(Icons.account_balance_wallet_rounded),
               ),
               items: const [
-                DropdownMenuItem(value: 'Cash', child: Text('My Wallet')),
+                DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                DropdownMenuItem(value: 'My Wallet', child: Text('My Wallet')),
                 DropdownMenuItem(
                   value: 'Whish Money',
                   child: Text('Whish Money'),
@@ -154,7 +158,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${isDebt ? 'Payment' : 'Collection'} will be recorded in ${_walletId == 'Whish Money' ? 'Whish Money' : 'My Wallet'}.',
+              '${isDebt ? 'Payment' : 'Collection'} will be recorded in $_walletId.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
@@ -211,11 +215,13 @@ class TransactionDetailScreen extends StatefulWidget {
     required this.controller,
     required this.transaction,
     this.startEditing = false,
+    this.openSettlement = false,
   });
 
   final DashboardController controller;
   final FinancialTransaction transaction;
   final bool startEditing;
+  final bool openSettlement;
 
   @override
   State<TransactionDetailScreen> createState() =>
@@ -256,6 +262,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _notesController = TextEditingController();
     _loadFormValues(_transaction);
     widget.controller.addListener(_syncTransactionFromController);
+    if (widget.openSettlement &&
+        (_transaction.isDebt || _transaction.isCredit) &&
+        !_transaction.isSettled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _settleCurrent();
+      });
+    }
   }
 
   @override
@@ -593,6 +606,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         _destinationWalletController.text = _oppositeWallet(walletId);
       }
     });
+  }
+
+  String get _selectedPaymentMethodOption {
+    final value = _paymentMethodController.text.trim().toLowerCase();
+    if (value.contains('wish')) return 'Whish Money';
+    if (value == 'cash') return 'Cash';
+    return 'My Wallet';
   }
 
   void _updateDestinationWallet(String walletId) {
@@ -1164,11 +1184,27 @@ class _EditBody extends StatelessWidget {
                   ),
                   if (state._showsSettlementStatus) ...[
                     const SizedBox(height: 12),
-                    Text(
-                      'Choose the payment wallet after tapping Add payment below.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+                    DropdownButtonFormField<String>(
+                      value: state._selectedPaymentMethodOption,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Payment method',
+                        prefixIcon: Icon(Icons.account_balance_wallet_rounded),
                       ),
+                      items: const [
+                        DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                        DropdownMenuItem(
+                          value: 'My Wallet',
+                          child: Text('My Wallet'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'Whish Money',
+                          child: Text('Whish Money'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) state._updateWallet(value);
+                      },
                     ),
                   ],
                   if (!state._showsSettlementStatus) ...[

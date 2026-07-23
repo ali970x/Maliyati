@@ -18,7 +18,7 @@ class LabelNormalizer {
       return wishMoney;
     }
     if (normalized == 'mywallet' || normalized == 'wallet') {
-      return cash;
+      return 'My Wallet';
     }
     if (normalized == 'cash') {
       return cash;
