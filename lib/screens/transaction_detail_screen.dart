@@ -388,26 +388,35 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 const SizedBox(height: 16),
                 Text('Wallet', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 8),
-                SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(
-                      value: 'Cash',
-                      icon: Icon(Icons.account_balance_wallet_rounded),
-                      label: Text('My Wallet'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        avatar: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                        ),
+                        label: const Text('My Wallet'),
+                        selected: !walletId.toLowerCase().contains('wish'),
+                        onSelected: (_) =>
+                            setSheetState(() => walletId = 'Cash'),
+                      ),
                     ),
-                    ButtonSegment(
-                      value: 'Whish Money',
-                      icon: Icon(Icons.account_balance_rounded),
-                      label: Text('Whish Money'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ChoiceChip(
+                        avatar: const Icon(Icons.account_balance_rounded),
+                        label: const Text('Whish Money'),
+                        selected: walletId.toLowerCase().contains('wish'),
+                        onSelected: (_) =>
+                            setSheetState(() => walletId = 'Whish Money'),
+                      ),
                     ),
                   ],
-                  selected: {
-                    walletId.toLowerCase().contains('wish')
-                        ? 'Whish Money'
-                        : 'Cash',
-                  },
-                  onSelectionChanged: (value) =>
-                      setSheetState(() => walletId = value.first),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${isDebt ? 'Payment' : 'Collection'} will be recorded in $walletId.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 20),
                 SizedBox(

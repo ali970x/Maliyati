@@ -550,9 +550,16 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'settlement_status': _showsSettlementStatus
           ? _settlementStatus.label
           : '',
-      'wallet_direction': _type == TransactionType.expense
-          ? (_paidNow ? '-1' : '0')
-          : '',
+      'wallet_direction': switch (_type) {
+        TransactionType.income => '1',
+        TransactionType.expense => _paidNow ? '-1' : '0',
+        // A credit is money advanced from the selected wallet.  Keeping the
+        // direction explicit makes Cash and Whish Money behave identically.
+        TransactionType.reserveable => '-1',
+        TransactionType.debt ||
+        TransactionType.transfer ||
+        TransactionType.unknown => '0',
+      },
     };
     final transaction = _buildTransaction(
       baseRaw: raw,
@@ -575,9 +582,16 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         return;
       }
       _clear();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Transaction added.')));
+      final walletName = _selectedWalletName();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _type == TransactionType.reserveable
+                ? 'Credit added from $walletName.'
+                : 'Transaction added to $walletName.',
+          ),
+        ),
+      );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
