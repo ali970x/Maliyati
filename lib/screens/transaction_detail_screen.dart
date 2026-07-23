@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
@@ -314,7 +315,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _transaction = widget.transaction;
+    _transaction = _parentTransactionFor(widget.transaction);
     _isEditing = true;
     _descriptionController = TextEditingController();
     _categoryController = TextEditingController();
@@ -343,6 +344,20 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         if (mounted) _settleCurrent();
       });
     }
+  }
+
+  FinancialTransaction _parentTransactionFor(FinancialTransaction transaction) {
+    if (!transaction.isSettlementEntry) {
+      return transaction;
+    }
+    final parentId = transaction.linkedTransactionId;
+    if (parentId == null || parentId.isEmpty) {
+      return transaction;
+    }
+    return widget.controller.transactions.firstWhere(
+      (item) => item.id == parentId,
+      orElse: () => transaction,
+    );
   }
 
   @override
@@ -631,8 +646,30 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     builder: (context) => _SettlementHistorySheet(
       isDebt: _transaction.isDebt,
       history: _settlementHistory,
+      onShare: _shareSettlementHistory,
     ),
   );
+
+  Future<void> _shareSettlementHistory() async {
+    final history = _settlementHistory;
+    if (history.isEmpty) {
+      return;
+    }
+    final label = _transaction.isDebt ? 'Debt payment' : 'Credit collection';
+    final lines = history
+        .map(
+          (entry) =>
+              '- ${FinanceFormatters.date(entry.date)} | ${entry.walletId} | ${FinanceFormatters.usd(entry.amountUsd)} | ${FinanceFormatters.lbp(entry.amountLbp)}',
+        )
+        .join('\n');
+    await Share.share(
+      'Maliyati - $label history\n'
+      'Transaction: ${_transaction.description}\n'
+      'Total: ${FinanceFormatters.usd(_transaction.amountUsd)} | ${FinanceFormatters.lbp(_transaction.amountLbp)}\n'
+      'Remaining: ${FinanceFormatters.usd(_transaction.remainingAmountUsd)} | ${FinanceFormatters.lbp(_transaction.remainingAmountLbp)}\n\n'
+      '$lines',
+    );
+  }
 
   void _updateType(TransactionType type) {
     setState(() {
@@ -776,9 +813,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       _selectedType == TransactionType.reserveable;
 
   WalletAccountSummary _editableWalletBalance() {
-    final usesWish = LabelNormalizer.isWishMoney(
-      _paymentMethodController.text,
-    );
+    final usesWish = LabelNormalizer.isWishMoney(_paymentMethodController.text);
     final base = usesWish
         ? widget.controller.walletSummary.wish
         : widget.controller.walletSummary.cash;
@@ -905,9 +940,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   String _oppositeWallet(String walletId) {
-    return LabelNormalizer.isWishMoney(walletId)
-        ? 'My Wallet'
-        : 'Whish Money';
+    return LabelNormalizer.isWishMoney(walletId) ? 'My Wallet' : 'Whish Money';
   }
 
   String _prettyKey(String key) {
@@ -1628,10 +1661,15 @@ class _SettlementProgressCard extends StatelessWidget {
 }
 
 class _SettlementHistorySheet extends StatelessWidget {
-  const _SettlementHistorySheet({required this.isDebt, required this.history});
+  const _SettlementHistorySheet({
+    required this.isDebt,
+    required this.history,
+    required this.onShare,
+  });
 
   final bool isDebt;
   final List<FinancialTransaction> history;
+  final VoidCallback onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -1647,6 +1685,11 @@ class _SettlementHistorySheet extends StatelessWidget {
               isDebt ? 'Debt payment history' : 'Credit collection history',
             ),
             subtitle: Text('${history.length} recorded activities'),
+            trailing: IconButton(
+              tooltip: 'Share payments',
+              onPressed: onShare,
+              icon: const Icon(Icons.share_rounded),
+            ),
           ),
           const Divider(height: 1),
           Flexible(
