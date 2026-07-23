@@ -91,6 +91,32 @@ void main() {
     expect(settlement.walletDirection, 1);
   });
 
+  test('service credit and debt stay outside both wallet balances', () {
+    final credit = AccountingRules.moveWallet(
+      _transaction(DateTime(2026, 7, 23), TransactionType.reserveable, 30),
+      walletId: 'Service',
+    );
+    final debt = AccountingRules.moveWallet(
+      _transaction(DateTime(2026, 7, 23), TransactionType.debt, 20),
+      walletId: 'Service',
+    );
+    final wallets = WalletSummary.fromTransactions(
+      [credit, debt],
+      cashOpeningUsd: 100,
+      cashOpeningLbp: 0,
+      wishOpeningUsd: 50,
+      wishOpeningLbp: 0,
+      ignoredCashTransactionIds: const {},
+      ignoredWishTransactionIds: const {},
+    );
+
+    expect(LabelNormalizer.wallet('service'), 'Service');
+    expect(credit.walletDirection, 0);
+    expect(debt.walletDirection, 0);
+    expect(wallets.cash.balanceUsd, 100);
+    expect(wallets.wish.balanceUsd, 50);
+  });
+
   test(
     'moving a credit transfers its wallet impact without duplicating it',
     () {

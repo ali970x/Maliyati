@@ -1640,7 +1640,7 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
                   subtitle: Text(
                     kind == _DashboardMetricKind.reserveable ||
                             kind == _DashboardMetricKind.debit
-                        ? FinanceFormatters.shortDate(transaction.date)
+                        ? '${transaction.walletId} · ${FinanceFormatters.shortDate(transaction.date)}'
                         : '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
                   ),
                   trailing: Text(
@@ -2137,7 +2137,9 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
     final balance = isWish ? wallets.wish : wallets.cash;
     final transactions = widget.controller.transactions.where((transaction) {
       final usesWish = LabelNormalizer.isWishMoney(transaction.walletId);
-      return (isWish ? usesWish : !usesWish) && _matchesScope(transaction);
+      final isService = LabelNormalizer.isService(transaction.walletId);
+      return (isWish ? usesWish : !usesWish && !isService) &&
+          _matchesScope(transaction);
     }).toList()..sort((a, b) => b.date.compareTo(a.date));
 
     return Scaffold(

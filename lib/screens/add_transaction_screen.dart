@@ -355,7 +355,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     _type == TransactionType.transfer
                         ? 'Source wallet'
                         : _type == TransactionType.reserveable
-                        ? 'Credit paid from'
+                        ? 'Credit source'
+                        : _type == TransactionType.debt
+                        ? 'Debt source'
                         : 'Wallet',
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w800,
@@ -368,7 +370,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                         child: _WalletDestinationChoice(
                           label: 'My Wallet',
                           icon: Icons.account_balance_wallet_rounded,
-                          selected: !_useWishMoney,
+                          selected: !_useWishMoney && !_usesService,
                           onTap: () => setState(() {
                             _useWishMoney = false;
                             _paymentMethodController.text = 'My Wallet';
@@ -389,6 +391,18 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                       ),
                     ],
                   ),
+                  if (_isCreditOrDebt) ...[
+                    const SizedBox(height: 10),
+                    _WalletDestinationChoice(
+                      label: 'Service',
+                      icon: Icons.miscellaneous_services_rounded,
+                      selected: _usesService,
+                      onTap: () => setState(() {
+                        _useWishMoney = false;
+                        _paymentMethodController.text = LabelNormalizer.service;
+                      }),
+                    ),
+                  ],
                   if (_type == TransactionType.transfer) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -596,8 +610,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         TransactionType.expense => '-1',
         // A credit is money advanced from the selected wallet.  Keeping the
         // direction explicit makes My Wallet and Whish Money behave identically.
-        TransactionType.reserveable => '-1',
-        TransactionType.debt => '1',
+        TransactionType.reserveable => _usesService ? '0' : '-1',
+        TransactionType.debt => _usesService ? '0' : '1',
         TransactionType.transfer || TransactionType.unknown => '0',
       },
     };
@@ -780,7 +794,11 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   bool get _requiresWalletFunds =>
-      _type == TransactionType.reserveable || _type == TransactionType.expense;
+      (_type == TransactionType.reserveable && !_usesService) ||
+      _type == TransactionType.expense;
+
+  bool get _usesService =>
+      LabelNormalizer.isService(_paymentMethodController.text);
 
   bool get _isCreditOrDebt =>
       _type == TransactionType.reserveable || _type == TransactionType.debt;

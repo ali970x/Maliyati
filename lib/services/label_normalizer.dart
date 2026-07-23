@@ -5,6 +5,7 @@ class LabelNormalizer {
 
   static const myWallet = 'My Wallet';
   static const wishMoney = 'Whish Money';
+  static const service = 'Service';
 
   static bool isWishMoney(String value) {
     final normalized = _key(value);
@@ -12,6 +13,8 @@ class LabelNormalizer {
         normalized.contains('wesh') ||
         normalized.contains('wish');
   }
+
+  static bool isService(String value) => _key(value) == 'service';
 
   static String wallet(String value) {
     final trimmed = value.trim();
@@ -21,6 +24,9 @@ class LabelNormalizer {
     final normalized = _key(trimmed);
     if (isWishMoney(trimmed)) {
       return wishMoney;
+    }
+    if (isService(trimmed)) {
+      return service;
     }
     if (normalized == 'mywallet' ||
         normalized == 'wallet' ||

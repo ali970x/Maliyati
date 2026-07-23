@@ -212,11 +212,19 @@ class AccountingRules {
     required String walletId,
   }) {
     final normalizedWallet = LabelNormalizer.wallet(walletId);
+    final walletDirection = LabelNormalizer.isService(normalizedWallet)
+        ? 0
+        : switch (transaction.type) {
+            TransactionType.income || TransactionType.debt => 1,
+            TransactionType.expense || TransactionType.reserveable => -1,
+            TransactionType.transfer || TransactionType.unknown => 0,
+          };
     final raw = Map<String, String>.from(transaction.raw)
       ..['wallet_id'] = normalizedWallet
       ..['walletId'] = normalizedWallet
       ..['payment_method'] = normalizedWallet
-      ..['Payment Method'] = normalizedWallet;
+      ..['Payment Method'] = normalizedWallet
+      ..['wallet_direction'] = walletDirection.toString();
     return normalize(
       transaction.copyWith(paymentMethod: normalizedWallet, raw: raw),
     );

@@ -1965,6 +1965,7 @@ class DashboardController extends ChangeNotifier {
     final matching = _transactions
         .where((transaction) {
           final isWalletTransaction =
+              !LabelNormalizer.isService(transaction.walletId) &&
               LabelNormalizer.isWishMoney(transaction.walletId) == isWishMoney;
           final isTransferIntoWallet =
               transaction.isTransfer &&

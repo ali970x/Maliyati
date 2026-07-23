@@ -33,17 +33,23 @@ class _WalletSelectionButton extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.isWish = false,
+    this.isService = false,
   });
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
   final bool isWish;
+  final bool isService;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isWish ? const Color(0xFF6D4AFF) : theme.colorScheme.primary;
+    final color = isWish
+        ? const Color(0xFF6D4AFF)
+        : isService
+        ? const Color(0xFF0F766E)
+        : theme.colorScheme.primary;
     return SizedBox(
       height: 54,
       child: OutlinedButton.icon(
@@ -60,7 +66,11 @@ class _WalletSelectionButton extends StatelessWidget {
                   ),
                 ),
               )
-            : const Icon(Icons.account_balance_wallet_rounded),
+            : Icon(
+                isService
+                    ? Icons.miscellaneous_services_rounded
+                    : Icons.account_balance_wallet_rounded,
+              ),
         label: Text(label, overflow: TextOverflow.ellipsis),
         style: OutlinedButton.styleFrom(
           foregroundColor: selected ? color : theme.colorScheme.onSurface,
@@ -499,7 +509,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _amountLbpController.text = _amountText(transaction.amountLbp);
     _paymentMethodController.text =
         transaction.isCredit || transaction.isDebt || transaction.isTransfer
-        ? (LabelNormalizer.isWishMoney(transaction.walletId)
+        ? (LabelNormalizer.isService(transaction.walletId)
+              ? LabelNormalizer.service
+              : LabelNormalizer.isWishMoney(transaction.walletId)
               ? 'Whish Money'
               : 'My Wallet')
         : transaction.paymentMethod;
@@ -573,8 +585,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ..['wallet_direction'] = switch (_selectedType) {
         TransactionType.income => '1',
         TransactionType.expense => '-1',
-        TransactionType.reserveable => '-1',
-        TransactionType.debt => '1',
+        TransactionType.reserveable => _usesService ? '0' : '-1',
+        TransactionType.debt => _usesService ? '0' : '1',
         TransactionType.transfer || TransactionType.unknown => '0',
       };
     final updated = _transaction.copyWith(
@@ -847,6 +859,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   String get _selectedPaymentMethodOption {
     final value = _paymentMethodController.text.trim().toLowerCase();
+    if (LabelNormalizer.isService(value)) return LabelNormalizer.service;
     if (LabelNormalizer.isWishMoney(value)) return 'Whish Money';
     return 'My Wallet';
   }
@@ -922,8 +935,11 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   bool get _requiresWalletFunds =>
-      _selectedType == TransactionType.reserveable ||
+      (_selectedType == TransactionType.reserveable && !_usesService) ||
       _selectedType == TransactionType.expense;
+
+  bool get _usesService =>
+      LabelNormalizer.isService(_paymentMethodController.text);
 
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
@@ -1435,6 +1451,17 @@ class _EditBody extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+                    _WalletSelectionButton(
+                      label: 'Service',
+                      isService: true,
+                      selected:
+                          state._selectedPaymentMethodOption ==
+                          LabelNormalizer.service,
+                      onTap: () => state._persistSettlementWallet(
+                        LabelNormalizer.service,
+                      ),
                     ),
                   ],
                   if (!state._showsSettlementStatus) ...[
