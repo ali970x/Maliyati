@@ -3,12 +3,25 @@ import 'package:flutter/services.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
+import '../services/firebase_finance_service.dart';
 import '../widgets/amount_limit_input_formatter.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_identity.dart';
 
 enum _EditTransactionStatus { income, expense, credit, debt, transfer }
+
+class _SettlementRequest {
+  const _SettlementRequest({
+    required this.amountUsd,
+    required this.amountLbp,
+    required this.walletId,
+  });
+
+  final double amountUsd;
+  final double amountLbp;
+  final String walletId;
+}
 
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
@@ -239,20 +252,214 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   Future<void> _settleCurrent() async {
+    final request = await _showSettlementSheet();
+    if (request == null || !mounted) {
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       await widget.controller.settleTransaction(
         _transaction,
-        walletId: _paymentMethodController.text.trim(),
+        walletId: request.walletId,
+        amountUsd: request.amountUsd,
+        amountLbp: request.amountLbp,
       );
       if (mounted) {
-        Navigator.of(context).pop();
+        final updated = widget.controller.transactions.where(
+          (item) => item.id == _transaction.id,
+        );
+        if (updated.isNotEmpty) {
+          setState(() {
+            _transaction = updated.first;
+            _loadFormValues(_transaction);
+          });
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _transaction.isSettled
+                  ? 'Settlement complete.'
+                  : 'Payment saved. The remaining balance is shown below.',
+            ),
+          ),
+        );
+      }
+    } on FirebaseFinanceException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
       }
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  Future<_SettlementRequest?> _showSettlementSheet() async {
+    final target = _transaction;
+    final usdController = TextEditingController(
+      text: _amountText(target.remainingAmountUsd),
+    );
+    final lbpController = TextEditingController(
+      text: _amountText(target.remainingAmountLbp),
+    );
+    var walletId = _paymentMethodController.text.trim().isEmpty
+        ? 'Cash'
+        : _paymentMethodController.text.trim();
+    final isDebt = target.isDebt;
+    final result = await showModalBottomSheet<_SettlementRequest>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            MediaQuery.viewInsetsOf(context).bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isDebt ? 'Pay debt' : 'Collect credit',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  isDebt
+                      ? 'Record the amount you paid now. You can return later for the rest.'
+                      : 'Record the amount you received now. You can collect the rest later.',
+                ),
+                const SizedBox(height: 16),
+                _SettlementAmounts(
+                  label: 'Remaining balance',
+                  usd: target.remainingAmountUsd,
+                  lbp: target.remainingAmountLbp,
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: usdController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Pay / collect USD',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: lbpController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: const InputDecoration(
+                          labelText: 'Pay / collect LBP',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: () {
+                    setSheetState(() {
+                      usdController.text = _amountText(
+                        target.remainingAmountUsd,
+                      );
+                      lbpController.text = _amountText(
+                        target.remainingAmountLbp,
+                      );
+                    });
+                  },
+                  icon: const Icon(Icons.done_all_rounded),
+                  label: const Text('Use full remaining balance'),
+                ),
+                const SizedBox(height: 6),
+                Text('Wallet', style: Theme.of(context).textTheme.labelLarge),
+                const SizedBox(height: 8),
+                SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(
+                      value: 'Cash',
+                      icon: Icon(Icons.account_balance_wallet_rounded),
+                      label: Text('My Wallet'),
+                    ),
+                    ButtonSegment(
+                      value: 'Whish Money',
+                      icon: Icon(Icons.account_balance_rounded),
+                      label: Text('Whish Money'),
+                    ),
+                  ],
+                  selected: {
+                    walletId.toLowerCase().contains('wish')
+                        ? 'Whish Money'
+                        : 'Cash',
+                  },
+                  onSelectionChanged: (value) =>
+                      setSheetState(() => walletId = value.first),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      final usd = _parseAmount(usdController.text);
+                      final lbp = _parseAmount(lbpController.text);
+                      if (usd <= 0 && lbp <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Enter the amount received or paid.'),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.of(sheetContext).pop(
+                        _SettlementRequest(
+                          amountUsd: usd,
+                          amountLbp: lbp,
+                          walletId: walletId,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.check_circle_rounded),
+                    label: Text(isDebt ? 'Save payment' : 'Save collection'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    usdController.dispose();
+    lbpController.dispose();
+    return result;
+  }
+
+  List<FinancialTransaction> get _settlementHistory {
+    final targetId = _transaction.id;
+    if (targetId == null || targetId.isEmpty) {
+      return const [];
+    }
+    final entries =
+        widget.controller.transactions
+            .where((item) => item.linkedTransactionId == targetId)
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    return entries;
   }
 
   void _updateType(TransactionType type) {
@@ -704,6 +911,13 @@ class _EditBody extends StatelessWidget {
             ? const EdgeInsets.fromLTRB(24, 16, 24, 32)
             : const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          if (state._transaction.isDebt || state._transaction.isCredit) ...[
+            _SettlementProgressCard(
+              transaction: state._transaction,
+              history: state._settlementHistory,
+            ),
+            const SizedBox(height: 12),
+          ],
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -784,35 +998,6 @@ class _EditBody extends StatelessWidget {
                       selected: {state._paidNow},
                       onSelectionChanged: (value) =>
                           state._updatePaidNow(value.first),
-                    ),
-                  ],
-                  if (state._showsSettlementStatus) ...[
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<AccountingSettlementStatus>(
-                      initialValue: state._settlementStatus,
-                      decoration: const InputDecoration(
-                        labelText: 'Settlement Status',
-                        prefixIcon: Icon(Icons.verified_rounded),
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: AccountingSettlementStatus.open,
-                          child: Text('open'),
-                        ),
-                        DropdownMenuItem(
-                          value: AccountingSettlementStatus.partial,
-                          child: Text('partial'),
-                        ),
-                        DropdownMenuItem(
-                          value: AccountingSettlementStatus.settled,
-                          child: Text('settled'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          state._updateSettlementStatus(value);
-                        }
-                      },
                     ),
                   ],
                   const SizedBox(height: 14),
@@ -1053,6 +1238,165 @@ class _EditBody extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _SettlementAmounts extends StatelessWidget {
+  const _SettlementAmounts({
+    required this.label,
+    required this.usd,
+    required this.lbp,
+  });
+
+  final String label;
+  final double usd;
+  final double lbp;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 5),
+          Text(
+            '${FinanceFormatters.usd(usd)}  |  ${FinanceFormatters.lbp(lbp)}',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettlementProgressCard extends StatelessWidget {
+  const _SettlementProgressCard({
+    required this.transaction,
+    required this.history,
+  });
+
+  final FinancialTransaction transaction;
+  final List<FinancialTransaction> history;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDebt = transaction.isDebt;
+    final totalUsd = transaction.amountUsd;
+    final totalLbp = transaction.amountLbp;
+    final paidUsd = transaction.settledAmountUsd;
+    final paidLbp = transaction.settledAmountLbp;
+    final remainingUsd = transaction.remainingAmountUsd;
+    final remainingLbp = transaction.remainingAmountLbp;
+    final total = totalUsd + totalLbp / 89000;
+    final remaining = remainingUsd + remainingLbp / 89000;
+    final progress = total <= 0 ? 0.0 : (1 - remaining / total).clamp(0.0, 1.0);
+    final color = isDebt ? Colors.deepOrange : Colors.teal;
+    final status = transaction.isSettled
+        ? 'Complete'
+        : transaction.settlementStatus == AccountingSettlementStatus.partial
+        ? 'Partially ${isDebt ? 'paid' : 'collected'}'
+        : 'Open';
+
+    return Card(
+      elevation: 0,
+      color: color.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isDebt ? Icons.payments_rounded : Icons.savings_rounded,
+                  color: color,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isDebt
+                        ? 'Debt payment progress'
+                        : 'Credit collection progress',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Chip(label: Text(status)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: progress, minHeight: 8),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _SettlementAmounts(
+                    label: 'Original',
+                    usd: totalUsd,
+                    lbp: totalLbp,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SettlementAmounts(
+                    label: isDebt ? 'Paid' : 'Collected',
+                    usd: paidUsd,
+                    lbp: paidLbp,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _SettlementAmounts(
+              label: 'Remaining',
+              usd: remainingUsd,
+              lbp: remainingLbp,
+            ),
+            if (history.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Activity',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              for (final entry in history.take(5))
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                    isDebt
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                    color: color,
+                  ),
+                  title: Text(FinanceFormatters.date(entry.date)),
+                  subtitle: Text(entry.walletId),
+                  trailing: Text(
+                    '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
+                    textAlign: TextAlign.end,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }

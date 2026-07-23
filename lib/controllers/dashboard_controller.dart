@@ -1550,22 +1550,46 @@ class DashboardController extends ChangeNotifier {
     FinancialTransaction transaction, {
     required String walletId,
     DateTime? date,
+    double? amountUsd,
+    double? amountLbp,
   }) async {
     if (!transaction.isDebt && !transaction.isCredit) {
       throw const FirebaseFinanceException(
         'Only Credit and Debt transactions can be settled.',
       );
     }
-    if (transaction.isSettled) {
+    if (transaction.isSettled || !transaction.hasOutstandingBalance) {
       throw const FirebaseFinanceException(
         'This transaction is already settled.',
       );
     }
-    final settled = AccountingRules.markSettled(transaction);
+    final paidUsd = amountUsd ?? transaction.remainingAmountUsd;
+    final paidLbp = amountLbp ?? transaction.remainingAmountLbp;
+    if (paidUsd < 0 || paidLbp < 0) {
+      throw const FirebaseFinanceException(
+        'Settlement amounts cannot be negative.',
+      );
+    }
+    if (paidUsd <= 0.0001 && paidLbp <= 0.5) {
+      throw const FirebaseFinanceException('Enter an amount to settle.');
+    }
+    if (paidUsd - transaction.remainingAmountUsd > 0.0001 ||
+        paidLbp - transaction.remainingAmountLbp > 0.5) {
+      throw const FirebaseFinanceException(
+        'The payment cannot be more than the remaining balance.',
+      );
+    }
+    final settled = AccountingRules.applySettlement(
+      transaction,
+      amountUsd: paidUsd,
+      amountLbp: paidLbp,
+    );
     final settlement = AccountingRules.settlementEntry(
       transaction,
       walletId: walletId.trim().isEmpty ? transaction.walletId : walletId,
       date: date ?? DateTime.now(),
+      amountUsd: paidUsd,
+      amountLbp: paidLbp,
     );
     await updateTransaction(transaction, settled);
     await addTransaction(settlement);
@@ -2458,36 +2482,44 @@ class FinancialSummary {
       }
 
       if (transaction.affectsReceivables) {
-        reserveableUsd += transactionUsd;
-        reserveableLbp += transactionLbp;
+        final remainingUsd = transaction.remainingAmountUsd;
+        final remainingLbp = transaction.remainingAmountLbp;
+        final remainingUsdValue = remainingUsd + remainingLbp / exchangeRate;
+        reserveableUsd += remainingUsd;
+        reserveableLbp += remainingLbp;
 
         reserveableByCategory.update(
           transaction.category,
-          (value) => value + amountUsd,
-          ifAbsent: () => amountUsd,
+          (value) => value + remainingUsdValue,
+          ifAbsent: () => remainingUsdValue,
         );
         if (day != null) {
           dailyReserveable.update(
             day,
-            (value) => value + amountUsd,
-            ifAbsent: () => amountUsd,
+            (value) => value + remainingUsdValue,
+            ifAbsent: () => remainingUsdValue,
           );
         }
 
         if (largestReserveable == null ||
-            amountUsd > largestReserveable.amountInUsd(exchangeRate)) {
+            remainingUsdValue >
+                largestReserveable.remainingAmountUsd +
+                    largestReserveable.remainingAmountLbp / exchangeRate) {
           largestReserveable = transaction;
         }
       }
 
       if (transaction.affectsPayables) {
-        debtUsd += transactionUsd;
-        debtLbp += transactionLbp;
+        final remainingUsd = transaction.remainingAmountUsd;
+        final remainingLbp = transaction.remainingAmountLbp;
+        final remainingUsdValue = remainingUsd + remainingLbp / exchangeRate;
+        debtUsd += remainingUsd;
+        debtLbp += remainingLbp;
 
         debtByCategory.update(
           transaction.category,
-          (value) => value + amountUsd,
-          ifAbsent: () => amountUsd,
+          (value) => value + remainingUsdValue,
+          ifAbsent: () => remainingUsdValue,
         );
       }
     }

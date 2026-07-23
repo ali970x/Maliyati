@@ -37,6 +37,10 @@ class AccountingRules {
       }
       return '';
     });
+    if (transaction.isCredit || transaction.isDebt) {
+      raw.putIfAbsent('settled_amount_usd', () => '0');
+      raw.putIfAbsent('settled_amount_lbp', () => '0');
+    }
     raw.putIfAbsent(
       'wallet_direction',
       () => transaction.walletDirection.toString(),
@@ -155,9 +159,22 @@ class AccountingRules {
     return [received, credit];
   }
 
-  static FinancialTransaction markSettled(FinancialTransaction transaction) {
+  static FinancialTransaction applySettlement(
+    FinancialTransaction transaction, {
+    required double amountUsd,
+    required double amountLbp,
+  }) {
+    final settledUsd = transaction.settledAmountUsd + amountUsd;
+    final settledLbp = transaction.settledAmountLbp + amountLbp;
+    final isComplete =
+        transaction.amountUsd - settledUsd <= 0.0001 &&
+        transaction.amountLbp - settledLbp <= 0.5;
     final raw = Map<String, String>.from(transaction.raw)
-      ..['settlement_status'] = AccountingSettlementStatus.settled.label;
+      ..['settled_amount_usd'] = settledUsd.toString()
+      ..['settled_amount_lbp'] = settledLbp.toString()
+      ..['settlement_status'] = isComplete
+          ? AccountingSettlementStatus.settled.label
+          : AccountingSettlementStatus.partial.label;
     return transaction.copyWith(raw: raw);
   }
 
@@ -165,6 +182,8 @@ class AccountingRules {
     FinancialTransaction target, {
     required String walletId,
     required DateTime date,
+    required double amountUsd,
+    required double amountLbp,
   }) {
     final isDebtSettlement = target.isDebt;
     final type = isDebtSettlement
@@ -176,6 +195,8 @@ class AccountingRules {
         type: type,
         date: DateTime(date.year, date.month, date.day),
         hasDate: true,
+        currency: amountUsd > 0 ? CurrencyCode.usd : CurrencyCode.lbp,
+        amount: amountUsd > 0 ? amountUsd : amountLbp,
         paymentMethod: walletId,
         description:
             '${isDebtSettlement ? 'Debt payment' : 'Credit collection'}: ${target.description}',
@@ -183,6 +204,12 @@ class AccountingRules {
           ...target.raw,
           'status': type.label,
           'Status': type.label,
+          'amount_usd': amountUsd.toString(),
+          'amount_lbp': amountLbp.toString(),
+          'Amount (\$)': amountUsd.toString(),
+          'Amount (LBP)': amountLbp.toString(),
+          'settlement_amount_usd': amountUsd.toString(),
+          'settlement_amount_lbp': amountLbp.toString(),
           'wallet_id': walletId,
           'payment_method': walletId,
           'Payment Method': walletId,

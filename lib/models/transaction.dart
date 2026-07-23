@@ -91,6 +91,22 @@ class FinancialTransaction {
 
   bool get isSettled => settlementStatus == AccountingSettlementStatus.settled;
 
+  /// Amount already paid for a debt, or already collected for a credit.
+  double get settledAmountUsd =>
+      _rawAmount(const ['settled_amount_usd', 'settledAmountUsd']);
+
+  double get settledAmountLbp =>
+      _rawAmount(const ['settled_amount_lbp', 'settledAmountLbp']);
+
+  double get remainingAmountUsd =>
+      (amountUsd - settledAmountUsd).clamp(0, double.infinity).toDouble();
+
+  double get remainingAmountLbp =>
+      (amountLbp - settledAmountLbp).clamp(0, double.infinity).toDouble();
+
+  bool get hasOutstandingBalance =>
+      remainingAmountUsd > 0.0001 || remainingAmountLbp > 0.5;
+
   bool get affectsExpenseStats =>
       isExpense && raw['affects_expense_stats']?.toLowerCase() != 'false';
 
