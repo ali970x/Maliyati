@@ -85,9 +85,9 @@ class _WalletScreenState extends State<WalletScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Reset $_title tracking?'),
-        content: const Text(
-          'Only this wallet will reset. Earlier transactions stay visible but stop changing this wallet balance.',
+        title: Text('Clear $_title completely?'),
+        content: Text(
+          'This deletes every $_title transaction, including its credit and debt history, then returns $_title to zero. The other wallet remains available.',
         ),
         actions: [
           TextButton(
@@ -96,29 +96,21 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset'),
+            child: const Text('Clear wallet'),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
     setState(() => _saving = true);
-    if (_isWish) {
-      await widget.controller.resetWishWalletTracking(
-        usd: _number(_usd),
-        lbp: _number(_lbp),
-      );
-    } else {
-      await widget.controller.resetCashWalletTracking(
-        usd: _number(_usd),
-        lbp: _number(_lbp),
-      );
-    }
+    await widget.controller.resetWalletData(isWishMoney: _isWish);
+    _usd.clear();
+    _lbp.clear();
     if (!mounted) return;
     setState(() => _saving = false);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$_title tracking now starts from these balances.'),
+        content: Text('$_title is now zero and its history was cleared.'),
       ),
     );
   }
@@ -211,7 +203,7 @@ class _WalletScreenState extends State<WalletScreen> {
           ),
           const SizedBox(height: 5),
           Text(
-            'Change only $_title. Saving preserves its current tracking; reset starts new tracking from the values below.',
+            'Save sets the opening amount. Clear wallet deletes this wallet history and returns it to zero.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -282,11 +274,11 @@ class _WalletScreenState extends State<WalletScreen> {
           OutlinedButton.icon(
             onPressed: _saving ? null : _reset,
             icon: const Icon(Icons.restart_alt_rounded),
-            label: Text('Reset $_title tracking'),
+            label: Text('Clear $_title history'),
           ),
           const SizedBox(height: 8),
           Text(
-            'Reset applies only to $_title. The other wallet, its balance, and its tracking remain unchanged.',
+            'Clear applies only to $_title. The other wallet remains available.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

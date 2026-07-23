@@ -1952,6 +1952,59 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears a single wallet completely. Records assigned to that wallet, plus
+  /// transfers targeting it, are deleted from Firebase so its history and
+  /// outstanding credit/debt balances truly restart from zero.
+  Future<void> resetWalletData({required bool isWishMoney}) async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    if (_firebase.currentUser == null) {
+      throw const FirebaseFinanceException('Sign in first.');
+    }
+    final matching = _transactions
+        .where((transaction) {
+          final isWalletTransaction =
+              LabelNormalizer.isWishMoney(transaction.walletId) == isWishMoney;
+          final isTransferIntoWallet =
+              transaction.isTransfer &&
+              LabelNormalizer.isWishMoney(
+                    transaction.destinationWalletId ?? '',
+                  ) ==
+                  isWishMoney;
+          return isWalletTransaction || isTransferIntoWallet;
+        })
+        .toList(growable: false);
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _firebase.deleteTransactionsByIds(
+        matching.map((transaction) => transaction.id ?? ''),
+      );
+      final removedIds = matching
+          .map((transaction) => transaction.id?.trim() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      _transactions = _transactions
+          .where((transaction) => !removedIds.contains(transaction.id?.trim()))
+          .toList(growable: false);
+      if (isWishMoney) {
+        _wishWalletOpeningUsd = 0;
+        _wishWalletOpeningLbp = 0;
+        _wishWalletBaselineTransactionIds = <String>{};
+      } else {
+        _walletOpeningUsd = 0;
+        _walletOpeningLbp = 0;
+        _cashWalletBaselineTransactionIds = <String>{};
+      }
+      _lastUpdated = DateTime.now();
+      await _saveWalletSettings();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _runDailyAutoBackupIfDue() async {
     if (!_autoBackupEnabled || _user == null) {
       return;

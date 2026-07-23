@@ -424,6 +424,21 @@ class FirebaseFinanceService {
     }
   }
 
+  Future<void> deleteTransactionsByIds(Iterable<String> transactionIds) async {
+    final user = _requireUser();
+    final ids = transactionIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+    for (var start = 0; start < ids.length; start += 400) {
+      final batch = _firestore.batch();
+      for (final id in ids.skip(start).take(400)) {
+        batch.delete(_transactions(user.uid).doc(id));
+      }
+      await batch.commit();
+    }
+  }
+
   Future<void> upsertTransactions(
     List<FinancialTransaction> transactions,
   ) async {

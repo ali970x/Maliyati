@@ -94,7 +94,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showRealBalance = true;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: widget.controller,
+    builder: (context, _) => _buildDashboard(context),
+  );
+
+  Widget _buildDashboard(BuildContext context) {
     final controller = widget.controller;
     if (controller.isLoading && !controller.hasData) {
       return const Center(child: CircularProgressIndicator());
