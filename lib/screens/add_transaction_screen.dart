@@ -516,13 +516,13 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         return;
       }
     }
-    if (_type == TransactionType.expense && _paidNow) {
+    if (_requiresWalletFunds) {
       final balance = _selectedWalletBalance();
       if (usd > balance.balanceUsd || lbp > balance.balanceLbp) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Paid Now cannot be more than ${FinanceFormatters.usd(balance.balanceUsd)} or ${FinanceFormatters.lbp(balance.balanceLbp)} in ${_selectedWalletName()}.',
+              '${_type == TransactionType.reserveable ? 'Credit' : 'Paid Now'} cannot be more than ${FinanceFormatters.usd(balance.balanceUsd)} or ${FinanceFormatters.lbp(balance.balanceLbp)} in ${_selectedWalletName()}.',
             ),
           ),
         );
@@ -717,21 +717,21 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   String? _amountUsdHint() {
-    if (_type == TransactionType.expense && _paidNow) {
+    if (_requiresWalletFunds) {
       return compactUsdLimit(_selectedWalletBalance().balanceUsd);
     }
     return null;
   }
 
   String? _amountLbpHint() {
-    if (_type == TransactionType.expense && _paidNow) {
+    if (_requiresWalletFunds) {
       return compactLbpLimit(_selectedWalletBalance().balanceLbp);
     }
     return null;
   }
 
   List<TextInputFormatter> _amountInputFormatters(CurrencyCode currency) {
-    if (_type != TransactionType.expense || !_paidNow) {
+    if (!_requiresWalletFunds) {
       return const [];
     }
     final balance = _selectedWalletBalance();
@@ -741,6 +741,10 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       ),
     ];
   }
+
+  bool get _requiresWalletFunds =>
+      _type == TransactionType.reserveable ||
+      (_type == TransactionType.expense && _paidNow);
 }
 
 class _ScriptAddForm extends StatefulWidget {

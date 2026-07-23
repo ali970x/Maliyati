@@ -247,15 +247,18 @@ class DashboardController extends ChangeNotifier {
   /// wallet changes; only the selected payment method (My Wallet or Whish
   /// Money)
   /// does.
-  WalletSummary get walletSummary => WalletSummary.fromTransactions(
-    _transactions,
+  WalletSummary get walletSummary => _walletSummaryFor(_transactions);
+
+  WalletSummary _walletSummaryFor(List<FinancialTransaction> transactions) =>
+      WalletSummary.fromTransactions(
+        transactions,
     cashOpeningUsd: _walletOpeningUsd,
     cashOpeningLbp: _walletOpeningLbp,
     wishOpeningUsd: _wishWalletOpeningUsd,
     wishOpeningLbp: _wishWalletOpeningLbp,
     ignoredCashTransactionIds: _cashWalletBaselineTransactionIds,
     ignoredWishTransactionIds: _wishWalletBaselineTransactionIds,
-  );
+      );
 
   /// Wallet balance shown on the dashboard follows the selected time filter.
   /// Today shows the current balance; other periods show the balance at their
@@ -281,16 +284,10 @@ class DashboardController extends ChangeNotifier {
 
   WalletSummary _walletSummaryAsOf(DateTime asOf) {
     final cutoff = DateTime(asOf.year, asOf.month, asOf.day);
-    return WalletSummary.fromTransactions(
+    return _walletSummaryFor(
       _transactions
           .where((transaction) => !transaction.date.isAfter(cutoff))
           .toList(),
-      cashOpeningUsd: _walletOpeningUsd,
-      cashOpeningLbp: _walletOpeningLbp,
-      wishOpeningUsd: _wishWalletOpeningUsd,
-      wishOpeningLbp: _wishWalletOpeningLbp,
-      ignoredCashTransactionIds: _cashWalletBaselineTransactionIds,
-      ignoredWishTransactionIds: _wishWalletBaselineTransactionIds,
     );
   }
 
@@ -1477,6 +1474,10 @@ class DashboardController extends ChangeNotifier {
       throw const FirebaseFinanceException('Sign in first.');
     }
     final ready = _assignMissingId(AccountingRules.normalize(transaction));
+    _ensureOutgoingWalletFunds(
+      afterTransactions: [..._transactions, ready],
+      changedTransactions: [ready],
+    );
     final saved = AccountingRules.normalize(
       await _firebase.addTransaction(ready),
     );
@@ -1500,6 +1501,10 @@ class DashboardController extends ChangeNotifier {
     }
     final ready = _assignMissingSequentialIds(
       transactions.map(AccountingRules.normalize).toList(growable: false),
+    );
+    _ensureOutgoingWalletFunds(
+      afterTransactions: [..._transactions, ...ready],
+      changedTransactions: ready,
     );
     await _firebase.upsertTransactions(ready);
     _transactions = [
@@ -1587,6 +1592,10 @@ class DashboardController extends ChangeNotifier {
       date: date ?? DateTime.now(),
       amountUsd: paidUsd,
       amountLbp: paidLbp,
+    );
+    _ensureOutgoingWalletFunds(
+      afterTransactions: [..._transactions, settlement],
+      changedTransactions: [settlement],
     );
     await updateTransaction(transaction, settled);
     await addTransaction(settlement);
@@ -2149,8 +2158,18 @@ class DashboardController extends ChangeNotifier {
     if (index == -1) {
       return;
     }
+    final ready = AccountingRules.normalize(updated);
+    final afterTransactions = [
+      ..._transactions.take(index),
+      ready,
+      ..._transactions.skip(index + 1),
+    ];
+    _ensureOutgoingWalletFunds(
+      afterTransactions: afterTransactions,
+      changedTransactions: [ready],
+    );
     final updatedWithId = AccountingRules.normalize(
-      await _firebase.updateTransaction(AccountingRules.normalize(updated)),
+      await _firebase.updateTransaction(ready),
     );
     _transactions = [
       ..._transactions.take(index),
@@ -2158,6 +2177,39 @@ class DashboardController extends ChangeNotifier {
       ..._transactions.skip(index + 1),
     ];
     notifyListeners();
+  }
+
+  void _ensureOutgoingWalletFunds({
+    required List<FinancialTransaction> afterTransactions,
+    required Iterable<FinancialTransaction> changedTransactions,
+  }) {
+    final after = _walletSummaryFor(afterTransactions);
+    for (final transaction in changedTransactions) {
+      if (transaction.walletDirection >= 0) {
+        continue;
+      }
+      final isWish = LabelNormalizer.isWishMoney(transaction.walletId);
+      final balance = isWish ? after.wish : after.cash;
+      final hasUsdShortfall =
+          transaction.amountUsd > 0 && balance.balanceUsd < -0.0001;
+      final hasLbpShortfall =
+          transaction.amountLbp > 0 && balance.balanceLbp < -0.5;
+      if (!hasUsdShortfall && !hasLbpShortfall) {
+        continue;
+      }
+      final walletName = isWish ? 'Whish Money' : 'My Wallet';
+      final availableUsd = (balance.balanceUsd + transaction.amountUsd)
+          .clamp(0.0, double.infinity)
+          .toDouble();
+      final availableLbp = (balance.balanceLbp + transaction.amountLbp)
+          .clamp(0.0, double.infinity)
+          .toDouble();
+      throw FirebaseFinanceException(
+        'Not enough balance in $walletName. Available: '
+        '${availableUsd.toStringAsFixed(2)} USD | '
+        '${availableLbp.toStringAsFixed(0)} LBP.',
+      );
+    }
   }
 
   Future<FinancialTransaction> moveTransactionWallet(

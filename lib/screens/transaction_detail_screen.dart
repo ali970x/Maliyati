@@ -533,13 +533,13 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       );
       return;
     }
-    if (_selectedType == TransactionType.expense && _paidNow) {
+    if (_requiresWalletFunds) {
       final balance = _editableWalletBalance();
       if (usd > balance.balanceUsd || lbp > balance.balanceLbp) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Paid Now cannot be more than ${FinanceFormatters.usd(balance.balanceUsd)} or ${FinanceFormatters.lbp(balance.balanceLbp)}.',
+              '${_selectedType == TransactionType.reserveable ? 'Credit' : 'Paid Now'} cannot be more than ${FinanceFormatters.usd(balance.balanceUsd)} or ${FinanceFormatters.lbp(balance.balanceLbp)}.',
             ),
           ),
         );
@@ -572,9 +572,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ..['settlement_status'] = _showsSettlementStatus
           ? _settlementStatus.label
           : ''
-      ..['wallet_direction'] = _selectedType == TransactionType.expense
-          ? (_paidNow ? '-1' : '0')
-          : '';
+      ..['wallet_direction'] = switch (_selectedType) {
+        TransactionType.income => '1',
+        TransactionType.expense => _paidNow ? '-1' : '0',
+        TransactionType.reserveable => '-1',
+        TransactionType.debt ||
+        TransactionType.transfer ||
+        TransactionType.unknown => '0',
+      };
     final updated = _transaction.copyWith(
       type: _selectedType,
       category: _categoryController.text.trim(),
@@ -891,21 +896,21 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   String? _amountUsdHint() {
-    if (_selectedType == TransactionType.expense && _paidNow) {
+    if (_requiresWalletFunds) {
       return compactUsdLimit(_editableWalletBalance().balanceUsd);
     }
     return null;
   }
 
   String? _amountLbpHint() {
-    if (_selectedType == TransactionType.expense && _paidNow) {
+    if (_requiresWalletFunds) {
       return compactLbpLimit(_editableWalletBalance().balanceLbp);
     }
     return null;
   }
 
   List<TextInputFormatter> _amountInputFormatters(CurrencyCode currency) {
-    if (_selectedType != TransactionType.expense || !_paidNow) {
+    if (!_requiresWalletFunds) {
       return const [];
     }
     final balance = _editableWalletBalance();
@@ -915,6 +920,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ),
     ];
   }
+
+  bool get _requiresWalletFunds =>
+      _selectedType == TransactionType.reserveable ||
+      (_selectedType == TransactionType.expense && _paidNow);
 
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
