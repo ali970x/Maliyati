@@ -308,6 +308,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     var walletId = _paymentMethodController.text.trim().isEmpty
         ? 'Cash'
         : _paymentMethodController.text.trim();
+    var payFullAmount = true;
     final isDebt = target.isDebt;
     final result = await showModalBottomSheet<_SettlementRequest>(
       context: context,
@@ -333,61 +334,58 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 6),
+                const SizedBox(height: 14),
                 Text(
-                  isDebt
-                      ? 'Record the amount you paid now. You can return later for the rest.'
-                      : 'Record the amount you received now. You can collect the rest later.',
+                  'Remaining: ${FinanceFormatters.usd(target.remainingAmountUsd)} | ${FinanceFormatters.lbp(target.remainingAmountLbp)}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 16),
-                _SettlementAmounts(
-                  label: 'Remaining balance',
-                  usd: target.remainingAmountUsd,
-                  lbp: target.remainingAmountLbp,
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: usdController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Pay / collect USD',
-                        ),
-                      ),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: true,
+                      icon: Icon(Icons.done_all_rounded),
+                      label: Text('Full amount'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: lbpController,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Pay / collect LBP',
-                        ),
-                      ),
+                    ButtonSegment(
+                      value: false,
+                      icon: Icon(Icons.edit_rounded),
+                      label: Text('Partial amount'),
                     ),
                   ],
+                  selected: {payFullAmount},
+                  onSelectionChanged: (value) =>
+                      setSheetState(() => payFullAmount = value.first),
                 ),
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  onPressed: () {
-                    setSheetState(() {
-                      usdController.text = _amountText(
-                        target.remainingAmountUsd,
-                      );
-                      lbpController.text = _amountText(
-                        target.remainingAmountLbp,
-                      );
-                    });
-                  },
-                  icon: const Icon(Icons.done_all_rounded),
-                  label: const Text('Use full remaining balance'),
-                ),
-                const SizedBox(height: 6),
+                if (!payFullAmount) ...[
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: usdController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(labelText: 'USD'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: lbpController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: const InputDecoration(labelText: 'LBP'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
                 Text('Wallet', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 8),
                 SegmentedButton<String>(
@@ -416,8 +414,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                   width: double.infinity,
                   child: FilledButton.icon(
                     onPressed: () {
-                      final usd = _parseAmount(usdController.text);
-                      final lbp = _parseAmount(lbpController.text);
+                      final usd = payFullAmount
+                          ? target.remainingAmountUsd
+                          : _parseAmount(usdController.text);
+                      final lbp = payFullAmount
+                          ? target.remainingAmountLbp
+                          : _parseAmount(lbpController.text);
                       if (usd <= 0 && lbp <= 0) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1231,49 +1233,12 @@ class _EditBody extends StatelessWidget {
             const SizedBox(height: 10),
             OutlinedButton.icon(
               onPressed: state._isSaving ? null : state._settleCurrent,
-              icon: const Icon(Icons.verified_rounded),
+              icon: const Icon(Icons.add_card_rounded),
               label: Text(
-                state._transaction.isDebt ? 'Settle debt' : 'Collect credit',
+                state._transaction.isDebt ? 'Add payment' : 'Add collection',
               ),
             ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SettlementAmounts extends StatelessWidget {
-  const _SettlementAmounts({
-    required this.label,
-    required this.usd,
-    required this.lbp,
-  });
-
-  final String label;
-  final double usd;
-  final double lbp;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: Theme.of(context).textTheme.labelLarge),
-          const SizedBox(height: 5),
-          Text(
-            '${FinanceFormatters.usd(usd)}  |  ${FinanceFormatters.lbp(lbp)}',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
         ],
       ),
     );
@@ -1301,16 +1266,17 @@ class _SettlementProgressCard extends StatelessWidget {
     final total = totalUsd + totalLbp / 89000;
     final remaining = remainingUsd + remainingLbp / 89000;
     final progress = total <= 0 ? 0.0 : (1 - remaining / total).clamp(0.0, 1.0);
-    final color = isDebt ? Colors.deepOrange : Colors.teal;
+    final color = isDebt ? const Color(0xFFB45309) : const Color(0xFF168A5B);
     final status = transaction.isSettled
-        ? 'Complete'
+        ? 'Done'
         : transaction.settlementStatus == AccountingSettlementStatus.partial
-        ? 'Partially ${isDebt ? 'paid' : 'collected'}'
+        ? 'Partial'
         : 'Open';
+    final latest = history.isEmpty ? null : history.first;
 
     return Card(
       elevation: 0,
-      color: color.withValues(alpha: 0.08),
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1326,74 +1292,58 @@ class _SettlementProgressCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isDebt
-                        ? 'Debt payment progress'
-                        : 'Credit collection progress',
+                    isDebt ? 'Amount left to pay' : 'Amount left to collect',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-                Chip(label: Text(status)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(value: progress, minHeight: 8),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _SettlementAmounts(
-                    label: 'Original',
-                    usd: totalUsd,
-                    lbp: totalLbp,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _SettlementAmounts(
-                    label: isDebt ? 'Paid' : 'Collected',
-                    usd: paidUsd,
-                    lbp: paidLbp,
+                Text(
+                  status,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            _SettlementAmounts(
-              label: 'Remaining',
-              usd: remainingUsd,
-              lbp: remainingLbp,
-            ),
-            if (history.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Activity',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            Text(
+              '${FinanceFormatters.usd(remainingUsd)}  |  ${FinanceFormatters.lbp(remainingLbp)}',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w900,
               ),
-              const SizedBox(height: 4),
-              for (final entry in history.take(5))
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  leading: Icon(
-                    isDebt
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded,
-                    color: color,
-                  ),
-                  title: Text(FinanceFormatters.date(entry.date)),
-                  subtitle: Text(entry.walletId),
-                  trailing: Text(
-                    '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
-                    textAlign: TextAlign.end,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(value: progress, minHeight: 6),
+            const SizedBox(height: 8),
+            Text(
+              '${isDebt ? 'Paid' : 'Collected'} ${FinanceFormatters.usd(paidUsd)} | ${FinanceFormatters.lbp(paidLbp)} of ${FinanceFormatters.usd(totalUsd)} | ${FinanceFormatters.lbp(totalLbp)}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (latest != null) ...[
+              const Divider(height: 24),
+              Row(
+                children: [
+                  Icon(Icons.history_rounded, size: 18, color: color),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${history.length} ${history.length == 1 ? 'payment' : 'payments'} - last on ${FinanceFormatters.date(latest.date)}',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
-                ),
+                  Text(
+                    FinanceFormatters.usd(latest.amountUsd),
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ],
         ),
