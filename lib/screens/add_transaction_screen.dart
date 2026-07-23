@@ -18,12 +18,16 @@ class AddTransactionScreen extends StatefulWidget {
     this.initialScript,
     this.autoRunInitialScript = false,
     this.scriptOnly = false,
+    this.initialType,
+    this.initialWalletId,
   });
 
   final DashboardController controller;
   final String? initialScript;
   final bool autoRunInitialScript;
   final bool scriptOnly;
+  final TransactionType? initialType;
+  final String? initialWalletId;
 
   @override
   State<AddTransactionScreen> createState() => _AddTransactionScreenState();
@@ -78,7 +82,11 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
               child: TabBarView(
                 controller: _tabController,
                 children: [
-                  _ManualAddForm(controller: widget.controller),
+                  _ManualAddForm(
+                    controller: widget.controller,
+                    initialType: widget.initialType,
+                    initialWalletId: widget.initialWalletId,
+                  ),
                   _ScriptAddForm(
                     controller: widget.controller,
                     initialScript: widget.initialScript,
@@ -95,9 +103,15 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
 }
 
 class _ManualAddForm extends StatefulWidget {
-  const _ManualAddForm({required this.controller});
+  const _ManualAddForm({
+    required this.controller,
+    this.initialType,
+    this.initialWalletId,
+  });
 
   final DashboardController controller;
+  final TransactionType? initialType;
+  final String? initialWalletId;
 
   @override
   State<_ManualAddForm> createState() => _ManualAddFormState();
@@ -126,8 +140,23 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   @override
   void initState() {
     super.initState();
-    _paymentMethodController.text = 'My Wallet';
+    _type = widget.initialType ?? TransactionType.expense;
+    _status = switch (_type) {
+      TransactionType.income => _ManualStatus.income,
+      TransactionType.reserveable => _ManualStatus.credit,
+      TransactionType.debt => _ManualStatus.debt,
+      TransactionType.transfer => _ManualStatus.transfer,
+      _ => _ManualStatus.expense,
+    };
+    _paymentMethodController.text =
+        widget.initialWalletId?.trim().isNotEmpty == true
+        ? widget.initialWalletId!.trim()
+        : 'My Wallet';
+    _useWishMoney = LabelNormalizer.isWishMoney(_paymentMethodController.text);
     _destinationWalletController.text = 'Whish Money';
+    if (_isCreditOrDebt) {
+      _categoryController.text = _fixedCategory;
+    }
   }
 
   @override

@@ -10,6 +10,7 @@ import '../services/label_normalizer.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
+import 'add_transaction_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'wallet_screen.dart';
 
@@ -40,6 +41,27 @@ void _openMetricFocus(
         controller: controller,
         kind: kind,
         showCategories: showCategories,
+      ),
+    ),
+  );
+}
+
+Future<void> _openContextualAdd(
+  BuildContext context,
+  DashboardController controller, {
+  TransactionType? type,
+  String? walletId,
+  required String title,
+}) async {
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: Text(title)),
+        body: AddTransactionScreen(
+          controller: controller,
+          initialType: type,
+          initialWalletId: walletId,
+        ),
       ),
     ),
   );
@@ -244,7 +266,7 @@ class _LightDashboard extends StatelessWidget {
                   trend: _chartSeries(summary.dailyNetTotals, 14),
                   visible: balanceVisible,
                   onToggle: onToggleBalance,
-                  label: showRealBalance ? 'Available balance' : 'Net balance',
+                  label: showRealBalance ? 'Wallet balance' : 'Net cash flow',
                   onDoubleTap: onToggleRealBalance,
                   onLongPress: () =>
                       _showBalancePeriodSettings(context, controller),
@@ -360,6 +382,18 @@ class _LightDashboard extends StatelessWidget {
                       ],
                     );
                   },
+                ),
+                const SizedBox(height: 8),
+                _LightMetric(
+                  title: 'Net cash flow',
+                  value: FinanceFormatters.usd(summary.totalNet),
+                  subtitle: FinanceFormatters.lbp(summary.totalNetLbp),
+                  icon: Icons.account_balance_rounded,
+                  color: summary.totalNet >= 0
+                      ? const Color(0xFF168A5B)
+                      : const Color(0xFFC74949),
+                  onTap: () {},
+                  onLongPress: () {},
                 ),
                 const SizedBox(height: 8),
                 _LightExpenseFocus(controller: controller),
@@ -550,7 +584,8 @@ class _LightAccountsState extends State<_LightAccounts> {
             onTap: () => _handleTap(context, isWishMoney: false),
             onDoubleTap: () =>
                 setState(() => _cashDisplay = _nextDisplay(_cashDisplay)),
-            onLongPress: _cycleCombinedBalance,
+            onLongPress: () =>
+                _showAvailableBalance(context, isWishMoney: false),
             displayMode: _cashDisplay,
             exchangeRate: widget.controller.exchangeRate,
             comparison: widget.controller.walletBalanceComparison(
@@ -572,7 +607,8 @@ class _LightAccountsState extends State<_LightAccounts> {
             onTap: () => _handleTap(context, isWishMoney: true),
             onDoubleTap: () =>
                 setState(() => _wishDisplay = _nextDisplay(_wishDisplay)),
-            onLongPress: _cycleCombinedBalance,
+            onLongPress: () =>
+                _showAvailableBalance(context, isWishMoney: true),
             displayMode: _wishDisplay,
             exchangeRate: widget.controller.exchangeRate,
             comparison: widget.controller.walletBalanceComparison(
@@ -628,6 +664,46 @@ class _LightAccountsState extends State<_LightAccounts> {
       ),
     ),
   );
+
+  void _showAvailableBalance(
+    BuildContext context, {
+    required bool isWishMoney,
+  }) {
+    final balance = isWishMoney ? widget.wallets.wish : widget.wallets.cash;
+    final title = isWishMoney ? 'Whish Money' : 'My Wallet';
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Available balance',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 4),
+              Text(title),
+              const SizedBox(height: 16),
+              Text(
+                FinanceFormatters.usd(balance.balanceUsd),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(FinanceFormatters.lbp(balance.balanceLbp)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _chooseTime(
     BuildContext context, {
@@ -1589,6 +1665,24 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
                 );
               },
             ),
+      floatingActionButton:
+          kind == _DashboardMetricKind.reserveable ||
+              kind == _DashboardMetricKind.debit
+          ? FloatingActionButton.extended(
+              onPressed: () => _openContextualAdd(
+                context,
+                controller,
+                type: kind == _DashboardMetricKind.reserveable
+                    ? TransactionType.reserveable
+                    : TransactionType.debt,
+                title: kind == _DashboardMetricKind.reserveable
+                    ? 'Add credit'
+                    : 'Add debt',
+              ),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add'),
+            )
+          : null,
     );
   }
 
@@ -1772,17 +1866,19 @@ class _DashboardContent extends StatelessWidget {
           onToggle: onToggleBalance,
           onWalletPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => WalletScreen(
+              builder: (_) => _WalletActivityScreen(
                 controller: controller,
-                wallet: WalletKind.myWallet,
+                isWishMoney: false,
+                initialScope: _WalletTimeScope.today,
               ),
             ),
           ),
           onWishWalletPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => WalletScreen(
+              builder: (_) => _WalletActivityScreen(
                 controller: controller,
-                wallet: WalletKind.wishMoney,
+                isWishMoney: true,
+                initialScope: _WalletTimeScope.today,
               ),
             ),
           ),
@@ -2164,6 +2260,16 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
           );
         },
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openContextualAdd(
+          context,
+          widget.controller,
+          walletId: isWish ? 'Whish Money' : 'My Wallet',
+          title: 'Add to $title',
+        ),
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Add'),
+      ),
     );
   }
 
@@ -2381,7 +2487,7 @@ class _BalanceHero extends StatelessWidget {
                         ),
                         const SizedBox(width: 7),
                         const Text(
-                          'Current balance',
+                          'Net cash flow',
                           style: TextStyle(
                             color: Color(0xFF9FB7C9),
                             fontWeight: FontWeight.w700,
