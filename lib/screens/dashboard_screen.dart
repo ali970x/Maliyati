@@ -114,6 +114,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   bool _balanceVisible = true;
   bool _showRealBalance = true;
+  bool _netCashFlowInLbp = false;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -136,6 +137,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         showRealBalance: _showRealBalance,
         onToggleRealBalance: () =>
             setState(() => _showRealBalance = !_showRealBalance),
+        netCashFlowInLbp: _netCashFlowInLbp,
+        onToggleNetCashFlowCurrency: () =>
+            setState(() => _netCashFlowInLbp = !_netCashFlowInLbp),
       );
     }
 
@@ -179,6 +183,8 @@ class _LightDashboard extends StatelessWidget {
     required this.onToggleBalance,
     required this.showRealBalance,
     required this.onToggleRealBalance,
+    required this.netCashFlowInLbp,
+    required this.onToggleNetCashFlowCurrency,
     this.onOpenMenu,
   });
 
@@ -188,6 +194,8 @@ class _LightDashboard extends StatelessWidget {
   final VoidCallback onToggleBalance;
   final bool showRealBalance;
   final VoidCallback onToggleRealBalance;
+  final bool netCashFlowInLbp;
+  final VoidCallback onToggleNetCashFlowCurrency;
 
   @override
   Widget build(BuildContext context) {
@@ -386,14 +394,17 @@ class _LightDashboard extends StatelessWidget {
                 const SizedBox(height: 8),
                 _LightMetric(
                   title: 'Net cash flow',
-                  value: FinanceFormatters.usd(summary.totalNet),
-                  subtitle: FinanceFormatters.lbp(summary.totalNetLbp),
+                  value: netCashFlowInLbp
+                      ? FinanceFormatters.lbp(summary.totalNetLbp)
+                      : FinanceFormatters.usd(summary.totalNet),
+                  subtitle: netCashFlowInLbp
+                      ? FinanceFormatters.usd(summary.totalNet)
+                      : FinanceFormatters.lbp(summary.totalNetLbp),
                   icon: Icons.account_balance_rounded,
                   color: summary.totalNet >= 0
                       ? const Color(0xFF168A5B)
                       : const Color(0xFFC74949),
-                  onTap: () {},
-                  onLongPress: () {},
+                  onLongPress: onToggleNetCashFlowCurrency,
                 ),
                 const SizedBox(height: 8),
                 _LightExpenseFocus(controller: controller),
