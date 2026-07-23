@@ -255,10 +255,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _destinationWalletController = TextEditingController();
     _notesController = TextEditingController();
     _loadFormValues(_transaction);
+    widget.controller.addListener(_syncTransactionFromController);
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_syncTransactionFromController);
     _descriptionController.dispose();
     _categoryController.dispose();
     _amountUsdController.dispose();
@@ -267,6 +269,24 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _destinationWalletController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _syncTransactionFromController() {
+    final id = _transaction.id;
+    if (!mounted || id == null || id.isEmpty) {
+      return;
+    }
+    final matching = widget.controller.transactions.where(
+      (item) => item.id == id,
+    );
+    if (matching.isEmpty ||
+        matching.first.raw.toString() == _transaction.raw.toString()) {
+      return;
+    }
+    setState(() {
+      _transaction = matching.first;
+      _loadFormValues(_transaction);
+    });
   }
 
   @override
@@ -502,6 +522,15 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           ..sort((a, b) => b.date.compareTo(a.date));
     return entries;
   }
+
+  Future<void> _showSettlementHistory() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => _SettlementHistorySheet(
+      isDebt: _transaction.isDebt,
+      history: _settlementHistory,
+    ),
+  );
 
   void _updateType(TransactionType type) {
     setState(() {
@@ -956,6 +985,7 @@ class _EditBody extends StatelessWidget {
             _SettlementProgressCard(
               transaction: state._transaction,
               history: state._settlementHistory,
+              onShowAll: state._showSettlementHistory,
             ),
             const SizedBox(height: 12),
           ],
@@ -1300,10 +1330,12 @@ class _SettlementProgressCard extends StatelessWidget {
   const _SettlementProgressCard({
     required this.transaction,
     required this.history,
+    required this.onShowAll,
   });
 
   final FinancialTransaction transaction;
   final List<FinancialTransaction> history;
+  final VoidCallback onShowAll;
 
   @override
   Widget build(BuildContext context) {
@@ -1323,8 +1355,6 @@ class _SettlementProgressCard extends StatelessWidget {
         : transaction.settlementStatus == AccountingSettlementStatus.partial
         ? 'Partial'
         : 'Open';
-    final latest = history.isEmpty ? null : history.first;
-
     return Card(
       elevation: 0,
       color: Theme.of(context).colorScheme.surfaceContainerLowest,
@@ -1375,29 +1405,89 @@ class _SettlementProgressCard extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-            if (latest != null) ...[
+            if (history.isNotEmpty) ...[
               const Divider(height: 24),
-              Row(
-                children: [
-                  Icon(Icons.history_rounded, size: 18, color: color),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '${history.length} ${history.length == 1 ? 'payment' : 'payments'} via ${latest.walletId} - last on ${FinanceFormatters.date(latest.date)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+              for (final entry in history.take(3))
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.history_rounded, size: 18, color: color),
+                  title: Text(
+                    '${isDebt ? 'Payment' : 'Collection'} via ${entry.walletId}',
                   ),
-                  Text(
-                    FinanceFormatters.usd(latest.amountUsd),
+                  subtitle: Text(FinanceFormatters.date(entry.date)),
+                  trailing: Text(
+                    '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
+                    textAlign: TextAlign.end,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
                   ),
-                ],
+                ),
+              TextButton.icon(
+                onPressed: onShowAll,
+                icon: const Icon(Icons.list_alt_rounded),
+                label: Text('View all ${history.length} payments'),
               ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SettlementHistorySheet extends StatelessWidget {
+  const _SettlementHistorySheet({required this.isDebt, required this.history});
+
+  final bool isDebt;
+  final List<FinancialTransaction> history;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: Icon(
+              isDebt ? Icons.payments_rounded : Icons.savings_rounded,
+            ),
+            title: Text(
+              isDebt ? 'Debt payment history' : 'Credit collection history',
+            ),
+            subtitle: Text('${history.length} recorded activities'),
+          ),
+          const Divider(height: 1),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: history.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final entry = history[index];
+                return ListTile(
+                  leading: Icon(
+                    isDebt
+                        ? Icons.arrow_upward_rounded
+                        : Icons.arrow_downward_rounded,
+                  ),
+                  title: Text(
+                    '${isDebt ? 'Payment' : 'Collection'} via ${entry.walletId}',
+                  ),
+                  subtitle: Text(FinanceFormatters.date(entry.date)),
+                  trailing: Text(
+                    '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
+                    textAlign: TextAlign.end,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
