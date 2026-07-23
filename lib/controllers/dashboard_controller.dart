@@ -582,29 +582,10 @@ class DashboardController extends ChangeNotifier {
         await prefs.setString(_appLockMethodKey, AppLockMethod.biometric.name);
       }
       _autoBackupEnabled = prefs.getBool(_autoBackupEnabledKey) ?? false;
-      _walletOpeningUsd = prefs.getDouble(_walletOpeningUsdKey) ?? 0;
-      _walletOpeningLbp = prefs.getDouble(_walletOpeningLbpKey) ?? 0;
-      _wishWalletOpeningUsd = prefs.getDouble(_wishWalletOpeningUsdKey) ?? 0;
-      _wishWalletOpeningLbp = prefs.getDouble(_wishWalletOpeningLbpKey) ?? 0;
-      // Older versions used one baseline for both wallets. Keep it as the
-      // first-run fallback, then persist separate baselines from now on.
-      final legacyBaseline =
-          prefs.getStringList(_walletBaselineTransactionIdsKey)?.toSet() ??
-          <String>{};
-      _cashWalletBaselineTransactionIds =
-          prefs.getStringList(_cashWalletBaselineTransactionIdsKey)?.toSet() ??
-          legacyBaseline;
-      _wishWalletBaselineTransactionIds =
-          prefs.getStringList(_wishWalletBaselineTransactionIdsKey)?.toSet() ??
-          legacyBaseline;
-      _cashWalletComparisonRange = WalletComparisonRange.values.firstWhere(
-        (value) => value.name == prefs.getString(_cashWalletComparisonRangeKey),
-        orElse: () => WalletComparisonRange.week,
-      );
-      _wishWalletComparisonRange = WalletComparisonRange.values.firstWhere(
-        (value) => value.name == prefs.getString(_wishWalletComparisonRangeKey),
-        orElse: () => WalletComparisonRange.week,
-      );
+      // Wallets are account data. Never hydrate them from device-wide prefs:
+      // that would make a second Google account inherit the first account's
+      // Cash and Whish balances. They are loaded only from this Firebase UID.
+      _resetWalletState();
       _categoryRules = _loadCategoryRules(prefs);
       _lastAutoBackup = DateTime.tryParse(
         prefs.getString(_lastAutoBackupKey) ?? '',
@@ -881,6 +862,7 @@ class DashboardController extends ChangeNotifier {
       }
       await _ensureCurrentUserAllowed();
       _useFirestore = true;
+      _resetWalletState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
       // Sheet settings are optional. They must not block a successful login.
@@ -960,6 +942,7 @@ class DashboardController extends ChangeNotifier {
       _user = await action();
       await _ensureCurrentUserAllowed();
       _useFirestore = true;
+      _resetWalletState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
       await _loadSheetIntegrationSettings();
@@ -1004,6 +987,7 @@ class DashboardController extends ChangeNotifier {
     }
     _user = null;
     _useFirestore = false;
+    _resetWalletState();
     _transactions = const [];
     _adminUsers = const [];
     _errorMessage = null;
@@ -2076,6 +2060,17 @@ class DashboardController extends ChangeNotifier {
     );
   }
 
+  void _resetWalletState() {
+    _walletOpeningUsd = 0;
+    _walletOpeningLbp = 0;
+    _wishWalletOpeningUsd = 0;
+    _wishWalletOpeningLbp = 0;
+    _cashWalletBaselineTransactionIds = <String>{};
+    _wishWalletBaselineTransactionIds = <String>{};
+    _cashWalletComparisonRange = WalletComparisonRange.week;
+    _wishWalletComparisonRange = WalletComparisonRange.week;
+  }
+
   Future<void> _loadWalletSettings() async {
     if (!_isFirebaseConfigured || _user == null) {
       return;
@@ -2083,12 +2078,10 @@ class DashboardController extends ChangeNotifier {
     try {
       final settings = await _firebase.fetchWalletSettings();
       if (settings == null) {
-        // The phone may already have balances stored locally from an older
-        // release. Let it publish that data once; a new browser must not
-        // overwrite it with empty values.
-        if (!kIsWeb) {
-          await _saveWalletSettings();
-        }
+        // A newly signed-in account starts with its own empty wallets. Do not
+        // copy balances from a prior user of this phone.
+        _resetWalletState();
+        await _saveWalletSettings();
         return;
       }
       _walletOpeningUsd = settings.cashOpeningUsd;
@@ -2106,27 +2099,6 @@ class DashboardController extends ChangeNotifier {
       _wishWalletComparisonRange = WalletComparisonRange.values.firstWhere(
         (value) => value.name == settings.wishComparisonRange,
         orElse: () => WalletComparisonRange.week,
-      );
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
-      await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
-      await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
-      await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
-      await prefs.setStringList(
-        _cashWalletBaselineTransactionIdsKey,
-        _cashWalletBaselineTransactionIds.toList(),
-      );
-      await prefs.setStringList(
-        _wishWalletBaselineTransactionIdsKey,
-        _wishWalletBaselineTransactionIds.toList(),
-      );
-      await prefs.setString(
-        _cashWalletComparisonRangeKey,
-        _cashWalletComparisonRange.name,
-      );
-      await prefs.setString(
-        _wishWalletComparisonRangeKey,
-        _wishWalletComparisonRange.name,
       );
     } catch (_) {
       // Wallet sync must never prevent sign-in or offline usage.
