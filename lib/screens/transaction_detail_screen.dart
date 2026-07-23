@@ -23,6 +23,188 @@ class _SettlementRequest {
   final String walletId;
 }
 
+class _SettlementSheet extends StatefulWidget {
+  const _SettlementSheet({required this.target, required this.initialWalletId});
+
+  final FinancialTransaction target;
+  final String initialWalletId;
+
+  @override
+  State<_SettlementSheet> createState() => _SettlementSheetState();
+}
+
+class _SettlementSheetState extends State<_SettlementSheet> {
+  late final TextEditingController _usdController;
+  late final TextEditingController _lbpController;
+  late String _walletId;
+  var _payFullAmount = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _usdController = TextEditingController(
+      text: _amountText(widget.target.remainingAmountUsd),
+    );
+    _lbpController = TextEditingController(
+      text: _amountText(widget.target.remainingAmountLbp),
+    );
+    _walletId = widget.initialWalletId.trim().toLowerCase().contains('wish')
+        ? 'Whish Money'
+        : 'Cash';
+  }
+
+  @override
+  void dispose() {
+    _usdController.dispose();
+    _lbpController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final target = widget.target;
+    final isDebt = target.isDebt;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        MediaQuery.viewInsetsOf(context).bottom + 24,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isDebt ? 'Pay debt' : 'Collect credit',
+              style: Theme.of(
+                context,
+              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Remaining: ${FinanceFormatters.usd(target.remainingAmountUsd)} | ${FinanceFormatters.lbp(target.remainingAmountLbp)}',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 16),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.done_all_rounded),
+                  label: Text('Full amount'),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.edit_rounded),
+                  label: Text('Partial amount'),
+                ),
+              ],
+              selected: {_payFullAmount},
+              onSelectionChanged: (value) =>
+                  setState(() => _payFullAmount = value.first),
+            ),
+            if (!_payFullAmount) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _usdController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(labelText: 'USD'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _lbpController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(labelText: 'LBP'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _walletId,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Pay from',
+                prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'Cash', child: Text('My Wallet')),
+                DropdownMenuItem(
+                  value: 'Whish Money',
+                  child: Text('Whish Money'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _walletId = value);
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${isDebt ? 'Payment' : 'Collection'} will be recorded in ${_walletId == 'Whish Money' ? 'Whish Money' : 'My Wallet'}.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _submit,
+                icon: const Icon(Icons.check_circle_rounded),
+                label: Text(isDebt ? 'Save payment' : 'Save collection'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    final target = widget.target;
+    final usd = _payFullAmount
+        ? target.remainingAmountUsd
+        : _parseAmount(_usdController.text);
+    final lbp = _payFullAmount
+        ? target.remainingAmountLbp
+        : _parseAmount(_lbpController.text);
+    if (usd <= 0 && lbp <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter the amount received or paid.')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(
+      _SettlementRequest(amountUsd: usd, amountLbp: lbp, walletId: _walletId),
+    );
+  }
+
+  static String _amountText(double amount) => amount <= 0
+      ? ''
+      : amount.toStringAsFixed(amount.truncateToDouble() == amount ? 0 : 2);
+
+  static double _parseAmount(String value) {
+    final cleaned = value
+        .replaceAll(',', '')
+        .replaceAll(r'$', '')
+        .replaceAll(RegExp('lbp|usd', caseSensitive: false), '')
+        .trim();
+    return double.tryParse(cleaned) ?? 0;
+  }
+}
+
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
     super.key,
@@ -297,164 +479,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     }
   }
 
-  Future<_SettlementRequest?> _showSettlementSheet() async {
-    final target = _transaction;
-    final usdController = TextEditingController(
-      text: _amountText(target.remainingAmountUsd),
-    );
-    final lbpController = TextEditingController(
-      text: _amountText(target.remainingAmountLbp),
-    );
-    var walletId =
-        _paymentMethodController.text.trim().toLowerCase().contains('wish')
-        ? 'Whish Money'
-        : 'Cash';
-    var payFullAmount = true;
-    final isDebt = target.isDebt;
-    final result = await showModalBottomSheet<_SettlementRequest>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            0,
-            20,
-            MediaQuery.viewInsetsOf(context).bottom + 24,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isDebt ? 'Pay debt' : 'Collect credit',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const SizedBox(height: 14),
-                Text(
-                  'Remaining: ${FinanceFormatters.usd(target.remainingAmountUsd)} | ${FinanceFormatters.lbp(target.remainingAmountLbp)}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(
-                      value: true,
-                      icon: Icon(Icons.done_all_rounded),
-                      label: Text('Full amount'),
-                    ),
-                    ButtonSegment(
-                      value: false,
-                      icon: Icon(Icons.edit_rounded),
-                      label: Text('Partial amount'),
-                    ),
-                  ],
-                  selected: {payFullAmount},
-                  onSelectionChanged: (value) =>
-                      setSheetState(() => payFullAmount = value.first),
-                ),
-                if (!payFullAmount) ...[
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: usdController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(labelText: 'USD'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: lbpController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          decoration: const InputDecoration(labelText: 'LBP'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Text('Wallet', style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: walletId,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Pay from',
-                    prefixIcon: Icon(Icons.account_balance_wallet_rounded),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Cash', child: Text('My Wallet')),
-                    DropdownMenuItem(
-                      value: 'Whish Money',
-                      child: Text('Whish Money'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setSheetState(() => walletId = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${isDebt ? 'Payment' : 'Collection'} will be recorded in ${walletId == 'Whish Money' ? 'Whish Money' : 'My Wallet'}.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      final usd = payFullAmount
-                          ? target.remainingAmountUsd
-                          : _parseAmount(usdController.text);
-                      final lbp = payFullAmount
-                          ? target.remainingAmountLbp
-                          : _parseAmount(lbpController.text);
-                      if (usd <= 0 && lbp <= 0) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Enter the amount received or paid.'),
-                          ),
-                        );
-                        return;
-                      }
-                      Navigator.of(sheetContext).pop(
-                        _SettlementRequest(
-                          amountUsd: usd,
-                          amountLbp: lbp,
-                          walletId: walletId,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.check_circle_rounded),
-                    label: Text(isDebt ? 'Save payment' : 'Save collection'),
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Future<_SettlementRequest?> _showSettlementSheet() =>
+      showModalBottomSheet<_SettlementRequest>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => _SettlementSheet(
+          target: _transaction,
+          initialWalletId: _paymentMethodController.text,
         ),
-      ),
-    );
-    usdController.dispose();
-    lbpController.dispose();
-    return result;
-  }
+      );
 
   List<FinancialTransaction> get _settlementHistory {
     final targetId = _transaction.id;
