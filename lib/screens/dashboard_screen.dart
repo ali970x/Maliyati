@@ -323,7 +323,7 @@ class _LightDashboard extends StatelessWidget {
                               context,
                               controller,
                               _DashboardMetricKind.reserveable,
-                              showCategories: true,
+                              showCategories: false,
                             ),
                             onLongPress: () => _openMetricFocus(
                               context,
@@ -347,7 +347,7 @@ class _LightDashboard extends StatelessWidget {
                               context,
                               controller,
                               _DashboardMetricKind.debit,
-                              showCategories: true,
+                              showCategories: false,
                             ),
                             onLongPress: () => _openMetricFocus(
                               context,
@@ -1562,7 +1562,10 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
                         : transaction.description,
                   ),
                   subtitle: Text(
-                    '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
+                    kind == _DashboardMetricKind.reserveable ||
+                            kind == _DashboardMetricKind.debit
+                        ? FinanceFormatters.shortDate(transaction.date)
+                        : '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
                   ),
                   trailing: Text(
                     FinanceFormatters.amount(transaction),
@@ -1839,7 +1842,7 @@ class _DashboardContent extends StatelessWidget {
               context,
               controller,
               _DashboardMetricKind.reserveable,
-              showCategories: true,
+              showCategories: false,
             ),
             onLongPress: () => _openMetricFocus(
               context,
@@ -1858,7 +1861,7 @@ class _DashboardContent extends StatelessWidget {
               context,
               controller,
               _DashboardMetricKind.debit,
-              showCategories: true,
+              showCategories: false,
             ),
             onLongPress: () => _openMetricFocus(
               context,

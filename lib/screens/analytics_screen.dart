@@ -161,7 +161,7 @@ class AnalyticsScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            ResponsiveTriple(
+            ResponsivePair(
               gap: 16,
               first: _CategoryRankingCard(
                 controller: controller,
@@ -189,22 +189,9 @@ class AnalyticsScreen extends StatelessWidget {
                   type: TransactionType.income,
                 ),
               ),
-              third: _CategoryRankingCard(
-                controller: controller,
-                title: strings.reserveableCategoryRanking,
-                emptyLabel: strings.noCategoryData,
-                data: summary.categoryReserveableTotals,
-                color: const Color(0xFFD97706),
-                icon: Icons.request_quote_rounded,
-                transactionsForKey: (category) => _transactionsForCategory(
-                  controller,
-                  category,
-                  type: TransactionType.reserveable,
-                ),
-              ),
             ),
             const SizedBox(height: 12),
-            ResponsiveTriple(
+            ResponsivePair(
               gap: 16,
               first: _CategoryRankingCard(
                 controller: controller,
@@ -246,9 +233,13 @@ class AnalyticsScreen extends StatelessWidget {
                       type: TransactionType.expense,
                     ),
               ),
-              third: _CategoryRankingCard(
+            ),
+            const SizedBox(height: 12),
+            ResponsivePair(
+              gap: 16,
+              first: _CategoryRankingCard(
                 controller: controller,
-                title: strings.reserveablePaymentMethodRanking,
+                title: 'Credit payment method ranking',
                 emptyLabel: strings.noPaymentMethodData,
                 data: _paymentMethodTotals(
                   transactions,
@@ -266,6 +257,26 @@ class AnalyticsScreen extends StatelessWidget {
                       type: TransactionType.reserveable,
                     ),
               ),
+              second: _CategoryRankingCard(
+                controller: controller,
+                title: 'Debt payment method ranking',
+                emptyLabel: strings.noPaymentMethodData,
+                data: _paymentMethodTotals(
+                  transactions,
+                  controller.exchangeRate,
+                  strings,
+                  type: TransactionType.debt,
+                ),
+                color: const Color(0xFF395EE9),
+                icon: Icons.account_balance_rounded,
+                transactionsForKey: (paymentMethod) =>
+                    _transactionsForPaymentMethod(
+                      controller,
+                      paymentMethod,
+                      strings,
+                      type: TransactionType.debt,
+                    ),
+              ),
             ),
             const SizedBox(height: 12),
             _BestWorstDays(summary: summary, strings: strings),
@@ -278,7 +289,7 @@ class AnalyticsScreen extends StatelessWidget {
               secondFlex: 2,
             ),
             const SizedBox(height: 12),
-            ResponsiveTriple(
+            ResponsivePair(
               gap: 16,
               first: _CategoryChart(
                 title: strings.expensesByCategory,
@@ -291,12 +302,6 @@ class AnalyticsScreen extends StatelessWidget {
                 noDataLabel: strings.noData,
                 data: summary.categoryIncomeTotals,
                 palette: _incomePalette,
-              ),
-              third: _CategoryChart(
-                title: strings.reserveablesByCategory,
-                noDataLabel: strings.noData,
-                data: summary.categoryReserveableTotals,
-                palette: _reserveablePalette,
               ),
             ),
             const SizedBox(height: 12),
@@ -338,14 +343,6 @@ class AnalyticsScreen extends StatelessWidget {
     Color(0xFF2563EB),
     Color(0xFF14B8A6),
     Color(0xFF9333EA),
-    Color(0xFF84CC16),
-  ];
-
-  static const _reserveablePalette = [
-    Color(0xFFD97706),
-    Color(0xFFEAB308),
-    Color(0xFFF59E0B),
-    Color(0xFFCA8A04),
     Color(0xFF84CC16),
   ];
 

@@ -565,6 +565,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ..['amount_lbp'] = lbp.toString()
       ..['Amount (\$)'] = usd.toString()
       ..['Amount (LBP)'] = lbp.toString()
+      ..['Category'] =
+          _fixedCategoryFor(_selectedType) ?? _categoryController.text.trim()
       ..['wallet_id'] = _paymentMethodController.text.trim()
       ..['destination_wallet_id'] = _selectedType == TransactionType.transfer
           ? _destinationWalletController.text.trim()
@@ -581,7 +583,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       };
     final updated = _transaction.copyWith(
       type: _selectedType,
-      category: _categoryController.text.trim(),
+      category:
+          _fixedCategoryFor(_selectedType) ?? _categoryController.text.trim(),
       description: _descriptionController.text.trim(),
       currency: usd > 0 ? CurrencyCode.usd : CurrencyCode.lbp,
       amount: usd > 0 ? usd : lbp,
@@ -734,9 +737,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           _paymentMethodController.text,
         );
       }
-      final options = widget.controller.categoryOptionsFor(type);
-      if (!options.contains(_categoryController.text.trim())) {
-        _categoryController.clear();
+      final fixedCategory = _fixedCategoryFor(type);
+      if (fixedCategory != null) {
+        _categoryController.text = fixedCategory;
+      } else {
+        final options = widget.controller.categoryOptionsFor(type);
+        if (!options.contains(_categoryController.text.trim())) {
+          _categoryController.clear();
+        }
       }
     });
   }
@@ -862,6 +870,12 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   bool get _showsSettlementStatus =>
       _selectedType == TransactionType.debt ||
       _selectedType == TransactionType.reserveable;
+
+  String? _fixedCategoryFor(TransactionType type) => switch (type) {
+    TransactionType.debt => 'Debt',
+    TransactionType.reserveable => 'Credit',
+    _ => null,
+  };
 
   WalletAccountSummary _editableWalletBalance() {
     final usesWish = LabelNormalizer.isWishMoney(_paymentMethodController.text);
@@ -1398,21 +1412,23 @@ class _EditBody extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _OptionTextField(
-                    controller: state._categoryController,
-                    label: strings.category,
-                    icon: Icons.category_rounded,
-                    options: state.widget.controller.categoryOptionsFor(
-                      state._selectedType,
+                  if (!state._showsSettlementStatus) ...[
+                    const SizedBox(height: 12),
+                    _OptionTextField(
+                      controller: state._categoryController,
+                      label: strings.category,
+                      icon: Icons.category_rounded,
+                      options: state.widget.controller.categoryOptionsFor(
+                        state._selectedType,
+                      ),
+                      fallbackOptions: state.widget.controller
+                          .categoryOptionsFor(state._selectedType),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                          ? strings.category
+                          : null,
                     ),
-                    fallbackOptions: state.widget.controller.categoryOptionsFor(
-                      state._selectedType,
-                    ),
-                    validator: (value) => value == null || value.trim().isEmpty
-                        ? strings.category
-                        : null,
-                  ),
+                  ],
                   if (state._showsSettlementStatus) ...[
                     const SizedBox(height: 12),
                     Text(
@@ -1628,11 +1644,6 @@ class _SettlementProgressCard extends StatelessWidget {
     final remaining = remainingUsd + remainingLbp / 89000;
     final progress = total <= 0 ? 0.0 : (1 - remaining / total).clamp(0.0, 1.0);
     final color = isDebt ? const Color(0xFFB45309) : const Color(0xFF168A5B);
-    final status = transaction.isSettled
-        ? 'Done'
-        : transaction.settlementStatus == AccountingSettlementStatus.partial
-        ? 'Partial'
-        : 'Open';
     return Card(
       elevation: 0,
       color: Theme.of(context).colorScheme.surfaceContainerLowest,
@@ -1655,13 +1666,6 @@ class _SettlementProgressCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
-                  ),
-                ),
-                Text(
-                  status,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],

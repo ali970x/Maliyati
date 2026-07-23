@@ -218,11 +218,15 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                                   .isEmpty) {
                             _destinationWalletController.text = 'Whish Money';
                           }
-                          final allowed = _categoryOptionsFor(_type);
-                          if (!allowed.contains(
-                            _categoryController.text.trim(),
-                          )) {
-                            _categoryController.clear();
+                          if (_isCreditOrDebt) {
+                            _categoryController.text = _fixedCategory;
+                          } else {
+                            final allowed = _categoryOptionsFor(_type);
+                            if (!allowed.contains(
+                              _categoryController.text.trim(),
+                            )) {
+                              _categoryController.clear();
+                            }
                           }
                         });
                       }
@@ -327,15 +331,17 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  _ListTextField(
-                    controller: _categoryController,
-                    label: 'Category',
-                    icon: Icons.category_rounded,
-                    color: const Color(0xFF9333EA),
-                    options: _categoryOptionsFor(_type),
-                    fallbackOptions: _categoryOptionsFor(_type),
-                  ),
+                  if (!_isCreditOrDebt) ...[
+                    const SizedBox(height: 12),
+                    _ListTextField(
+                      controller: _categoryController,
+                      label: 'Category',
+                      icon: Icons.category_rounded,
+                      color: const Color(0xFF9333EA),
+                      options: _categoryOptionsFor(_type),
+                      fallbackOptions: _categoryOptionsFor(_type),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Text(
                     _type == TransactionType.transfer
@@ -555,7 +561,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       }
     }
 
-    final category = _categoryController.text.trim().isEmpty
+    final category = _isCreditOrDebt
+        ? _fixedCategory
+        : _categoryController.text.trim().isEmpty
         ? 'Uncategorized'
         : _categoryController.text.trim();
     final raw = {
@@ -767,6 +775,12 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   bool get _requiresWalletFunds =>
       _type == TransactionType.reserveable ||
       (_type == TransactionType.expense && _paidNow);
+
+  bool get _isCreditOrDebt =>
+      _type == TransactionType.reserveable || _type == TransactionType.debt;
+
+  String get _fixedCategory =>
+      _type == TransactionType.debt ? 'Debt' : 'Credit';
 
   Future<void> _chooseSettlementTarget() async {
     final isDebt = _type == TransactionType.expense;
