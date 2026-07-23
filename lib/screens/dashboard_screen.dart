@@ -7,7 +7,6 @@ import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
 import '../services/label_normalizer.dart';
-import '../widgets/app_states.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
@@ -97,35 +96,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final strings = controller.strings;
     if (controller.isLoading && !controller.hasData) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (controller.errorMessage != null && !controller.hasData) {
-      return AppEmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: strings.couldNotLoadSheet,
-        message: controller.errorMessage!,
-        action: FilledButton.icon(
-          onPressed: controller.refresh,
-          icon: const Icon(Icons.refresh_rounded),
-          label: Text(strings.tryAgain),
-        ),
-      );
-    }
-    if (!controller.hasData) {
-      return AppEmptyState(
-        icon: Icons.account_balance_wallet_outlined,
-        title: strings.noTransactionsYet,
-        message: strings.noValidRows,
-        action: FilledButton.icon(
-          onPressed: controller.refresh,
-          icon: const Icon(Icons.refresh_rounded),
-          label: Text(strings.refresh),
-        ),
-      );
-    }
-
     if (Theme.of(context).brightness == Brightness.light) {
       return _LightDashboard(
         controller: controller,

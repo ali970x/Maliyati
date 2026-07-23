@@ -11,6 +11,7 @@ import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
 import '../services/app_lock_service.dart';
+import '../services/firebase_finance_service.dart';
 import '../services/google_drive_backup_service.dart';
 import '../services/smart_clipboard_service.dart';
 import 'smart_clipboard_settings_section.dart';
@@ -140,6 +141,13 @@ class AppMenuScreen extends StatelessWidget {
             subtitle: 'Version ${AppConfig.fullVersion}',
             onTap: () => _open(context, const AboutApplicationScreen()),
           ),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.delete_forever_outlined,
+            title: 'Reset account data',
+            subtitle: 'Delete every transaction and reset both wallets to zero',
+            onTap: () => _confirmResetAccount(context),
+          ),
           const SizedBox(height: 18),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
@@ -172,6 +180,50 @@ class AppMenuScreen extends StatelessWidget {
 
   void _open(BuildContext context, Widget page) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+  }
+
+  Future<void> _confirmResetAccount(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.red),
+        title: const Text('Reset this account?'),
+        content: const Text(
+          'This permanently deletes all transactions from Firebase and resets My Wallet and Whish Money to zero. Your login stays active.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.delete_forever_rounded),
+            label: const Text('Delete everything'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return;
+    }
+    try {
+      await controller.resetAccountData();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account reset. Both wallets are zero.'),
+          ),
+        );
+      }
+    } on FirebaseFinanceException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
   }
 }
 

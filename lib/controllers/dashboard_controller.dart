@@ -2247,6 +2247,30 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Permanently removes every transaction for the active Firebase account and
+  /// returns both wallets to a clean zero-balance state.
+  Future<void> resetAccountData() async {
+    if (!_isFirebaseConfigured) {
+      throw const FirebaseFinanceException('Firebase is not configured.');
+    }
+    if (_firebase.currentUser == null) {
+      throw const FirebaseFinanceException('Sign in first.');
+    }
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _firebase.clearTransactions();
+      _transactions = const [];
+      _resetWalletState();
+      _lastUpdated = DateTime.now();
+      _errorMessage = null;
+      await _saveWalletSettings();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   List<FinancialTransaction> _applyWindow(
     List<FinancialTransaction> source,
     DateWindow? window,

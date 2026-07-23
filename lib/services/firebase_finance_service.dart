@@ -406,6 +406,24 @@ class FirebaseFinanceService {
     await _transactions(user.uid).doc(id).delete();
   }
 
+  /// Deletes only the signed-in user's transaction records. User profile and
+  /// login credentials remain intact, so this can safely power "Reset account".
+  Future<void> clearTransactions() async {
+    final user = _requireUser();
+    final collection = _transactions(user.uid);
+    while (true) {
+      final snapshot = await collection.limit(400).get();
+      if (snapshot.docs.isEmpty) {
+        return;
+      }
+      final batch = _firestore.batch();
+      for (final document in snapshot.docs) {
+        batch.delete(document.reference);
+      }
+      await batch.commit();
+    }
+  }
+
   Future<void> upsertTransactions(
     List<FinancialTransaction> transactions,
   ) async {
