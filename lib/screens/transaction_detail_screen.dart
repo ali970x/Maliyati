@@ -40,56 +40,34 @@ class _WalletSelectionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = isWish ? const Color(0xFF6D4AFF) : theme.colorScheme.primary;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            height: 54,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: selected ? color.withValues(alpha: .14) : null,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selected ? color : theme.colorScheme.outlineVariant,
-                width: selected ? 2 : 1,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (isWish)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(7),
-                    child: Image.asset(
-                      'assets/branding/wish_money_logo.jpg',
-                      width: 23,
-                      height: 23,
-                      fit: BoxFit.cover,
-                    ),
-                  )
-                else
-                  Icon(Icons.account_balance_wallet_rounded, color: color),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: selected ? color : null,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+    return SizedBox(
+      height: 54,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: isWish
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: Image.asset(
+                  'assets/branding/wish_money_logo.jpg',
+                  width: 23,
+                  height: 23,
+                  fit: BoxFit.cover,
                 ),
-              ],
-            ),
+              )
+            : const Icon(Icons.account_balance_wallet_rounded),
+        label: Text(label, overflow: TextOverflow.ellipsis),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: selected ? color : theme.colorScheme.onSurface,
+          backgroundColor: selected ? color.withValues(alpha: .14) : null,
+          side: BorderSide(
+            color: selected ? color : theme.colorScheme.outlineVariant,
+            width: selected ? 2 : 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
