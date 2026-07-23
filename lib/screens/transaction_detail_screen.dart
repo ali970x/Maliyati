@@ -305,10 +305,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     final lbpController = TextEditingController(
       text: _amountText(target.remainingAmountLbp),
     );
-    var useWishMoney = _paymentMethodController.text
-        .trim()
-        .toLowerCase()
-        .contains('wish');
+    var walletId =
+        _paymentMethodController.text.trim().toLowerCase().contains('wish')
+        ? 'Whish Money'
+        : 'Cash';
     var payFullAmount = true;
     final isDebt = target.isDebt;
     final result = await showModalBottomSheet<_SettlementRequest>(
@@ -389,34 +389,29 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                 const SizedBox(height: 16),
                 Text('Wallet', style: Theme.of(context).textTheme.labelLarge),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ChoiceChip(
-                        avatar: const Icon(
-                          Icons.account_balance_wallet_rounded,
-                        ),
-                        label: const Text('My Wallet'),
-                        selected: !useWishMoney,
-                        onSelected: (_) =>
-                            setSheetState(() => useWishMoney = false),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ChoiceChip(
-                        avatar: const Icon(Icons.account_balance_rounded),
-                        label: const Text('Whish Money'),
-                        selected: useWishMoney,
-                        onSelected: (_) =>
-                            setSheetState(() => useWishMoney = true),
-                      ),
+                DropdownButtonFormField<String>(
+                  value: walletId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Pay from',
+                    prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Cash', child: Text('My Wallet')),
+                    DropdownMenuItem(
+                      value: 'Whish Money',
+                      child: Text('Whish Money'),
                     ),
                   ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setSheetState(() => walletId = value);
+                    }
+                  },
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${isDebt ? 'Payment' : 'Collection'} will be recorded in ${useWishMoney ? 'Whish Money' : 'My Wallet'}.',
+                  '${isDebt ? 'Payment' : 'Collection'} will be recorded in ${walletId == 'Whish Money' ? 'Whish Money' : 'My Wallet'}.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 20),
@@ -442,7 +437,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                         _SettlementRequest(
                           amountUsd: usd,
                           amountLbp: lbp,
-                          walletId: useWishMoney ? 'Whish Money' : 'Cash',
+                          walletId: walletId,
                         ),
                       );
                     },
