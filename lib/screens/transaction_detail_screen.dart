@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
 import '../services/firebase_finance_service.dart';
+import '../services/label_normalizer.dart';
 import '../widgets/amount_limit_input_formatter.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
@@ -45,13 +46,15 @@ class _WalletSelectionButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onTap,
         icon: isWish
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: Image.asset(
-                  'assets/branding/wish_money_logo.jpg',
-                  width: 23,
-                  height: 23,
-                  fit: BoxFit.cover,
+            ? ExcludeSemantics(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Image.asset(
+                    'assets/branding/wish_money_logo.jpg',
+                    width: 23,
+                    height: 23,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               )
             : const Icon(Icons.account_balance_wallet_rounded),
@@ -101,7 +104,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       text: _amountText(widget.target.remainingAmountLbp),
     );
     final initial = widget.initialWalletId.trim().toLowerCase();
-    _walletId = initial.contains('wish') ? 'Whish Money' : 'My Wallet';
+    _walletId = LabelNormalizer.isWishMoney(initial)
+        ? 'Whish Money'
+        : 'My Wallet';
   }
 
   @override
@@ -433,7 +438,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _amountLbpController.text = _amountText(transaction.amountLbp);
     _paymentMethodController.text =
         transaction.isCredit || transaction.isDebt || transaction.isTransfer
-        ? (transaction.paymentMethod.trim().toLowerCase().contains('wish')
+        ? (LabelNormalizer.isWishMoney(transaction.walletId)
               ? 'Whish Money'
               : 'My Wallet')
         : transaction.paymentMethod;
@@ -697,20 +702,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       return;
     }
     final previousWallet = _selectedPaymentMethodOption;
-    final raw = Map<String, String>.from(_transaction.raw)
-      ..['wallet_id'] = walletId
-      ..['walletId'] = walletId
-      ..['payment_method'] = walletId
-      ..['Payment Method'] = walletId;
-    final updated = _transaction.copyWith(paymentMethod: walletId, raw: raw);
-
     setState(() {
       _paymentMethodController.text = walletId;
       _hasLocalEdits = false;
       _isSaving = true;
     });
     try {
-      await widget.controller.updateTransaction(_transaction, updated);
+      final updated = await widget.controller.moveTransactionWallet(
+        _transaction,
+        walletId: walletId,
+      );
       if (!mounted) {
         return;
       }
@@ -754,7 +755,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   String get _selectedPaymentMethodOption {
     final value = _paymentMethodController.text.trim().toLowerCase();
-    if (value.contains('wish')) return 'Whish Money';
+    if (LabelNormalizer.isWishMoney(value)) return 'Whish Money';
     return 'My Wallet';
   }
 
@@ -775,10 +776,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       _selectedType == TransactionType.reserveable;
 
   WalletAccountSummary _editableWalletBalance() {
-    final usesWish = _paymentMethodController.text
-        .trim()
-        .toLowerCase()
-        .contains('wish');
+    final usesWish = LabelNormalizer.isWishMoney(
+      _paymentMethodController.text,
+    );
     final base = usesWish
         ? widget.controller.walletSummary.wish
         : widget.controller.walletSummary.cash;
@@ -905,7 +905,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   String _oppositeWallet(String walletId) {
-    return walletId.trim().toLowerCase().contains('wish')
+    return LabelNormalizer.isWishMoney(walletId)
         ? 'My Wallet'
         : 'Whish Money';
   }
@@ -1383,9 +1383,9 @@ class _EditBody extends StatelessWidget {
                               Icons.account_balance_wallet_rounded,
                             ),
                             label: const Text('My Wallet'),
-                            selected: !state._paymentMethodController.text
-                                .toLowerCase()
-                                .contains('wish'),
+                            selected: !LabelNormalizer.isWishMoney(
+                              state._paymentMethodController.text,
+                            ),
                             onSelected: (_) => state._updateWallet('My Wallet'),
                           ),
                         ),
@@ -1402,9 +1402,9 @@ class _EditBody extends StatelessWidget {
                               ),
                             ),
                             label: const Text('Whish Money'),
-                            selected: state._paymentMethodController.text
-                                .toLowerCase()
-                                .contains('wish'),
+                            selected: LabelNormalizer.isWishMoney(
+                              state._paymentMethodController.text,
+                            ),
                             onSelected: (_) =>
                                 state._updateWallet('Whish Money'),
                           ),
@@ -1431,9 +1431,9 @@ class _EditBody extends StatelessWidget {
                                 Icons.account_balance_wallet_rounded,
                               ),
                               label: const Text('My Wallet'),
-                              selected: !state._destinationWalletController.text
-                                  .toLowerCase()
-                                  .contains('wish'),
+                              selected: !LabelNormalizer.isWishMoney(
+                                state._destinationWalletController.text,
+                              ),
                               onSelected: (_) =>
                                   state._updateDestinationWallet('My Wallet'),
                             ),
@@ -1451,9 +1451,9 @@ class _EditBody extends StatelessWidget {
                                 ),
                               ),
                               label: const Text('Whish Money'),
-                              selected: state._destinationWalletController.text
-                                  .toLowerCase()
-                                  .contains('wish'),
+                              selected: LabelNormalizer.isWishMoney(
+                                state._destinationWalletController.text,
+                              ),
                               onSelected: (_) =>
                                   state._updateDestinationWallet('Whish Money'),
                             ),

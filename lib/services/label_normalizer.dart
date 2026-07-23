@@ -6,15 +6,20 @@ class LabelNormalizer {
   static const myWallet = 'My Wallet';
   static const wishMoney = 'Whish Money';
 
+  static bool isWishMoney(String value) {
+    final normalized = _key(value);
+    return normalized.contains('whish') ||
+        normalized.contains('wesh') ||
+        normalized.contains('wish');
+  }
+
   static String wallet(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
       return '';
     }
     final normalized = _key(trimmed);
-    if (normalized.contains('whish') ||
-        normalized.contains('wesh') ||
-        normalized.contains('wish')) {
+    if (isWishMoney(trimmed)) {
       return wishMoney;
     }
     if (normalized == 'mywallet' ||

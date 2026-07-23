@@ -86,6 +86,53 @@ void main() {
     expect(settlement.walletId, 'Whish Money');
     expect(settlement.walletDirection, 1);
   });
+
+  test(
+    'moving a credit transfers its wallet impact without duplicating it',
+    () {
+      final original =
+          _transaction(
+            DateTime(2026, 7, 23),
+            TransactionType.reserveable,
+            36,
+          ).copyWith(
+            id: 'credit-move',
+            paymentMethod: 'My Wallet',
+            raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '-1'},
+          );
+    final moved = AccountingRules.moveWallet(
+      original,
+      walletId: 'Whish Money',
+    );
+
+    expect(moved.paymentMethod, 'Whish Money');
+    expect(moved.walletId, 'Whish Money');
+
+      final before = WalletSummary.fromTransactions(
+        [original],
+        cashOpeningUsd: 100,
+        cashOpeningLbp: 0,
+        wishOpeningUsd: 40,
+        wishOpeningLbp: 0,
+        ignoredCashTransactionIds: const {},
+        ignoredWishTransactionIds: const {},
+      );
+      final after = WalletSummary.fromTransactions(
+        [moved],
+        cashOpeningUsd: 100,
+        cashOpeningLbp: 0,
+        wishOpeningUsd: 40,
+        wishOpeningLbp: 0,
+        ignoredCashTransactionIds: const {},
+        ignoredWishTransactionIds: const {},
+      );
+
+      expect(before.cash.balanceUsd, 64);
+      expect(before.wish.balanceUsd, 40);
+      expect(after.cash.balanceUsd, 100);
+      expect(after.wish.balanceUsd, 4);
+    },
+  );
 }
 
 FinancialTransaction _transaction(

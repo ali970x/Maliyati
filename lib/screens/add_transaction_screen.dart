@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../controllers/dashboard_controller.dart';
 import '../models/transaction.dart';
 import '../services/gemini_transaction_parser.dart';
+import '../services/label_normalizer.dart';
 import '../widgets/amount_limit_input_formatter.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
@@ -395,10 +396,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           child: _WalletDestinationChoice(
                             label: 'My Wallet',
                             icon: Icons.account_balance_wallet_rounded,
-                            selected: !_destinationWalletController.text
-                                .trim()
-                                .toLowerCase()
-                                .contains('wish'),
+                            selected: !LabelNormalizer.isWishMoney(
+                              _destinationWalletController.text,
+                            ),
                             onTap: () => setState(
                               () => _destinationWalletController.text =
                                   'My Wallet',
@@ -409,10 +409,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                         Expanded(
                           child: _WalletDestinationChoice(
                             label: 'Whish Money',
-                            selected: _destinationWalletController.text
-                                .trim()
-                                .toLowerCase()
-                                .contains('wish'),
+                            selected: LabelNormalizer.isWishMoney(
+                              _destinationWalletController.text,
+                            ),
                             imageAsset: 'assets/branding/wish_money_logo.jpg',
                             onTap: () => setState(
                               () => _destinationWalletController.text =

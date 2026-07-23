@@ -13,6 +13,7 @@ import '../services/firebase_bootstrap.dart';
 import '../services/gemini_transaction_parser.dart';
 import '../services/google_drive_backup_service.dart';
 import '../services/google_sheet_service.dart';
+import '../services/label_normalizer.dart';
 import '../services/sheet_export_service.dart';
 
 enum TimeFilter { today, last3Days, thisWeek, thisMonth, custom, allTime }
@@ -1848,7 +1849,7 @@ class DashboardController extends ChangeNotifier {
     _cashWalletBaselineTransactionIds = _transactions
         .where(
           (transaction) =>
-              !transaction.paymentMethod.toLowerCase().contains('wish'),
+              !LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -1856,7 +1857,7 @@ class DashboardController extends ChangeNotifier {
     _wishWalletBaselineTransactionIds = _transactions
         .where(
           (transaction) =>
-              transaction.paymentMethod.toLowerCase().contains('wish'),
+              LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -1887,7 +1888,7 @@ class DashboardController extends ChangeNotifier {
     _cashWalletBaselineTransactionIds = _transactions
         .where(
           (transaction) =>
-              !transaction.paymentMethod.toLowerCase().contains('wish'),
+              !LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -1912,7 +1913,7 @@ class DashboardController extends ChangeNotifier {
     _wishWalletBaselineTransactionIds = _transactions
         .where(
           (transaction) =>
-              transaction.paymentMethod.toLowerCase().contains('wish'),
+              LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -2151,6 +2152,18 @@ class DashboardController extends ChangeNotifier {
       ..._transactions.skip(index + 1),
     ];
     notifyListeners();
+  }
+
+  Future<FinancialTransaction> moveTransactionWallet(
+    FinancialTransaction transaction, {
+    required String walletId,
+  }) async {
+    final moved = AccountingRules.moveWallet(transaction, walletId: walletId);
+    await updateTransaction(transaction, moved);
+    return _transactions.firstWhere(
+      (item) => item.id?.trim() == moved.id?.trim(),
+      orElse: () => moved,
+    );
   }
 
   Future<void> deleteTransaction(FinancialTransaction transaction) async {
@@ -2657,7 +2670,7 @@ class WalletSummary {
     required Set<String> ignoredWishTransactionIds,
   }) {
     final id = transaction.id?.trim() ?? '';
-    final isWish = transaction.walletId.trim().toLowerCase().contains('wish');
+    final isWish = LabelNormalizer.isWishMoney(transaction.walletId);
     if (id.isNotEmpty &&
         (isWish
             ? ignoredWishTransactionIds.contains(id)

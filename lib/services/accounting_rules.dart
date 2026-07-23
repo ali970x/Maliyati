@@ -178,6 +178,25 @@ class AccountingRules {
     return transaction.copyWith(raw: raw);
   }
 
+  /// Moves the complete wallet impact of an existing transaction. Wallet
+  /// summaries are derived from transactions, so replacing the wallet on this
+  /// source record removes its effect from the old wallet and applies it to
+  /// the new one without creating a duplicate charge.
+  static FinancialTransaction moveWallet(
+    FinancialTransaction transaction, {
+    required String walletId,
+  }) {
+    final normalizedWallet = LabelNormalizer.wallet(walletId);
+    final raw = Map<String, String>.from(transaction.raw)
+      ..['wallet_id'] = normalizedWallet
+      ..['walletId'] = normalizedWallet
+      ..['payment_method'] = normalizedWallet
+      ..['Payment Method'] = normalizedWallet;
+    return normalize(
+      transaction.copyWith(paymentMethod: normalizedWallet, raw: raw),
+    );
+  }
+
   static FinancialTransaction settlementEntry(
     FinancialTransaction target, {
     required String walletId,

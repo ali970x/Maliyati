@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
+import '../services/label_normalizer.dart';
 import '../widgets/app_states.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
@@ -2058,7 +2059,7 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
     final wallets = widget.controller.walletSummary;
     final balance = isWish ? wallets.wish : wallets.cash;
     final transactions = widget.controller.transactions.where((transaction) {
-      final usesWish = transaction.paymentMethod.toLowerCase().contains('wish');
+      final usesWish = LabelNormalizer.isWishMoney(transaction.walletId);
       return (isWish ? usesWish : !usesWish) && _matchesScope(transaction);
     }).toList()..sort((a, b) => b.date.compareTo(a.date));
 
