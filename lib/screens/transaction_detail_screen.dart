@@ -325,6 +325,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   late AccountingSettlementStatus _settlementStatus;
   bool _isEditing = false;
   bool _isSaving = false;
+  bool _hydratingForm = false;
+  bool _hasLocalEdits = false;
 
   @override
   void initState() {
@@ -338,6 +340,17 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     _paymentMethodController = TextEditingController();
     _destinationWalletController = TextEditingController();
     _notesController = TextEditingController();
+    for (final controller in [
+      _descriptionController,
+      _categoryController,
+      _amountUsdController,
+      _amountLbpController,
+      _paymentMethodController,
+      _destinationWalletController,
+      _notesController,
+    ]) {
+      controller.addListener(_markLocalEdit);
+    }
     _loadFormValues(_transaction);
     widget.controller.addListener(_syncTransactionFromController);
     if (widget.openSettlement &&
@@ -364,7 +377,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   void _syncTransactionFromController() {
     final id = _transaction.id;
-    if (!mounted || id == null || id.isEmpty) {
+    if (!mounted || id == null || id.isEmpty || _hasLocalEdits) {
       return;
     }
     final matching = widget.controller.transactions.where(
@@ -422,6 +435,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   }
 
   void _loadFormValues(FinancialTransaction transaction) {
+    _hydratingForm = true;
     _selectedType = transaction.type == TransactionType.unknown
         ? TransactionType.expense
         : transaction.type;
@@ -449,6 +463,14 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         transaction.destinationWalletId ??
         (transaction.isTransfer ? _oppositeWallet(transaction.walletId) : '');
     _notesController.text = transaction.notes;
+    _hydratingForm = false;
+    _hasLocalEdits = false;
+  }
+
+  void _markLocalEdit() {
+    if (!_hydratingForm) {
+      _hasLocalEdits = true;
+    }
   }
 
   Future<void> _saveChanges() async {
@@ -538,6 +560,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       setState(() {
         _transaction = updated;
         _isEditing = false;
+        _hasLocalEdits = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(widget.controller.strings.localChangesSaved)),
