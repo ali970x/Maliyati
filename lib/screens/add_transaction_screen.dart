@@ -117,6 +117,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   DateTime _createdAt = DateTime.now();
   TransactionType _type = TransactionType.expense;
   _ManualStatus _status = _ManualStatus.expense;
+  bool _useWishMoney = false;
   TransactionSource _source = TransactionSource.application;
   AccountingSettlementStatus _settlementStatus =
       AccountingSettlementStatus.open;
@@ -344,6 +345,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                   Text(
                     _type == TransactionType.transfer
                         ? 'Source wallet'
+                        : _type == TransactionType.reserveable
+                        ? 'Credit paid from'
                         : 'Wallet',
                     style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w800,
@@ -356,27 +359,23 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                         child: _WalletDestinationChoice(
                           label: 'My Wallet',
                           icon: Icons.account_balance_wallet_rounded,
-                          selected: !_paymentMethodController.text
-                              .trim()
-                              .toLowerCase()
-                              .contains('wish'),
-                          onTap: () => setState(
-                            () => _paymentMethodController.text = 'Cash',
-                          ),
+                          selected: !_useWishMoney,
+                          onTap: () => setState(() {
+                            _useWishMoney = false;
+                            _paymentMethodController.text = 'Cash';
+                          }),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _WalletDestinationChoice(
                           label: 'Whish Money',
-                          selected: _paymentMethodController.text
-                              .trim()
-                              .toLowerCase()
-                              .contains('wish'),
+                          selected: _useWishMoney,
                           imageAsset: 'assets/branding/wish_money_logo.jpg',
-                          onTap: () => setState(
-                            () => _paymentMethodController.text = 'Whish Money',
-                          ),
+                          onTap: () => setState(() {
+                            _useWishMoney = true;
+                            _paymentMethodController.text = 'Whish Money';
+                          }),
                         ),
                       ),
                     ],
@@ -541,11 +540,11 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'Amount (\$)': usd.toString(),
       'Amount (LBP)': lbp.toString(),
       'Category': category,
-      'Payment Method': _paymentMethodController.text.trim(),
+      'Payment Method': _selectedWalletId,
       'Notes': _notesController.text.trim(),
       'Created At': _createdAt.toIso8601String(),
       'Source': _source.label,
-      'wallet_id': _paymentMethodController.text.trim(),
+      'wallet_id': _selectedWalletId,
       'destination_wallet_id': _destinationWalletController.text.trim(),
       'settlement_status': _showsSettlementStatus
           ? _settlementStatus.label
@@ -622,6 +621,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       _source = TransactionSource.application;
       _settlementStatus = AccountingSettlementStatus.open;
       _paidNow = true;
+      _useWishMoney = false;
     });
   }
 
@@ -656,27 +656,23 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       description: _titleController.text.trim(),
       currency: primaryCurrency,
       amount: primaryAmount,
-      paymentMethod: _paymentMethodController.text.trim(),
+      paymentMethod: _selectedWalletId,
       notes: _notesController.text.trim(),
       raw: raw,
     );
   }
 
   WalletAccountSummary _selectedWalletBalance() {
-    final usesWish = _paymentMethodController.text
-        .trim()
-        .toLowerCase()
-        .contains('wish');
-    return usesWish
+    return _useWishMoney
         ? widget.controller.walletSummary.wish
         : widget.controller.walletSummary.cash;
   }
 
   String _selectedWalletName() {
-    return _paymentMethodController.text.trim().toLowerCase().contains('wish')
-        ? 'Whish Money'
-        : 'My Wallet';
+    return _useWishMoney ? 'Whish Money' : 'My Wallet';
   }
+
+  String get _selectedWalletId => _useWishMoney ? 'Whish Money' : 'Cash';
 
   bool get _showsSettlementStatus =>
       _type == TransactionType.debt || _type == TransactionType.reserveable;

@@ -1,5 +1,6 @@
 import 'package:finance_tracker/controllers/dashboard_controller.dart';
 import 'package:finance_tracker/models/transaction.dart';
+import 'package:finance_tracker/services/accounting_rules.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -52,6 +53,32 @@ void main() {
       expect(summary.totalDebt, 60);
     },
   );
+
+  test('credit and debt settlement preserve Whish Money as the wallet', () {
+    final credit =
+        _transaction(
+          DateTime(2026, 7, 13),
+          TransactionType.reserveable,
+          50,
+        ).copyWith(
+          id: 'credit-1',
+          paymentMethod: 'Whish Money',
+          raw: const {'wallet_id': 'Whish Money', 'wallet_direction': '-1'},
+        );
+    final normalized = AccountingRules.normalize(credit);
+    final settlement = AccountingRules.settlementEntry(
+      normalized,
+      walletId: 'Whish Money',
+      date: DateTime(2026, 7, 14),
+      amountUsd: 20,
+      amountLbp: 0,
+    );
+
+    expect(normalized.walletId, 'Whish Money');
+    expect(normalized.walletDirection, -1);
+    expect(settlement.walletId, 'Whish Money');
+    expect(settlement.walletDirection, 1);
+  });
 }
 
 FinancialTransaction _transaction(

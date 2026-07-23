@@ -305,9 +305,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     final lbpController = TextEditingController(
       text: _amountText(target.remainingAmountLbp),
     );
-    var walletId = _paymentMethodController.text.trim().isEmpty
-        ? 'Cash'
-        : _paymentMethodController.text.trim();
+    var useWishMoney = _paymentMethodController.text
+        .trim()
+        .toLowerCase()
+        .contains('wish');
     var payFullAmount = true;
     final isDebt = target.isDebt;
     final result = await showModalBottomSheet<_SettlementRequest>(
@@ -396,9 +397,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                           Icons.account_balance_wallet_rounded,
                         ),
                         label: const Text('My Wallet'),
-                        selected: !walletId.toLowerCase().contains('wish'),
+                        selected: !useWishMoney,
                         onSelected: (_) =>
-                            setSheetState(() => walletId = 'Cash'),
+                            setSheetState(() => useWishMoney = false),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -406,16 +407,16 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                       child: ChoiceChip(
                         avatar: const Icon(Icons.account_balance_rounded),
                         label: const Text('Whish Money'),
-                        selected: walletId.toLowerCase().contains('wish'),
+                        selected: useWishMoney,
                         onSelected: (_) =>
-                            setSheetState(() => walletId = 'Whish Money'),
+                            setSheetState(() => useWishMoney = true),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${isDebt ? 'Payment' : 'Collection'} will be recorded in $walletId.',
+                  '${isDebt ? 'Payment' : 'Collection'} will be recorded in ${useWishMoney ? 'Whish Money' : 'My Wallet'}.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 20),
@@ -441,7 +442,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
                         _SettlementRequest(
                           amountUsd: usd,
                           amountLbp: lbp,
-                          walletId: walletId,
+                          walletId: useWishMoney ? 'Whish Money' : 'Cash',
                         ),
                       );
                     },
