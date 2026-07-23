@@ -555,9 +555,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         // A credit is money advanced from the selected wallet.  Keeping the
         // direction explicit makes My Wallet and Whish Money behave identically.
         TransactionType.reserveable => '-1',
-        TransactionType.debt ||
-        TransactionType.transfer ||
-        TransactionType.unknown => '0',
+        TransactionType.debt => '1',
+        TransactionType.transfer || TransactionType.unknown => '0',
       },
     };
     final transaction = _buildTransaction(

@@ -1612,8 +1612,8 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
   }
 
   bool _matches(FinancialTransaction transaction) => switch (kind) {
-    _DashboardMetricKind.income => transaction.isIncome,
-    _DashboardMetricKind.expense => transaction.isExpense,
+    _DashboardMetricKind.income => transaction.affectsIncomeStats,
+    _DashboardMetricKind.expense => transaction.affectsExpenseStats,
     _DashboardMetricKind.reserveable =>
       transaction.isReserveable && !transaction.isSettlementEntry,
     _DashboardMetricKind.debit =>

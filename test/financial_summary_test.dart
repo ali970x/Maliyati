@@ -16,7 +16,11 @@ void main() {
     final transactions = [
       _transaction(date, TransactionType.income, 200),
       _transaction(date, TransactionType.expense, 50),
-      _transaction(date, TransactionType.reserveable, 75),
+      _transaction(
+        date,
+        TransactionType.reserveable,
+        75,
+      ).copyWith(raw: const {'accounting_role': 'split_income_receivable'}),
     ];
 
     final summary = FinancialSummary.fromTransactions(
@@ -172,6 +176,45 @@ void main() {
     expect(allocation.amountUsd, 10);
     expect(updated.remainingAmountUsd, 15);
     expect(updated.isSettled, isFalse);
+  });
+
+  test('credit and debt flows are reflected in income and expense totals', () {
+    final date = DateTime(2026, 7, 23);
+    final credit = _transaction(
+      date,
+      TransactionType.reserveable,
+      40,
+    ).copyWith(id: 'credit-1', raw: const {'wallet_direction': '-1'});
+    final collection = AccountingRules.settlementEntry(
+      credit,
+      walletId: 'My Wallet',
+      date: date,
+      amountUsd: 40,
+      amountLbp: 0,
+    );
+    final debt = _transaction(
+      date,
+      TransactionType.debt,
+      70,
+    ).copyWith(id: 'debt-1', raw: const {'wallet_direction': '1'});
+    final repayment = AccountingRules.settlementEntry(
+      debt,
+      walletId: 'Whish Money',
+      date: date,
+      amountUsd: 70,
+      amountLbp: 0,
+    );
+
+    final summary = FinancialSummary.fromTransactions([
+      credit,
+      collection,
+      debt,
+      repayment,
+    ], exchangeRate: 89000);
+
+    expect(summary.totalExpense, 110);
+    expect(summary.totalIncome, 110);
+    expect(summary.totalNet, 0);
   });
 }
 

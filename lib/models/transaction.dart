@@ -113,11 +113,25 @@ class FinancialTransaction {
   bool get hasOutstandingBalance =>
       remainingAmountUsd > 0.0001 || remainingAmountLbp > 0.5;
 
-  bool get affectsExpenseStats =>
-      isExpense && raw['affects_expense_stats']?.toLowerCase() != 'false';
+  /// Giving someone a credit is an expense; collecting it is income. Borrowing
+  /// is income; repaying it is an expense. The explicit accounting roles below
+  /// protect the special split-income and expense-on-credit helper records from
+  /// being counted twice.
+  bool get affectsExpenseStats {
+    if (isSettlementEntry) return isDebt;
+    if (isCredit && raw['accounting_role'] != 'split_income_receivable') {
+      return true;
+    }
+    return isExpense && raw['affects_expense_stats']?.toLowerCase() != 'false';
+  }
 
-  bool get affectsIncomeStats =>
-      isIncome && raw['affects_income_stats']?.toLowerCase() != 'false';
+  bool get affectsIncomeStats {
+    if (isSettlementEntry) return isCredit;
+    if (isDebt && raw['accounting_role'] != 'accrued_expense_payable') {
+      return true;
+    }
+    return isIncome && raw['affects_income_stats']?.toLowerCase() != 'false';
+  }
 
   bool get affectsReceivables =>
       isCredit &&

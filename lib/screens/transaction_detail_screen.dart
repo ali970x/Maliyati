@@ -576,9 +576,8 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         TransactionType.income => '1',
         TransactionType.expense => _paidNow ? '-1' : '0',
         TransactionType.reserveable => '-1',
-        TransactionType.debt ||
-        TransactionType.transfer ||
-        TransactionType.unknown => '0',
+        TransactionType.debt => '1',
+        TransactionType.transfer || TransactionType.unknown => '0',
       };
     final updated = _transaction.copyWith(
       type: _selectedType,

@@ -47,11 +47,11 @@ class AccountingRules {
     );
     raw.putIfAbsent(
       'affects_expense_stats',
-      () => transaction.isExpense ? 'true' : 'false',
+      () => transaction.isExpense || transaction.isCredit ? 'true' : 'false',
     );
     raw.putIfAbsent(
       'affects_income_stats',
-      () => transaction.isIncome ? 'true' : 'false',
+      () => transaction.isIncome || transaction.isDebt ? 'true' : 'false',
     );
     raw.putIfAbsent(
       'affects_receivables',
@@ -260,8 +260,8 @@ class AccountingRules {
           'linked_transaction_id': target.id ?? '',
           'settlement_status': AccountingSettlementStatus.settled.label,
           'wallet_direction': isDebtSettlement ? '-1' : '1',
-          'affects_expense_stats': 'false',
-          'affects_income_stats': 'false',
+          'affects_expense_stats': isDebtSettlement ? 'true' : 'false',
+          'affects_income_stats': isDebtSettlement ? 'false' : 'true',
           'affects_payables': 'false',
           'affects_receivables': 'false',
           'accounting_role': isDebtSettlement
