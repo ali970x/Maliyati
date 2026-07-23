@@ -13,6 +13,8 @@ import '../widgets/transaction_identity.dart';
 
 enum _EditTransactionStatus { income, expense, credit, debt, transfer }
 
+enum _SettlementCurrency { usd, lbp }
+
 class _SettlementRequest {
   const _SettlementRequest({
     required this.amountUsd,
@@ -80,30 +82,30 @@ class _WalletSelectionButton extends StatelessWidget {
 }
 
 class _SettlementSheet extends StatefulWidget {
-  const _SettlementSheet({required this.target, required this.initialWalletId});
+  const _SettlementSheet({
+    required this.target,
+    required this.initialWalletId,
+    required this.exchangeRate,
+  });
 
   final FinancialTransaction target;
   final String initialWalletId;
+  final double exchangeRate;
 
   @override
   State<_SettlementSheet> createState() => _SettlementSheetState();
 }
 
 class _SettlementSheetState extends State<_SettlementSheet> {
-  late final TextEditingController _usdController;
-  late final TextEditingController _lbpController;
+  late final TextEditingController _amountController;
   late String _walletId;
   var _payFullAmount = true;
+  var _inputCurrency = _SettlementCurrency.usd;
 
   @override
   void initState() {
     super.initState();
-    _usdController = TextEditingController(
-      text: _amountText(widget.target.remainingAmountUsd),
-    );
-    _lbpController = TextEditingController(
-      text: _amountText(widget.target.remainingAmountLbp),
-    );
+    _amountController = TextEditingController(text: _amountText(_fullAmount));
     final initial = widget.initialWalletId.trim().toLowerCase();
     _walletId = LabelNormalizer.isWishMoney(initial)
         ? 'Whish Money'
@@ -112,9 +114,36 @@ class _SettlementSheetState extends State<_SettlementSheet> {
 
   @override
   void dispose() {
-    _usdController.dispose();
-    _lbpController.dispose();
+    _amountController.dispose();
     super.dispose();
+  }
+
+  double get _remainingUsdValue =>
+      widget.target.remainingAmountUsd +
+      widget.target.remainingAmountLbp / widget.exchangeRate;
+
+  double get _fullAmount => _inputCurrency == _SettlementCurrency.usd
+      ? _remainingUsdValue
+      : _remainingUsdValue * widget.exchangeRate;
+
+  double get _enteredUsdValue {
+    final amount = _parseAmount(_amountController.text);
+    return _inputCurrency == _SettlementCurrency.usd
+        ? amount
+        : amount / widget.exchangeRate;
+  }
+
+  void _setCurrency(_SettlementCurrency currency) {
+    final currentUsdValue = _payFullAmount
+        ? _remainingUsdValue
+        : _enteredUsdValue;
+    setState(() {
+      _inputCurrency = currency;
+      final converted = currency == _SettlementCurrency.usd
+          ? currentUsdValue
+          : currentUsdValue * widget.exchangeRate;
+      _amountController.text = _amountText(converted);
+    });
   }
 
   @override
@@ -161,35 +190,60 @@ class _SettlementSheetState extends State<_SettlementSheet> {
                 ),
               ],
               selected: {_payFullAmount},
-              onSelectionChanged: (value) =>
-                  setState(() => _payFullAmount = value.first),
+              onSelectionChanged: (value) {
+                if (value.isEmpty) return;
+                setState(() {
+                  _payFullAmount = value.first;
+                  if (_payFullAmount) {
+                    _amountController.text = _amountText(_fullAmount);
+                  }
+                });
+              },
             ),
-            if (!_payFullAmount) ...[
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _usdController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(labelText: 'USD'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _lbpController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(labelText: 'LBP'),
-                    ),
-                  ),
-                ],
+            const SizedBox(height: 14),
+            SegmentedButton<_SettlementCurrency>(
+              segments: const [
+                ButtonSegment(
+                  value: _SettlementCurrency.usd,
+                  icon: Icon(Icons.attach_money_rounded),
+                  label: Text('USD'),
+                ),
+                ButtonSegment(
+                  value: _SettlementCurrency.lbp,
+                  icon: Icon(Icons.currency_lira_rounded),
+                  label: Text('LBP'),
+                ),
+              ],
+              selected: {_inputCurrency},
+              onSelectionChanged: (value) {
+                if (value.isNotEmpty) _setCurrency(value.first);
+              },
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amountController,
+              enabled: !_payFullAmount,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
               ),
-            ],
+              decoration: InputDecoration(
+                labelText: _inputCurrency == _SettlementCurrency.usd
+                    ? 'Amount (USD)'
+                    : 'Amount (LBP)',
+                prefixIcon: Icon(
+                  _inputCurrency == _SettlementCurrency.usd
+                      ? Icons.attach_money_rounded
+                      : Icons.currency_lira_rounded,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _inputCurrency == _SettlementCurrency.usd
+                  ? 'Equivalent: ${FinanceFormatters.lbp(_enteredUsdValue * widget.exchangeRate)}'
+                  : 'Equivalent: ${FinanceFormatters.usd(_enteredUsdValue)}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             const SizedBox(height: 16),
             Text(
               'Wallet',
@@ -239,13 +293,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
   }
 
   void _submit() {
-    final target = widget.target;
-    final usd = _payFullAmount
-        ? target.remainingAmountUsd
-        : _parseAmount(_usdController.text);
-    final lbp = _payFullAmount
-        ? target.remainingAmountLbp
-        : _parseAmount(_lbpController.text);
+    final amount = _parseAmount(_amountController.text);
+    final usd = _inputCurrency == _SettlementCurrency.usd ? amount : 0.0;
+    final lbp = _inputCurrency == _SettlementCurrency.lbp ? amount : 0.0;
     if (usd <= 0 && lbp <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter the amount received or paid.')),
@@ -582,6 +632,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         walletId: request.walletId,
         amountUsd: request.amountUsd,
         amountLbp: request.amountLbp,
+        conversionRate: widget.controller.exchangeRate,
       );
       if (mounted) {
         final updated = widget.controller.transactions.where(
@@ -624,6 +675,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         builder: (_) => _SettlementSheet(
           target: _transaction,
           initialWalletId: _paymentMethodController.text,
+          exchangeRate: widget.controller.exchangeRate,
         ),
       );
 

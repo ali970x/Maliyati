@@ -1539,6 +1539,7 @@ class DashboardController extends ChangeNotifier {
     DateTime? date,
     double? amountUsd,
     double? amountLbp,
+    double? conversionRate,
   }) async {
     if (!transaction.isDebt && !transaction.isCredit) {
       throw const FirebaseFinanceException(
@@ -1552,6 +1553,7 @@ class DashboardController extends ChangeNotifier {
     }
     final paidUsd = amountUsd ?? transaction.remainingAmountUsd;
     final paidLbp = amountLbp ?? transaction.remainingAmountLbp;
+    final rate = conversionRate ?? exchangeRate;
     if (paidUsd < 0 || paidLbp < 0) {
       throw const FirebaseFinanceException(
         'Settlement amounts cannot be negative.',
@@ -1560,16 +1562,24 @@ class DashboardController extends ChangeNotifier {
     if (paidUsd <= 0.0001 && paidLbp <= 0.5) {
       throw const FirebaseFinanceException('Enter an amount to settle.');
     }
-    if (paidUsd - transaction.remainingAmountUsd > 0.0001 ||
-        paidLbp - transaction.remainingAmountLbp > 0.5) {
+    final remainingUsdValue =
+        transaction.remainingAmountUsd + transaction.remainingAmountLbp / rate;
+    final paidUsdValue = paidUsd + paidLbp / rate;
+    if (paidUsdValue - remainingUsdValue > 0.0001) {
       throw const FirebaseFinanceException(
         'The payment cannot be more than the remaining balance.',
       );
     }
+    final allocation = AccountingRules.settlementAllocation(
+      transaction,
+      paidUsd: paidUsd,
+      paidLbp: paidLbp,
+      exchangeRate: rate,
+    );
     final settled = AccountingRules.applySettlement(
       transaction,
-      amountUsd: paidUsd,
-      amountLbp: paidLbp,
+      amountUsd: allocation.amountUsd,
+      amountLbp: allocation.amountLbp,
     );
     final settlement = AccountingRules.settlementEntry(
       transaction,
@@ -1848,16 +1858,14 @@ class DashboardController extends ChangeNotifier {
     _wishWalletOpeningLbp = wishLbp < 0 ? 0 : wishLbp;
     _cashWalletBaselineTransactionIds = _transactions
         .where(
-          (transaction) =>
-              !LabelNormalizer.isWishMoney(transaction.walletId),
+          (transaction) => !LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
         .toSet();
     _wishWalletBaselineTransactionIds = _transactions
         .where(
-          (transaction) =>
-              LabelNormalizer.isWishMoney(transaction.walletId),
+          (transaction) => LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -1887,8 +1895,7 @@ class DashboardController extends ChangeNotifier {
     _walletOpeningLbp = lbp < 0 ? 0 : lbp;
     _cashWalletBaselineTransactionIds = _transactions
         .where(
-          (transaction) =>
-              !LabelNormalizer.isWishMoney(transaction.walletId),
+          (transaction) => !LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -1912,8 +1919,7 @@ class DashboardController extends ChangeNotifier {
     _wishWalletOpeningLbp = lbp < 0 ? 0 : lbp;
     _wishWalletBaselineTransactionIds = _transactions
         .where(
-          (transaction) =>
-              LabelNormalizer.isWishMoney(transaction.walletId),
+          (transaction) => LabelNormalizer.isWishMoney(transaction.walletId),
         )
         .map((transaction) => transaction.id?.trim() ?? '')
         .where((id) => id.isNotEmpty)

@@ -178,6 +178,31 @@ class AccountingRules {
     return transaction.copyWith(raw: raw);
   }
 
+  /// Converts one payment value into the USD/LBP portions of the original
+  /// balance. The payment itself remains recorded in the currency selected by
+  /// the user; this allocation is only used to reduce the outstanding debt.
+  static ({double amountUsd, double amountLbp}) settlementAllocation(
+    FinancialTransaction transaction, {
+    required double paidUsd,
+    required double paidLbp,
+    required double exchangeRate,
+  }) {
+    if (exchangeRate <= 0) {
+      throw ArgumentError.value(exchangeRate, 'exchangeRate');
+    }
+    final remainingUsd = transaction.remainingAmountUsd;
+    final remainingLbp = transaction.remainingAmountLbp;
+    final remainingUsdValue = remainingUsd + remainingLbp / exchangeRate;
+    final paidUsdValue = paidUsd + paidLbp / exchangeRate;
+    if (paidUsdValue - remainingUsdValue > 0.0001) {
+      throw ArgumentError('Payment is greater than the remaining balance.');
+    }
+    final ratio = remainingUsdValue - paidUsdValue <= 0.0001
+        ? 1.0
+        : (paidUsdValue / remainingUsdValue).clamp(0.0, 1.0).toDouble();
+    return (amountUsd: remainingUsd * ratio, amountLbp: remainingLbp * ratio);
+  }
+
   /// Moves the complete wallet impact of an existing transaction. Wallet
   /// summaries are derived from transactions, so replacing the wallet on this
   /// source record removes its effect from the old wallet and applies it to

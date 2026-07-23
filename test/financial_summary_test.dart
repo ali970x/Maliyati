@@ -149,6 +149,30 @@ void main() {
 
     expect(collection.isSettlementEntry, isTrue);
   });
+
+  test('an LBP collection reduces a USD credit using the exchange rate', () {
+    final credit = _transaction(
+      DateTime(2026, 7, 23),
+      TransactionType.reserveable,
+      25,
+    ).copyWith(raw: const {'affects_receivables': 'true'});
+
+    final allocation = AccountingRules.settlementAllocation(
+      credit,
+      paidUsd: 0,
+      paidLbp: 890000,
+      exchangeRate: 89000,
+    );
+    final updated = AccountingRules.applySettlement(
+      credit,
+      amountUsd: allocation.amountUsd,
+      amountLbp: allocation.amountLbp,
+    );
+
+    expect(allocation.amountUsd, 10);
+    expect(updated.remainingAmountUsd, 15);
+    expect(updated.isSettled, isFalse);
+  });
 }
 
 FinancialTransaction _transaction(
