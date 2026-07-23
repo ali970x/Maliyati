@@ -1098,60 +1098,23 @@ class _EditBody extends StatelessWidget {
                         ? strings.category
                         : null,
                   ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      state._selectedType == TransactionType.transfer
-                          ? 'Source wallet'
-                          : 'Wallet',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
+                  if (state._showsSettlementStatus) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Choose the payment wallet after tapping Add payment below.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          avatar: const Icon(
-                            Icons.account_balance_wallet_rounded,
-                          ),
-                          label: const Text('My Wallet'),
-                          selected: !state._paymentMethodController.text
-                              .toLowerCase()
-                              .contains('wish'),
-                          onSelected: (_) => state._updateWallet('Cash'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ChoiceChip(
-                          avatar: ClipRRect(
-                            borderRadius: BorderRadius.circular(7),
-                            child: Image.asset(
-                              'assets/branding/wish_money_logo.jpg',
-                              width: 24,
-                              height: 24,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          label: const Text('Whish Money'),
-                          selected: state._paymentMethodController.text
-                              .toLowerCase()
-                              .contains('wish'),
-                          onSelected: (_) => state._updateWallet('Whish Money'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (state._selectedType == TransactionType.transfer) ...[
+                  ],
+                  if (!state._showsSettlementStatus) ...[
                     const SizedBox(height: 12),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'Destination wallet',
+                        state._selectedType == TransactionType.transfer
+                            ? 'Source wallet'
+                            : 'Wallet',
                         style: theme.textTheme.labelLarge?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
@@ -1166,11 +1129,10 @@ class _EditBody extends StatelessWidget {
                               Icons.account_balance_wallet_rounded,
                             ),
                             label: const Text('My Wallet'),
-                            selected: !state._destinationWalletController.text
+                            selected: !state._paymentMethodController.text
                                 .toLowerCase()
                                 .contains('wish'),
-                            onSelected: (_) =>
-                                state._updateDestinationWallet('Cash'),
+                            onSelected: (_) => state._updateWallet('Cash'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1186,15 +1148,65 @@ class _EditBody extends StatelessWidget {
                               ),
                             ),
                             label: const Text('Whish Money'),
-                            selected: state._destinationWalletController.text
+                            selected: state._paymentMethodController.text
                                 .toLowerCase()
                                 .contains('wish'),
                             onSelected: (_) =>
-                                state._updateDestinationWallet('Whish Money'),
+                                state._updateWallet('Whish Money'),
                           ),
                         ),
                       ],
                     ),
+                    if (state._selectedType == TransactionType.transfer) ...[
+                      const SizedBox(height: 12),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Destination wallet',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ChoiceChip(
+                              avatar: const Icon(
+                                Icons.account_balance_wallet_rounded,
+                              ),
+                              label: const Text('My Wallet'),
+                              selected: !state._destinationWalletController.text
+                                  .toLowerCase()
+                                  .contains('wish'),
+                              onSelected: (_) =>
+                                  state._updateDestinationWallet('Cash'),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ChoiceChip(
+                              avatar: ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: Image.asset(
+                                  'assets/branding/wish_money_logo.jpg',
+                                  width: 24,
+                                  height: 24,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              label: const Text('Whish Money'),
+                              selected: state._destinationWalletController.text
+                                  .toLowerCase()
+                                  .contains('wish'),
+                              onSelected: (_) =>
+                                  state._updateDestinationWallet('Whish Money'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1337,7 +1349,7 @@ class _SettlementProgressCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${history.length} ${history.length == 1 ? 'payment' : 'payments'} - last on ${FinanceFormatters.date(latest.date)}',
+                      '${history.length} ${history.length == 1 ? 'payment' : 'payments'} via ${latest.walletId} - last on ${FinanceFormatters.date(latest.date)}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
