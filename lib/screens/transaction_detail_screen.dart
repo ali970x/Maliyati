@@ -692,6 +692,66 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     });
   }
 
+  Future<void> _persistSettlementWallet(String walletId) async {
+    if (_isSaving || _selectedPaymentMethodOption == walletId) {
+      return;
+    }
+    final previousWallet = _selectedPaymentMethodOption;
+    final raw = Map<String, String>.from(_transaction.raw)
+      ..['wallet_id'] = walletId
+      ..['walletId'] = walletId
+      ..['payment_method'] = walletId
+      ..['Payment Method'] = walletId;
+    final updated = _transaction.copyWith(paymentMethod: walletId, raw: raw);
+
+    setState(() {
+      _paymentMethodController.text = walletId;
+      _hasLocalEdits = false;
+      _isSaving = true;
+    });
+    try {
+      await widget.controller.updateTransaction(_transaction, updated);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _transaction = updated;
+        _hasLocalEdits = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Wallet changed to $walletId.')));
+    } on FirebaseFinanceException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _paymentMethodController.text = previousWallet;
+        _hasLocalEdits = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _paymentMethodController.text = previousWallet;
+        _hasLocalEdits = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not update the wallet. Try again.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
   String get _selectedPaymentMethodOption {
     final value = _paymentMethodController.text.trim().toLowerCase();
     if (value.contains('wish')) return 'Whish Money';
@@ -1282,7 +1342,8 @@ class _EditBody extends StatelessWidget {
                             selected:
                                 state._selectedPaymentMethodOption ==
                                 'My Wallet',
-                            onTap: () => state._updateWallet('My Wallet'),
+                            onTap: () =>
+                                state._persistSettlementWallet('My Wallet'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1293,7 +1354,8 @@ class _EditBody extends StatelessWidget {
                             selected:
                                 state._selectedPaymentMethodOption ==
                                 'Whish Money',
-                            onTap: () => state._updateWallet('Whish Money'),
+                            onTap: () =>
+                                state._persistSettlementWallet('Whish Money'),
                           ),
                         ),
                       ],
