@@ -75,6 +75,12 @@ class FinancialTransaction {
     return trimmed.isEmpty ? null : trimmed;
   }
 
+  bool get isSettlementEntry {
+    final role = (raw['accounting_role'] ?? '').trim().toLowerCase();
+    return linkedTransactionId != null &&
+        (role == 'debt_settlement' || role == 'credit_collection');
+  }
+
   AccountingSettlementStatus get settlementStatus {
     final normalized =
         (raw['settlement_status'] ?? raw['settlementStatus'] ?? '')

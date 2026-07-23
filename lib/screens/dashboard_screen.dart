@@ -192,11 +192,12 @@ class _LightDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final summary = controller.summary;
     final comparison = controller.comparison;
-    final debtTotal = summary.totalDebt;
-    final shownBalance = showRealBalance
-        ? summary.totalNet + summary.totalReserveable - debtTotal
-        : summary.totalNet;
     final wallets = controller.walletSummary;
+    final walletUsd = wallets.cash.balanceUsd + wallets.wish.balanceUsd;
+    final walletLbp = wallets.cash.balanceLbp + wallets.wish.balanceLbp;
+    final shownBalance = showRealBalance
+        ? walletUsd + walletLbp / controller.exchangeRate
+        : summary.totalNet;
     final wide = AppResponsive.isWideWeb(context);
     return RefreshIndicator(
       onRefresh: controller.refresh,
@@ -1596,8 +1597,10 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
   bool _matches(FinancialTransaction transaction) => switch (kind) {
     _DashboardMetricKind.income => transaction.isIncome,
     _DashboardMetricKind.expense => transaction.isExpense,
-    _DashboardMetricKind.reserveable => transaction.isReserveable,
-    _DashboardMetricKind.debit => transaction.isDebt,
+    _DashboardMetricKind.reserveable =>
+      transaction.isReserveable && !transaction.isSettlementEntry,
+    _DashboardMetricKind.debit =>
+      transaction.isDebt && !transaction.isSettlementEntry,
   };
 }
 

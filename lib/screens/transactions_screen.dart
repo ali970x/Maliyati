@@ -497,10 +497,14 @@ class _ResultsSummary extends StatelessWidget {
         income += amount;
       } else if (transaction.isExpense) {
         expenses += amount;
-      } else if (transaction.isReserveable) {
-        credits += amount;
-      } else if (transaction.isDebt) {
-        debt += amount;
+      } else if (transaction.isReserveable && !transaction.isSettlementEntry) {
+        credits +=
+            transaction.remainingAmountUsd +
+            transaction.remainingAmountLbp / exchangeRate;
+      } else if (transaction.isDebt && !transaction.isSettlementEntry) {
+        debt +=
+            transaction.remainingAmountUsd +
+            transaction.remainingAmountLbp / exchangeRate;
       }
     }
     final net = income - expenses;

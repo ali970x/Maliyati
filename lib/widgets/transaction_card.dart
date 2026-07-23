@@ -29,7 +29,8 @@ class TransactionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = switch (transaction.type) {
+    final isSettlement = transaction.isSettlementEntry;
+    final typeColor = switch (transaction.type) {
       TransactionType.income => const Color(0xFF168A5B),
       TransactionType.expense => const Color(0xFFC74949),
       TransactionType.reserveable => const Color(0xFFD97706),
@@ -37,7 +38,12 @@ class TransactionCard extends StatelessWidget {
       TransactionType.transfer => const Color(0xFF2563EB),
       TransactionType.unknown => theme.colorScheme.onSurfaceVariant,
     };
-    final icon = switch (transaction.type) {
+    final color = isSettlement
+        ? (transaction.isDebt
+              ? const Color(0xFFB45309)
+              : const Color(0xFF168A5B))
+        : typeColor;
+    final typeIcon = switch (transaction.type) {
       TransactionType.income => Icons.trending_up_rounded,
       TransactionType.expense => Icons.trending_down_rounded,
       TransactionType.reserveable => Icons.request_quote_rounded,
@@ -45,6 +51,9 @@ class TransactionCard extends StatelessWidget {
       TransactionType.transfer => Icons.swap_horiz_rounded,
       TransactionType.unknown => Icons.help_outline_rounded,
     };
+    final icon = isSettlement
+        ? (transaction.isDebt ? Icons.payments_rounded : Icons.savings_rounded)
+        : typeIcon;
     final dateText = transaction.hasDate
         ? FinanceFormatters.date(transaction.date)
         : strings.noDateInSheet;
