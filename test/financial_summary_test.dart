@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('wallet choices remain distinct for credit and debt settlements', () {
-    expect(LabelNormalizer.wallet('Cash'), 'Cash');
+    expect(LabelNormalizer.wallet('Cash'), 'My Wallet');
     expect(LabelNormalizer.wallet('My Wallet'), 'My Wallet');
     expect(LabelNormalizer.wallet('Whish Money'), 'Whish Money');
   });

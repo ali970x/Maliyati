@@ -40,7 +40,7 @@ class _WalletAnalyticsCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: _WalletAnalyticValue(
-                    label: 'Cash',
+                    label: 'My Wallet',
                     usd: wallets.cash.balanceUsd,
                     lbp: wallets.cash.balanceLbp,
                     color: const Color(0xFF1F2937),

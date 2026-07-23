@@ -233,7 +233,7 @@ class AboutApplicationScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   Text(
-                    'Maliyati helps you manage income, expenses, Cash and Whish Money wallets, backups, and financial insights in one private place.',
+                    'Maliyati helps you manage income, expenses, My Wallet and Whish Money wallets, backups, and financial insights in one private place.',
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

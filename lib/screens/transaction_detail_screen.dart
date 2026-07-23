@@ -49,11 +49,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
       text: _amountText(widget.target.remainingAmountLbp),
     );
     final initial = widget.initialWalletId.trim().toLowerCase();
-    _walletId = initial.contains('wish')
-        ? 'Whish Money'
-        : initial == 'cash'
-        ? 'Cash'
-        : 'My Wallet';
+    _walletId = initial.contains('wish') ? 'Whish Money' : 'My Wallet';
   }
 
   @override
@@ -137,24 +133,34 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               ),
             ],
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _walletId,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Pay from',
-                prefixIcon: Icon(Icons.account_balance_wallet_rounded),
-              ),
-              items: const [
-                DropdownMenuItem(value: 'Cash', child: Text('Cash')),
-                DropdownMenuItem(value: 'My Wallet', child: Text('My Wallet')),
-                DropdownMenuItem(
-                  value: 'Whish Money',
-                  child: Text('Whish Money'),
+            Text(
+              'Wallet',
+              style: Theme.of(
+                context,
+              ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    avatar: const Icon(Icons.account_balance_wallet_rounded),
+                    label: const Text('My Wallet'),
+                    selected: _walletId == 'My Wallet',
+                    onSelected: (_) => setState(() => _walletId = 'My Wallet'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ChoiceChip(
+                    avatar: const Icon(Icons.account_balance_wallet_rounded),
+                    label: const Text('Whish Money'),
+                    selected: _walletId == 'Whish Money',
+                    onSelected: (_) =>
+                        setState(() => _walletId = 'Whish Money'),
+                  ),
                 ),
               ],
-              onChanged: (value) {
-                if (value != null) setState(() => _walletId = value);
-              },
             ),
             const SizedBox(height: 8),
             Text(
@@ -549,7 +555,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     setState(() {
       _selectedType = type;
       if (_paymentMethodController.text.trim().isEmpty) {
-        _paymentMethodController.text = 'Cash';
+        _paymentMethodController.text = 'My Wallet';
       }
       if (type == TransactionType.transfer &&
           _destinationWalletController.text.trim().isEmpty) {
@@ -611,7 +617,6 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   String get _selectedPaymentMethodOption {
     final value = _paymentMethodController.text.trim().toLowerCase();
     if (value.contains('wish')) return 'Whish Money';
-    if (value == 'cash') return 'Cash';
     return 'My Wallet';
   }
 
@@ -763,7 +768,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
 
   String _oppositeWallet(String walletId) {
     return walletId.trim().toLowerCase().contains('wish')
-        ? 'Cash'
+        ? 'My Wallet'
         : 'Whish Money';
   }
 
@@ -1184,27 +1189,48 @@ class _EditBody extends StatelessWidget {
                   ),
                   if (state._showsSettlementStatus) ...[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: state._selectedPaymentMethodOption,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Payment method',
-                        prefixIcon: Icon(Icons.account_balance_wallet_rounded),
+                    Text(
+                      'Wallet',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'Cash', child: Text('Cash')),
-                        DropdownMenuItem(
-                          value: 'My Wallet',
-                          child: Text('My Wallet'),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            avatar: const Icon(
+                              Icons.account_balance_wallet_rounded,
+                            ),
+                            label: const Text('My Wallet'),
+                            selected:
+                                state._selectedPaymentMethodOption ==
+                                'My Wallet',
+                            onSelected: (_) => state._updateWallet('My Wallet'),
+                          ),
                         ),
-                        DropdownMenuItem(
-                          value: 'Whish Money',
-                          child: Text('Whish Money'),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ChoiceChip(
+                            avatar: ClipRRect(
+                              borderRadius: BorderRadius.circular(7),
+                              child: Image.asset(
+                                'assets/branding/wish_money_logo.jpg',
+                                width: 24,
+                                height: 24,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            label: const Text('Whish Money'),
+                            selected:
+                                state._selectedPaymentMethodOption ==
+                                'Whish Money',
+                            onSelected: (_) =>
+                                state._updateWallet('Whish Money'),
+                          ),
                         ),
                       ],
-                      onChanged: (value) {
-                        if (value != null) state._updateWallet(value);
-                      },
                     ),
                   ],
                   if (!state._showsSettlementStatus) ...[
@@ -1232,7 +1258,7 @@ class _EditBody extends StatelessWidget {
                             selected: !state._paymentMethodController.text
                                 .toLowerCase()
                                 .contains('wish'),
-                            onSelected: (_) => state._updateWallet('Cash'),
+                            onSelected: (_) => state._updateWallet('My Wallet'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1281,7 +1307,7 @@ class _EditBody extends StatelessWidget {
                                   .toLowerCase()
                                   .contains('wish'),
                               onSelected: (_) =>
-                                  state._updateDestinationWallet('Cash'),
+                                  state._updateDestinationWallet('My Wallet'),
                             ),
                           ),
                           const SizedBox(width: 10),

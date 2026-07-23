@@ -60,7 +60,7 @@ class FinancialTransaction {
       return explicit.trim();
     }
     final method = paymentMethod.trim();
-    return method.isEmpty ? 'Cash' : method;
+    return method.isEmpty ? 'My Wallet' : method;
   }
 
   String? get destinationWalletId {

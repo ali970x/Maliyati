@@ -3,7 +3,7 @@ import '../models/transaction.dart';
 class LabelNormalizer {
   const LabelNormalizer._();
 
-  static const cash = 'Cash';
+  static const myWallet = 'My Wallet';
   static const wishMoney = 'Whish Money';
 
   static String wallet(String value) {
@@ -17,11 +17,10 @@ class LabelNormalizer {
         normalized.contains('wish')) {
       return wishMoney;
     }
-    if (normalized == 'mywallet' || normalized == 'wallet') {
-      return 'My Wallet';
-    }
-    if (normalized == 'cash') {
-      return cash;
+    if (normalized == 'mywallet' ||
+        normalized == 'wallet' ||
+        normalized == 'cash') {
+      return myWallet;
     }
     return text(trimmed);
   }

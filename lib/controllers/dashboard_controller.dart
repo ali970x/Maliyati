@@ -243,7 +243,8 @@ class DashboardController extends ChangeNotifier {
       isWishMoney ? _wishWalletComparisonRange : _cashWalletComparisonRange;
 
   /// Wallet balances begin at the last reset. Categories never decide which
-  /// wallet changes; only the selected payment method (Cash or Whish Money)
+  /// wallet changes; only the selected payment method (My Wallet or Whish
+  /// Money)
   /// does.
   WalletSummary get walletSummary => WalletSummary.fromTransactions(
     _transactions,
@@ -411,7 +412,7 @@ class DashboardController extends ChangeNotifier {
 
   List<String> get paymentMethodOptions {
     final values = <String>{
-      'Cash',
+      'My Wallet',
       'Whish Money',
       ..._transactions
           .map((transaction) => transaction.paymentMethod.trim())
@@ -584,7 +585,8 @@ class DashboardController extends ChangeNotifier {
       _autoBackupEnabled = prefs.getBool(_autoBackupEnabledKey) ?? false;
       // Wallets are account data. Never hydrate them from device-wide prefs:
       // that would make a second Google account inherit the first account's
-      // Cash and Whish balances. They are loaded only from this Firebase UID.
+      // My Wallet and Whish balances. They are loaded only from this Firebase
+      // UID.
       _resetWalletState();
       _categoryRules = _loadCategoryRules(prefs);
       _lastAutoBackup = DateTime.tryParse(

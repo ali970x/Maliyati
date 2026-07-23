@@ -127,7 +127,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   @override
   void initState() {
     super.initState();
-    _paymentMethodController.text = 'Cash';
+    _paymentMethodController.text = 'My Wallet';
     _destinationWalletController.text = 'Whish Money';
   }
 
@@ -362,7 +362,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           selected: !_useWishMoney,
                           onTap: () => setState(() {
                             _useWishMoney = false;
-                            _paymentMethodController.text = 'Cash';
+                            _paymentMethodController.text = 'My Wallet';
                           }),
                         ),
                       ),
@@ -400,7 +400,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                                 .toLowerCase()
                                 .contains('wish'),
                             onTap: () => setState(
-                              () => _destinationWalletController.text = 'Cash',
+                              () => _destinationWalletController.text =
+                                  'My Wallet',
                             ),
                           ),
                         ),
@@ -553,7 +554,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         TransactionType.income => '1',
         TransactionType.expense => _paidNow ? '-1' : '0',
         // A credit is money advanced from the selected wallet.  Keeping the
-        // direction explicit makes Cash and Whish Money behave identically.
+        // direction explicit makes My Wallet and Whish Money behave identically.
         TransactionType.reserveable => '-1',
         TransactionType.debt ||
         TransactionType.transfer ||
@@ -611,7 +612,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     _categoryController.clear();
     _paymentMethodController.clear();
     _notesController.clear();
-    _paymentMethodController.text = 'Cash';
+    _paymentMethodController.text = 'My Wallet';
     _destinationWalletController.text = 'Whish Money';
     setState(() {
       _date = DateTime.now();
@@ -672,7 +673,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     return _useWishMoney ? 'Whish Money' : 'My Wallet';
   }
 
-  String get _selectedWalletId => _useWishMoney ? 'Whish Money' : 'Cash';
+  String get _selectedWalletId => _useWishMoney ? 'Whish Money' : 'My Wallet';
 
   bool get _showsSettlementStatus =>
       _type == TransactionType.debt || _type == TransactionType.reserveable;
