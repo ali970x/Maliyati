@@ -17,6 +17,7 @@ class AccountingRules {
     );
     final amountUsd = transaction.amountUsd;
     final amountLbp = transaction.amountLbp;
+    final isServiceSource = LabelNormalizer.isService(walletId);
     raw['category'] = category;
     raw['Category'] = category;
     raw['amount_usd'] = amountUsd.toString();
@@ -47,11 +48,15 @@ class AccountingRules {
     );
     raw.putIfAbsent(
       'affects_expense_stats',
-      () => transaction.isExpense || transaction.isCredit ? 'true' : 'false',
+      () => transaction.isExpense || (transaction.isCredit && !isServiceSource)
+          ? 'true'
+          : 'false',
     );
     raw.putIfAbsent(
       'affects_income_stats',
-      () => transaction.isIncome || transaction.isDebt ? 'true' : 'false',
+      () => transaction.isIncome || (transaction.isDebt && !isServiceSource)
+          ? 'true'
+          : 'false',
     );
     raw.putIfAbsent(
       'affects_receivables',
@@ -224,7 +229,19 @@ class AccountingRules {
       ..['walletId'] = normalizedWallet
       ..['payment_method'] = normalizedWallet
       ..['Payment Method'] = normalizedWallet
-      ..['wallet_direction'] = walletDirection.toString();
+      ..['wallet_direction'] = walletDirection.toString()
+      ..['affects_expense_stats'] =
+          transaction.isExpense ||
+              (transaction.isCredit &&
+                  !LabelNormalizer.isService(normalizedWallet))
+          ? 'true'
+          : 'false'
+      ..['affects_income_stats'] =
+          transaction.isIncome ||
+              (transaction.isDebt &&
+                  !LabelNormalizer.isService(normalizedWallet))
+          ? 'true'
+          : 'false';
     return normalize(
       transaction.copyWith(paymentMethod: normalizedWallet, raw: raw),
     );

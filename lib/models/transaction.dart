@@ -81,6 +81,8 @@ class FinancialTransaction {
     return linkedTransactionId != null;
   }
 
+  bool get isServiceSource => walletId.trim().toLowerCase() == 'service';
+
   AccountingSettlementStatus get settlementStatus {
     final normalized =
         (raw['settlement_status'] ?? raw['settlementStatus'] ?? '')
@@ -119,6 +121,7 @@ class FinancialTransaction {
   /// being counted twice.
   bool get affectsExpenseStats {
     if (isSettlementEntry) return isDebt;
+    if (isServiceSource && (isCredit || isDebt)) return false;
     if (isCredit && raw['accounting_role'] != 'split_income_receivable') {
       return true;
     }
@@ -127,6 +130,7 @@ class FinancialTransaction {
 
   bool get affectsIncomeStats {
     if (isSettlementEntry) return isCredit;
+    if (isServiceSource && (isCredit || isDebt)) return false;
     if (isDebt && raw['accounting_role'] != 'accrued_expense_payable') {
       return true;
     }

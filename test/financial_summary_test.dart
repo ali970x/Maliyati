@@ -115,6 +115,16 @@ void main() {
     expect(debt.walletDirection, 0);
     expect(wallets.cash.balanceUsd, 100);
     expect(wallets.wish.balanceUsd, 50);
+
+    final summary = FinancialSummary.fromTransactions([
+      credit,
+      debt,
+    ], exchangeRate: 89000);
+    expect(summary.totalIncome, 0);
+    expect(summary.totalExpense, 0);
+    expect(summary.totalNet, 0);
+    expect(summary.totalReserveable, 30);
+    expect(summary.totalDebt, 20);
   });
 
   test(
