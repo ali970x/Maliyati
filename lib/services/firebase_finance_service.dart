@@ -765,6 +765,14 @@ class FirebaseFinanceService {
         raw['${entry.key}'] = '${entry.value}';
       }
     }
+    // The document-level relation is authoritative. A few old raw maps have
+    // an empty linked_transaction_id which otherwise hides the relationship
+    // and makes a collection look like a standalone Credit transaction.
+    final linkedTransactionId = '${data['linkedTransactionId'] ?? ''}'.trim();
+    if (linkedTransactionId.isNotEmpty) {
+      raw['linked_transaction_id'] = linkedTransactionId;
+      raw['linkedTransactionId'] = linkedTransactionId;
+    }
     // The document-level flag is authoritative. Older versions stored a
     // stale `archived` value in raw, which could make an archived item return
     // after a refresh or prevent a restored item from returning to the list.

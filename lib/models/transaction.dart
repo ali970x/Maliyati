@@ -76,9 +76,9 @@ class FinancialTransaction {
   }
 
   bool get isSettlementEntry {
-    final role = (raw['accounting_role'] ?? '').trim().toLowerCase();
-    return linkedTransactionId != null &&
-        (role == 'debt_settlement' || role == 'credit_collection');
+    // A link to another transaction is the stable accounting relationship.
+    // Older Firestore documents may not carry the optional role in raw.
+    return linkedTransactionId != null;
   }
 
   AccountingSettlementStatus get settlementStatus {

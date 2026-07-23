@@ -100,13 +100,13 @@ void main() {
             paymentMethod: 'My Wallet',
             raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '-1'},
           );
-    final moved = AccountingRules.moveWallet(
-      original,
-      walletId: 'Whish Money',
-    );
+      final moved = AccountingRules.moveWallet(
+        original,
+        walletId: 'Whish Money',
+      );
 
-    expect(moved.paymentMethod, 'Whish Money');
-    expect(moved.walletId, 'Whish Money');
+      expect(moved.paymentMethod, 'Whish Money');
+      expect(moved.walletId, 'Whish Money');
 
       final before = WalletSummary.fromTransactions(
         [original],
@@ -133,6 +133,22 @@ void main() {
       expect(after.wish.balanceUsd, 4);
     },
   );
+
+  test('a linked collection is never treated as a standalone credit', () {
+    final collection =
+        _transaction(
+          DateTime(2026, 7, 23),
+          TransactionType.reserveable,
+          10,
+        ).copyWith(
+          raw: const {
+            'linked_transaction_id': 'credit-original',
+            // Simulates older Firestore rows without accounting_role.
+          },
+        );
+
+    expect(collection.isSettlementEntry, isTrue);
+  });
 }
 
 FinancialTransaction _transaction(
