@@ -729,10 +729,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   String _selectedWalletName() {
-    return _useWishMoney ? 'Whish Money' : 'My Wallet';
+    return _selectedWalletId;
   }
 
-  String get _selectedWalletId => _useWishMoney ? 'Whish Money' : 'My Wallet';
+  String get _selectedWalletId => _usesService
+      ? LabelNormalizer.service
+      : _useWishMoney
+      ? 'Whish Money'
+      : 'My Wallet';
 
   Color _typeColor(TransactionType type) {
     return switch (type) {
