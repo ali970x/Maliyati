@@ -1711,6 +1711,7 @@ class _CreditFocusBody extends StatefulWidget {
 }
 
 class _CreditFocusBodyState extends State<_CreditFocusBody> {
+  var _showOpen = true;
   var _showCompleted = true;
 
   @override
@@ -1729,9 +1730,17 @@ class _CreditFocusBodyState extends State<_CreditFocusBody> {
           count: open.length,
           icon: Icons.pending_actions_rounded,
           color: const Color(0xFFD97706),
+          expanded: _showOpen,
+          onTap: () => setState(() => _showOpen = !_showOpen),
         ),
         const SizedBox(height: 8),
-        if (open.isEmpty)
+        if (!_showOpen)
+          TextButton.icon(
+            onPressed: () => setState(() => _showOpen = true),
+            icon: const Icon(Icons.visibility_outlined),
+            label: Text('${open.length} open credits hidden'),
+          )
+        else if (open.isEmpty)
           const _CreditEmptyState(message: 'No credit waiting for collection.')
         else
           for (final transaction in open) ...[
@@ -1753,28 +1762,13 @@ class _CreditFocusBodyState extends State<_CreditFocusBody> {
             const SizedBox(height: 8),
           ],
         const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: _CreditSectionHeader(
-                title: 'Collected in full',
-                count: completed.length,
-                icon: Icons.check_circle_rounded,
-                color: const Color(0xFF168A5B),
-              ),
-            ),
-            IconButton(
-              tooltip: _showCompleted
-                  ? 'Hide completed credits'
-                  : 'Show completed credits',
-              onPressed: () => setState(() => _showCompleted = !_showCompleted),
-              icon: Icon(
-                _showCompleted
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
-              ),
-            ),
-          ],
+        _CreditSectionHeader(
+          title: 'Collected in full',
+          count: completed.length,
+          icon: Icons.check_circle_rounded,
+          color: const Color(0xFF168A5B),
+          expanded: _showCompleted,
+          onTap: () => setState(() => _showCompleted = !_showCompleted),
         ),
         const SizedBox(height: 8),
         if (!_showCompleted)
@@ -1815,39 +1809,56 @@ class _CreditSectionHeader extends StatelessWidget {
     required this.count,
     required this.icon,
     required this.color,
+    this.expanded,
+    this.onTap,
   });
 
   final String title;
   final int count;
   final IconData icon;
   final Color color;
+  final bool? expanded;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, size: 20, color: color),
-      const SizedBox(width: 8),
-      Text(
-        title,
-        style: Theme.of(
-          context,
-        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            constraints: const BoxConstraints(minWidth: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Text(
+              '$count',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: color, fontWeight: FontWeight.w900),
+            ),
+          ),
+          const Spacer(),
+          if (expanded != null)
+            Icon(
+              expanded! ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+        ],
       ),
-      const SizedBox(width: 8),
-      Container(
-        constraints: const BoxConstraints(minWidth: 24),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .12),
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: Text(
-          '$count',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: color, fontWeight: FontWeight.w900),
-        ),
-      ),
-    ],
+    ),
   );
 }
 

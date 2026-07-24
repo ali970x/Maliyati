@@ -247,23 +247,41 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     }).toList();
 
     results.sort((a, b) {
+      int stableNewest() => _compareByNewest(a, b);
       switch (_sort) {
         case TransactionSort.newest:
-          return b.date.compareTo(a.date);
+          return stableNewest();
         case TransactionSort.oldest:
-          return a.date.compareTo(b.date);
+          return _compareByNewest(b, a);
         case TransactionSort.highestAmount:
-          return b
+          final amountCompare = b
               .amountInUsd(controller.exchangeRate)
               .compareTo(a.amountInUsd(controller.exchangeRate));
+          return amountCompare == 0 ? stableNewest() : amountCompare;
         case TransactionSort.lowestAmount:
-          return a
+          final amountCompare = a
               .amountInUsd(controller.exchangeRate)
               .compareTo(b.amountInUsd(controller.exchangeRate));
+          return amountCompare == 0 ? stableNewest() : amountCompare;
       }
     });
 
     return results;
+  }
+
+  int _compareByNewest(FinancialTransaction a, FinancialTransaction b) {
+    final createdCompare = (b.createdAt ?? b.date).compareTo(
+      a.createdAt ?? a.date,
+    );
+    if (createdCompare != 0) return createdCompare;
+
+    final dateCompare = b.date.compareTo(a.date);
+    if (dateCompare != 0) return dateCompare;
+
+    final idCompare = (b.id ?? '').compareTo(a.id ?? '');
+    if (idCompare != 0) return idCompare;
+
+    return b.description.compareTo(a.description);
   }
 
   void _openDetail(
