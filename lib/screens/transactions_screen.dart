@@ -273,11 +273,16 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => TransactionDetailScreen(
-          controller: widget.controller,
-          transaction: transaction,
-          startEditing: startEditing,
-        ),
+        builder: (_) => transaction.isCredit && !startEditing
+            ? CreditCollectionScreen(
+                controller: widget.controller,
+                credit: transaction,
+              )
+            : TransactionDetailScreen(
+                controller: widget.controller,
+                transaction: transaction,
+                startEditing: startEditing,
+              ),
       ),
     );
   }

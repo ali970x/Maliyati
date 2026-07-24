@@ -331,6 +331,183 @@ class _SettlementSheetState extends State<_SettlementSheet> {
   }
 }
 
+/// A focused collection workspace for receivables. It deliberately avoids the
+/// editable transaction form so receiving a payment stays a quick workflow.
+class CreditCollectionScreen extends StatefulWidget {
+  const CreditCollectionScreen({
+    super.key,
+    required this.controller,
+    required this.credit,
+  });
+
+  final DashboardController controller;
+  final FinancialTransaction credit;
+
+  @override
+  State<CreditCollectionScreen> createState() => _CreditCollectionScreenState();
+}
+
+class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
+  late FinancialTransaction _credit;
+  var _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _credit = widget.credit;
+    widget.controller.addListener(_syncCredit);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_syncCredit);
+    super.dispose();
+  }
+
+  void _syncCredit() {
+    final id = _credit.id;
+    if (id == null || id.isEmpty) return;
+    final latest = widget.controller.transactions.where(
+      (item) => item.id == id,
+    );
+    if (latest.isEmpty) return;
+    final transaction = latest.first;
+    if (mounted && transaction != _credit) {
+      setState(() => _credit = transaction);
+    }
+  }
+
+  List<FinancialTransaction> get _history {
+    final id = _credit.id;
+    if (id == null || id.isEmpty) return const [];
+    final items =
+        widget.controller.transactions
+            .where((item) => item.linkedTransactionId == id)
+            .toList()
+          ..sort((a, b) => b.date.compareTo(a.date));
+    return items;
+  }
+
+  Future<void> _addCollection() async {
+    final request = await showModalBottomSheet<_SettlementRequest>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _SettlementSheet(
+        target: _credit,
+        initialWalletId: _credit.walletId,
+        exchangeRate: widget.controller.exchangeRate,
+      ),
+    );
+    if (request == null || !mounted) return;
+    setState(() => _isSaving = true);
+    try {
+      final updated = await widget.controller.settleTransaction(
+        _credit,
+        walletId: request.walletId,
+        amountUsd: request.amountUsd,
+        amountLbp: request.amountLbp,
+        conversionRate: widget.controller.exchangeRate,
+      );
+      if (!mounted) return;
+      setState(() => _credit = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            updated.isSettled
+                ? 'Credit collected in full.'
+                : 'Collection saved. The progress was updated.',
+          ),
+        ),
+      );
+    } on FirebaseFinanceException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  Future<void> _showAllCollections() => showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (context) => SafeArea(
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        itemCount: _history.length + 1,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return const ListTile(
+              leading: Icon(Icons.receipt_long_rounded),
+              title: Text('Collection history'),
+            );
+          }
+          final entry = _history[index - 1];
+          return ListTile(
+            leading: const Icon(Icons.south_west_rounded),
+            title: Text('Collection via ${entry.walletId}'),
+            subtitle: Text(FinanceFormatters.date(entry.date)),
+            trailing: Text(
+              '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
+              textAlign: TextAlign.end,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          );
+        },
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Credit collection')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        children: [
+          Card(
+            child: ListTile(
+              leading: const CircleAvatar(
+                child: Icon(Icons.request_quote_rounded),
+              ),
+              title: Text(
+                _credit.description.isEmpty ? 'Credit' : _credit.description,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text('Source: ${_credit.walletId}'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SettlementProgressCard(
+            transaction: _credit,
+            history: _history,
+            onShowAll: _showAllCollections,
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _credit.isSettled || _isSaving ? null : _addCollection,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.add_card_rounded),
+            label: Text(
+              _credit.isSettled ? 'Collection complete' : 'Add collection',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class TransactionDetailScreen extends StatefulWidget {
   const TransactionDetailScreen({
     super.key,

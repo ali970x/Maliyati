@@ -1773,10 +1773,15 @@ class _RecentTransactionsPanelState extends State<_RecentTransactionsPanel> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => TransactionDetailScreen(
-                        controller: widget.controller,
-                        transaction: transaction,
-                      ),
+                      builder: (_) => transaction.isCredit
+                          ? CreditCollectionScreen(
+                              controller: widget.controller,
+                              credit: transaction,
+                            )
+                          : TransactionDetailScreen(
+                              controller: widget.controller,
+                              transaction: transaction,
+                            ),
                     ),
                   );
                 },

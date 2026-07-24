@@ -67,6 +67,25 @@ Future<void> _openContextualAdd(
   );
 }
 
+void _openDashboardTransaction(
+  BuildContext context,
+  DashboardController controller,
+  FinancialTransaction transaction, {
+  bool startEditing = false,
+}) {
+  final route = transaction.isCredit && !startEditing
+      ? CreditCollectionScreen(controller: controller, credit: transaction)
+      : TransactionDetailScreen(
+          controller: controller,
+          transaction: transaction,
+          startEditing: startEditing,
+          openSettlement:
+              (transaction.isDebt || transaction.isCredit) &&
+              !transaction.isSettled,
+        );
+  Navigator.of(context).push(MaterialPageRoute(builder: (_) => route));
+}
+
 void _showBalancePeriodSettings(
   BuildContext context,
   DashboardController controller,
@@ -1471,25 +1490,12 @@ class _RecentDashboardRow extends StatelessWidget {
         : const Color(0xFFC74949);
     return InkWell(
       borderRadius: BorderRadius.circular(10),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransactionDetailScreen(
-            controller: controller,
-            transaction: transaction,
-            openSettlement:
-                (transaction.isDebt || transaction.isCredit) &&
-                !transaction.isSettled,
-          ),
-        ),
-      ),
-      onLongPress: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => TransactionDetailScreen(
-            controller: controller,
-            transaction: transaction,
-            startEditing: true,
-          ),
-        ),
+      onTap: () => _openDashboardTransaction(context, controller, transaction),
+      onLongPress: () => _openDashboardTransaction(
+        context,
+        controller,
+        transaction,
+        startEditing: true,
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 9),
@@ -1669,15 +1675,11 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     FinancialTransaction transaction, {
     bool openSettlement = false,
     bool startEditing = false,
-  }) => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => TransactionDetailScreen(
-        controller: controller,
-        transaction: transaction,
-        startEditing: startEditing,
-        openSettlement: openSettlement,
-      ),
-    ),
+  }) => _openDashboardTransaction(
+    context,
+    controller,
+    transaction,
+    startEditing: startEditing,
   );
 }
 
@@ -2206,25 +2208,19 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
               style: TextStyle(color: color, fontWeight: FontWeight.w900),
             ),
             onTap: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => TransactionDetailScreen(
-                    controller: widget.controller,
-                    transaction: transaction,
-                  ),
-                ),
+              _openDashboardTransaction(
+                context,
+                widget.controller,
+                transaction,
               );
               if (mounted) setState(() {});
             },
             onLongPress: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => TransactionDetailScreen(
-                    controller: widget.controller,
-                    transaction: transaction,
-                    startEditing: true,
-                  ),
-                ),
+              _openDashboardTransaction(
+                context,
+                widget.controller,
+                transaction,
+                startEditing: true,
               );
               if (mounted) setState(() {});
             },
@@ -3123,25 +3119,13 @@ class _TransactionRow extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => TransactionDetailScreen(
-                controller: controller,
-                transaction: transaction,
-                openSettlement:
-                    (transaction.isDebt || transaction.isCredit) &&
-                    !transaction.isSettled,
-              ),
-            ),
-          ),
-          onLongPress: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => TransactionDetailScreen(
-                controller: controller,
-                transaction: transaction,
-                startEditing: true,
-              ),
-            ),
+          onTap: () =>
+              _openDashboardTransaction(context, controller, transaction),
+          onLongPress: () => _openDashboardTransaction(
+            context,
+            controller,
+            transaction,
+            startEditing: true,
           ),
           borderRadius: BorderRadius.circular(12),
           child: Padding(

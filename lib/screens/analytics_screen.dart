@@ -802,10 +802,15 @@ class _CategoryRankingCard extends StatelessWidget {
                         Navigator.of(sheetContext).pop();
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => TransactionDetailScreen(
-                              controller: controller,
-                              transaction: transaction,
-                            ),
+                            builder: (_) => transaction.isCredit
+                                ? CreditCollectionScreen(
+                                    controller: controller,
+                                    credit: transaction,
+                                  )
+                                : TransactionDetailScreen(
+                                    controller: controller,
+                                    transaction: transaction,
+                                  ),
                           ),
                         );
                       },
