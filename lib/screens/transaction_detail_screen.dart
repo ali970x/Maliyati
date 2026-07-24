@@ -441,34 +441,28 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
   Future<void> _showAllCollections() => showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
-    builder: (context) => SafeArea(
-      child: ListView.separated(
-        shrinkWrap: true,
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        itemCount: _history.length + 1,
-        separatorBuilder: (_, _) => const Divider(height: 1),
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return const ListTile(
-              leading: Icon(Icons.receipt_long_rounded),
-              title: Text('Collection history'),
-            );
-          }
-          final entry = _history[index - 1];
-          return ListTile(
-            leading: const Icon(Icons.south_west_rounded),
-            title: Text('Collection via ${entry.walletId}'),
-            subtitle: Text(FinanceFormatters.date(entry.date)),
-            trailing: Text(
-              '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
-              textAlign: TextAlign.end,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          );
-        },
-      ),
+    builder: (_) => _SettlementHistorySheet(
+      isDebt: false,
+      history: _history,
+      onShare: _shareCollections,
     ),
   );
+
+  Future<void> _shareCollections() async {
+    if (_history.isEmpty) return;
+    final lines = _history
+        .map(
+          (entry) =>
+              '- ${FinanceFormatters.date(entry.date)} | ${entry.walletId} | ${FinanceFormatters.usd(entry.amountUsd)} | ${FinanceFormatters.lbp(entry.amountLbp)}',
+        )
+        .join('\n');
+    await Share.share(
+      'Maliyati - Credit collection log\n'
+      'Total: ${FinanceFormatters.usd(_credit.amountUsd)} | ${FinanceFormatters.lbp(_credit.amountLbp)}\n'
+      'Remaining: ${FinanceFormatters.usd(_credit.remainingAmountUsd)} | ${FinanceFormatters.lbp(_credit.remainingAmountLbp)}\n\n'
+      '$lines',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -477,58 +471,59 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF7ED),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFFDBA74)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFEDD5),
-                    borderRadius: BorderRadius.circular(8),
+          if (false)
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFDBA74)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFEDD5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.request_quote_rounded,
+                      color: Color(0xFFD97706),
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.request_quote_rounded,
-                    color: Color(0xFFD97706),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _credit.description.isEmpty
-                            ? 'Credit account'
-                            : _credit.description,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _credit.description.isEmpty
+                              ? 'Credit account'
+                              : _credit.description,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _credit.isServiceSource
-                            ? 'Service credit · collect when paid'
-                            : 'Credit from ${_credit.walletId}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          _credit.isServiceSource
+                              ? 'Service credit · collect when paid'
+                              : 'Credit from ${_credit.walletId}',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           const SizedBox(height: 12),
           _SettlementProgressCard(
             transaction: _credit,
             history: _history,
             onShowAll: _showAllCollections,
+            showHistory: false,
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -543,6 +538,12 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
             label: Text(
               _credit.isSettled ? 'Collection complete' : 'Add collection',
             ),
+          ),
+          const SizedBox(height: 16),
+          _CreditPaymentLog(
+            history: _history,
+            onShowAll: _showAllCollections,
+            onShare: _shareCollections,
           ),
         ],
       ),
@@ -1848,11 +1849,13 @@ class _SettlementProgressCard extends StatelessWidget {
     required this.transaction,
     required this.history,
     required this.onShowAll,
+    this.showHistory = true,
   });
 
   final FinancialTransaction transaction;
   final List<FinancialTransaction> history;
   final VoidCallback onShowAll;
+  final bool showHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -1910,7 +1913,7 @@ class _SettlementProgressCard extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
-            if (history.isNotEmpty) ...[
+            if (showHistory && history.isNotEmpty) ...[
               const Divider(height: 24),
               for (final entry in history.take(3))
                 ListTile(
@@ -1937,6 +1940,72 @@ class _SettlementProgressCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CreditPaymentLog extends StatelessWidget {
+  const _CreditPaymentLog({
+    required this.history,
+    required this.onShowAll,
+    required this.onShare,
+  });
+
+  final List<FinancialTransaction> history;
+  final VoidCallback onShowAll;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.receipt_long_rounded),
+            title: const Text(
+              'Payment log',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: Text(
+              history.isEmpty
+                  ? 'No collection recorded yet'
+                  : '${history.length} recorded payment${history.length == 1 ? '' : 's'}',
+            ),
+            trailing: IconButton(
+              tooltip: 'Share payment log',
+              onPressed: history.isEmpty ? null : onShare,
+              icon: const Icon(Icons.share_rounded),
+            ),
+          ),
+          if (history.isNotEmpty) ...[
+            const Divider(height: 1),
+            for (final entry in history.take(3))
+              ListTile(
+                dense: true,
+                leading: const Icon(Icons.south_west_rounded),
+                title: Text('Collection via ${entry.walletId}'),
+                subtitle: Text(FinanceFormatters.date(entry.date)),
+                trailing: Text(
+                  '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
+                  textAlign: TextAlign.end,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            if (history.length > 3)
+              TextButton.icon(
+                onPressed: onShowAll,
+                icon: const Icon(Icons.list_alt_rounded),
+                label: Text('View all ${history.length} payments'),
+              ),
+          ],
+        ],
       ),
     );
   }
