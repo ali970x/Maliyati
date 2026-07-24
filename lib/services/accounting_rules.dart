@@ -260,7 +260,9 @@ class AccountingRules {
         : TransactionType.reserveable;
     return normalize(
       target.copyWith(
-        id: null,
+        // A collection/payment is a new ledger entry. It must never reuse the
+        // Credit/Debt ID it is linked to.
+        clearId: true,
         type: type,
         date: DateTime(date.year, date.month, date.day),
         hasDate: true,

@@ -368,7 +368,7 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
     final id = _credit.id;
     if (id == null || id.isEmpty) return;
     final latest = widget.controller.transactions.where(
-      (item) => item.id == id,
+      (item) => item.id == id && !item.isSettlementEntry,
     );
     if (latest.isEmpty) return;
     final transaction = latest.first;
@@ -400,6 +400,7 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
       ),
     );
     if (request == null || !mounted) return;
+    final creditId = _credit.id;
     setState(() => _isSaving = true);
     try {
       final updated = await widget.controller.settleTransaction(
@@ -410,11 +411,17 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
         conversionRate: widget.controller.exchangeRate,
       );
       if (!mounted) return;
-      setState(() => _credit = updated);
+      final refreshedCredit = creditId == null
+          ? updated
+          : widget.controller.transactions.firstWhere(
+              (item) => item.id == creditId && !item.isSettlementEntry,
+              orElse: () => updated,
+            );
+      setState(() => _credit = refreshedCredit);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            updated.isSettled
+            refreshedCredit.isSettled
                 ? 'Credit collected in full.'
                 : 'Collection saved. The progress was updated.',
           ),

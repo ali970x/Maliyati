@@ -1604,7 +1604,7 @@ class DashboardController extends ChangeNotifier {
       return settled;
     }
     return _transactions.firstWhere(
-      (item) => item.id?.trim() == id,
+      (item) => item.id?.trim() == id && !item.isSettlementEntry,
       orElse: () => settled,
     );
   }

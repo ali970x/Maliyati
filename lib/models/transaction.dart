@@ -220,6 +220,7 @@ class FinancialTransaction {
 
   FinancialTransaction copyWith({
     String? id,
+    bool clearId = false,
     DateTime? createdAt,
     TransactionSource? source,
     DateTime? date,
@@ -234,7 +235,7 @@ class FinancialTransaction {
     Map<String, String>? raw,
   }) {
     return FinancialTransaction(
-      id: id ?? this.id,
+      id: clearId ? null : id ?? this.id,
       createdAt: createdAt ?? this.createdAt,
       source: source ?? this.source,
       date: date ?? this.date,
