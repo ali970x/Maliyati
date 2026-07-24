@@ -1546,18 +1546,29 @@ class DashboardController extends ChangeNotifier {
     double? amountLbp,
     double? conversionRate,
   }) async {
-    if (!transaction.isDebt && !transaction.isCredit) {
+    // A target can have been selected in Add while a collection is saved from
+    // another screen. Always settle the latest canonical record, otherwise a
+    // stale copy could overwrite the previous collected amount.
+    final transactionId = transaction.id?.trim() ?? '';
+    final current = transactionId.isEmpty
+        ? transaction
+        : _transactions.firstWhere(
+            (item) =>
+                item.id?.trim() == transactionId && !item.isSettlementEntry,
+            orElse: () => transaction,
+          );
+    if (!current.isDebt && !current.isCredit) {
       throw const FirebaseFinanceException(
         'Only Credit and Debt transactions can be settled.',
       );
     }
-    if (transaction.isSettled || !transaction.hasOutstandingBalance) {
+    if (current.isSettled || !current.hasOutstandingBalance) {
       throw const FirebaseFinanceException(
         'This transaction is already settled.',
       );
     }
-    final paidUsd = amountUsd ?? transaction.remainingAmountUsd;
-    final paidLbp = amountLbp ?? transaction.remainingAmountLbp;
+    final paidUsd = amountUsd ?? current.remainingAmountUsd;
+    final paidLbp = amountLbp ?? current.remainingAmountLbp;
     final rate = conversionRate ?? exchangeRate;
     if (paidUsd < 0 || paidLbp < 0) {
       throw const FirebaseFinanceException(
@@ -1568,7 +1579,7 @@ class DashboardController extends ChangeNotifier {
       throw const FirebaseFinanceException('Enter an amount to settle.');
     }
     final remainingUsdValue =
-        transaction.remainingAmountUsd + transaction.remainingAmountLbp / rate;
+        current.remainingAmountUsd + current.remainingAmountLbp / rate;
     final paidUsdValue = paidUsd + paidLbp / rate;
     if (paidUsdValue - remainingUsdValue > 0.0001) {
       throw const FirebaseFinanceException(
@@ -1576,19 +1587,19 @@ class DashboardController extends ChangeNotifier {
       );
     }
     final allocation = AccountingRules.settlementAllocation(
-      transaction,
+      current,
       paidUsd: paidUsd,
       paidLbp: paidLbp,
       exchangeRate: rate,
     );
     final settled = AccountingRules.applySettlement(
-      transaction,
+      current,
       amountUsd: allocation.amountUsd,
       amountLbp: allocation.amountLbp,
     );
     final settlement = AccountingRules.settlementEntry(
-      transaction,
-      walletId: walletId.trim().isEmpty ? transaction.walletId : walletId,
+      current,
+      walletId: walletId.trim().isEmpty ? current.walletId : walletId,
       date: date ?? DateTime.now(),
       amountUsd: paidUsd,
       amountLbp: paidLbp,
@@ -1597,9 +1608,9 @@ class DashboardController extends ChangeNotifier {
       afterTransactions: [..._transactions, settlement],
       changedTransactions: [settlement],
     );
-    await updateTransaction(transaction, settled);
+    await updateTransaction(current, settled);
     await addTransaction(settlement);
-    final id = transaction.id?.trim() ?? '';
+    final id = current.id?.trim() ?? '';
     if (id.isEmpty) {
       return settled;
     }
