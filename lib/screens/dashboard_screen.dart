@@ -1582,7 +1582,9 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     };
     return Scaffold(
       appBar: AppBar(title: Text(category ?? title)),
-      body: showCategories && category == null
+      body: kind == _DashboardMetricKind.reserveable && category == null
+          ? _CreditFocusBody(controller: controller, transactions: transactions)
+          : showCategories && category == null
           ? _CategoryFocusList(
               controller: controller,
               kind: kind,
@@ -1693,6 +1695,282 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     transaction,
     startEditing: startEditing,
   );
+}
+
+class _CreditFocusBody extends StatefulWidget {
+  const _CreditFocusBody({
+    required this.controller,
+    required this.transactions,
+  });
+
+  final DashboardController controller;
+  final List<FinancialTransaction> transactions;
+
+  @override
+  State<_CreditFocusBody> createState() => _CreditFocusBodyState();
+}
+
+class _CreditFocusBodyState extends State<_CreditFocusBody> {
+  var _showCompleted = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = widget.transactions
+        .where((transaction) => !transaction.isSettled)
+        .toList();
+    final completed = widget.transactions
+        .where((transaction) => transaction.isSettled)
+        .toList();
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      children: [
+        _CreditSectionHeader(
+          title: 'Needs collection',
+          count: open.length,
+          icon: Icons.pending_actions_rounded,
+          color: const Color(0xFFD97706),
+        ),
+        const SizedBox(height: 8),
+        if (open.isEmpty)
+          const _CreditEmptyState(message: 'No credit waiting for collection.')
+        else
+          for (final transaction in open) ...[
+            _CompactCreditRow(
+              controller: widget.controller,
+              transaction: transaction,
+              onTap: () => _openDashboardTransaction(
+                context,
+                widget.controller,
+                transaction,
+              ),
+              onLongPress: () => _openDashboardTransaction(
+                context,
+                widget.controller,
+                transaction,
+                startEditing: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: _CreditSectionHeader(
+                title: 'Collected in full',
+                count: completed.length,
+                icon: Icons.check_circle_rounded,
+                color: const Color(0xFF168A5B),
+              ),
+            ),
+            IconButton(
+              tooltip: _showCompleted
+                  ? 'Hide completed credits'
+                  : 'Show completed credits',
+              onPressed: () => setState(() => _showCompleted = !_showCompleted),
+              icon: Icon(
+                _showCompleted
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (!_showCompleted)
+          TextButton.icon(
+            onPressed: () => setState(() => _showCompleted = true),
+            icon: const Icon(Icons.visibility_outlined),
+            label: Text('${completed.length} completed credits hidden'),
+          )
+        else if (completed.isEmpty)
+          const _CreditEmptyState(message: 'No completed credit yet.')
+        else
+          for (final transaction in completed) ...[
+            _CompactCreditRow(
+              controller: widget.controller,
+              transaction: transaction,
+              onTap: () => _openDashboardTransaction(
+                context,
+                widget.controller,
+                transaction,
+              ),
+              onLongPress: () => _openDashboardTransaction(
+                context,
+                widget.controller,
+                transaction,
+                startEditing: true,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+      ],
+    );
+  }
+}
+
+class _CreditSectionHeader extends StatelessWidget {
+  const _CreditSectionHeader({
+    required this.title,
+    required this.count,
+    required this.icon,
+    required this.color,
+  });
+
+  final String title;
+  final int count;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, size: 20, color: color),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: Theme.of(
+          context,
+        ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+      ),
+      const SizedBox(width: 8),
+      Container(
+        constraints: const BoxConstraints(minWidth: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Text(
+          '$count',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: color, fontWeight: FontWeight.w900),
+        ),
+      ),
+    ],
+  );
+}
+
+class _CreditEmptyState extends StatelessWidget {
+  const _CreditEmptyState({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Text(
+      message,
+      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+    ),
+  );
+}
+
+class _CompactCreditRow extends StatelessWidget {
+  const _CompactCreditRow({
+    required this.controller,
+    required this.transaction,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final DashboardController controller;
+  final FinancialTransaction transaction;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final rate = controller.exchangeRate;
+    final total = transaction.amountInUsd(rate);
+    final remaining =
+        transaction.remainingAmountUsd + transaction.remainingAmountLbp / rate;
+    final collected = (total - remaining).clamp(0, total).toDouble();
+    final progress = total <= 0
+        ? 0.0
+        : (collected / total).clamp(0, 1).toDouble();
+    final isDone = transaction.isSettled;
+    final accent = isDone ? const Color(0xFF168A5B) : const Color(0xFFD97706);
+    final title = transaction.description.trim().isEmpty
+        ? 'Credit'
+        : transaction.description.trim();
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: accent.withValues(alpha: .2)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isDone
+                      ? Icons.check_circle_rounded
+                      : Icons.request_quote_rounded,
+                  color: accent,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+                Text(
+                  isDone ? 'Done' : 'Open',
+                  style: TextStyle(color: accent, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    isDone
+                        ? 'Collected ${FinanceFormatters.usd(collected)}'
+                        : 'Left ${FinanceFormatters.usd(transaction.remainingAmountUsd)}',
+                    style: TextStyle(
+                      color: accent,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(
+                  'of ${FinanceFormatters.usd(total)}',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 5,
+                color: accent,
+                backgroundColor: accent.withValues(alpha: .14),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CreditOverviewTile extends StatelessWidget {
