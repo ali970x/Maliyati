@@ -1596,11 +1596,23 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
               ),
             )
           : ListView.separated(
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
               itemCount: transactions.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final transaction = transactions[index];
+                if (kind == _DashboardMetricKind.reserveable) {
+                  return _CreditOverviewTile(
+                    controller: controller,
+                    transaction: transaction,
+                    onTap: () => _openTransaction(context, transaction),
+                    onLongPress: () => _openTransaction(
+                      context,
+                      transaction,
+                      startEditing: true,
+                    ),
+                  );
+                }
                 return ListTile(
                   leading: CircleAvatar(
                     backgroundColor: _kindColor(kind).withValues(alpha: .15),
@@ -1680,6 +1692,186 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     controller,
     transaction,
     startEditing: startEditing,
+  );
+}
+
+class _CreditOverviewTile extends StatelessWidget {
+  const _CreditOverviewTile({
+    required this.controller,
+    required this.transaction,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final DashboardController controller;
+  final FinancialTransaction transaction;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    const creditColor = Color(0xFFD97706);
+    final rate = controller.exchangeRate;
+    final total = transaction.amountInUsd(rate);
+    final remaining =
+        transaction.remainingAmountUsd + transaction.remainingAmountLbp / rate;
+    final collected = (total - remaining).clamp(0, total).toDouble();
+    final progress = total <= 0
+        ? 0.0
+        : (collected / total).clamp(0, 1).toDouble();
+    final history = controller.transactions
+        .where((item) => item.linkedTransactionId == transaction.id)
+        .toList();
+    final collectionWallets = history
+        .map((item) => item.walletId)
+        .where((wallet) => wallet.trim().isNotEmpty)
+        .toSet()
+        .join(', ');
+    final title = transaction.description.trim().isEmpty
+        ? 'Credit'
+        : transaction.description.trim();
+    final sourceLabel = transaction.isServiceSource
+        ? 'Service credit'
+        : 'From ${transaction.walletId}';
+    final statusLabel = transaction.isSettled
+        ? 'Collected in full'
+        : 'Remaining to collect';
+
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: creditColor.withValues(alpha: .22)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: creditColor.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.request_quote_rounded,
+                    color: creditColor,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        sourceLabel,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  FinanceFormatters.usd(transaction.amountUsd),
+                  style: const TextStyle(
+                    color: creditColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _CreditAmountLabel(
+                    label: statusLabel,
+                    value: FinanceFormatters.usd(
+                      transaction.remainingAmountUsd,
+                    ),
+                    color: transaction.isSettled
+                        ? const Color(0xFF168A5B)
+                        : creditColor,
+                  ),
+                ),
+                Expanded(
+                  child: _CreditAmountLabel(
+                    label: 'Collected',
+                    value: FinanceFormatters.usd(transaction.settledAmountUsd),
+                    alignEnd: true,
+                    color: const Color(0xFF168A5B),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                color: const Color(0xFF168A5B),
+                backgroundColor: creditColor.withValues(alpha: .14),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${FinanceFormatters.usd(collected)} collected of ${FinanceFormatters.usd(total)}'
+              '${collectionWallets.isEmpty ? '' : ' · Received to $collectionWallets'}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CreditAmountLabel extends StatelessWidget {
+  const _CreditAmountLabel({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: alignEnd
+        ? CrossAxisAlignment.end
+        : CrossAxisAlignment.start,
+    children: [
+      Text(label, style: Theme.of(context).textTheme.labelMedium),
+      const SizedBox(height: 2),
+      Text(
+        value,
+        style: TextStyle(color: color, fontWeight: FontWeight.w900),
+      ),
+    ],
   );
 }
 

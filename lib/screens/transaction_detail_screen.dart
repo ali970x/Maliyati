@@ -477,16 +477,51 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          Card(
-            child: ListTile(
-              leading: const CircleAvatar(
-                child: Icon(Icons.request_quote_rounded),
-              ),
-              title: Text(
-                _credit.description.isEmpty ? 'Credit' : _credit.description,
-                style: const TextStyle(fontWeight: FontWeight.w900),
-              ),
-              subtitle: Text('Source: ${_credit.walletId}'),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFDBA74)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEDD5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.request_quote_rounded,
+                    color: Color(0xFFD97706),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _credit.description.isEmpty
+                            ? 'Credit account'
+                            : _credit.description,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _credit.isServiceSource
+                            ? 'Service credit · collect when paid'
+                            : 'Credit from ${_credit.walletId}',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
