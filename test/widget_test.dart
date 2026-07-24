@@ -11,5 +11,7 @@ void main() {
     await tester.pumpWidget(const FinanceTrackerApp());
     await tester.pump();
     expect(find.byType(MaterialApp), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }

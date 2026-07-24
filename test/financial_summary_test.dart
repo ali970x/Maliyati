@@ -214,6 +214,39 @@ void main() {
     expect(updated.isSettled, isFalse);
   });
 
+  test(
+    'a mixed-currency collection preserves payment and allocation details',
+    () {
+      final credit = _transaction(
+        DateTime(2026, 7, 23),
+        TransactionType.reserveable,
+        25,
+      ).copyWith(id: 'credit-allocated');
+      final allocation = AccountingRules.settlementAllocation(
+        credit,
+        paidUsd: 0,
+        paidLbp: 445000,
+        exchangeRate: 89000,
+      );
+      final entry = AccountingRules.settlementEntry(
+        credit,
+        walletId: 'Whish Money',
+        date: DateTime(2026, 7, 24),
+        amountUsd: 0,
+        amountLbp: 445000,
+        allocatedUsd: allocation.amountUsd,
+        allocatedLbp: allocation.amountLbp,
+        exchangeRate: 89000,
+      );
+
+      expect(entry.linkedTransactionId, 'credit-allocated');
+      expect(entry.raw['settlement_amount_lbp'], '445000.0');
+      expect(double.parse(entry.raw['settlement_allocation_usd']!), 5);
+      expect(entry.raw['settlement_exchange_rate'], '89000.0');
+      expect(entry.walletId, 'Whish Money');
+    },
+  );
+
   test('credit and debt flows are reflected in income and expense totals', () {
     final date = DateTime(2026, 7, 23);
     final credit = _transaction(

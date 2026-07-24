@@ -69,7 +69,7 @@ class FloatingInputService : Service() {
         val size = (60 * density).toInt()
         val edge = (12 * density).toInt()
         val touchSlop = 7 * density
-        val bubbleView = createBubbleView(size, edge)
+        val bubbleView = createBubbleView(size)
         val params = overlayParams(size, size).apply {
             gravity = Gravity.START or Gravity.TOP
             x = resources.displayMetrics.widthPixels - size - edge
@@ -146,7 +146,7 @@ class FloatingInputService : Service() {
         }
     }
 
-    private fun createBubbleView(size: Int, edge: Int): FrameLayout {
+    private fun createBubbleView(size: Int): FrameLayout {
         val density = resources.displayMetrics.density
 
         return FrameLayout(this).apply {
@@ -156,55 +156,27 @@ class FloatingInputService : Service() {
                 shape = GradientDrawable.RECTANGLE
                 cornerRadius = 18 * density
                 setColor(Color.WHITE)
-                setStroke((1.2f * density).toInt(), Color.argb(72, 88, 99, 117))
+                setStroke((1.2f * density).toInt(), Color.argb(72, 11, 92, 173))
             }
 
             addView(
-                TextView(this@FloatingInputService).apply {
-                    text = "G"
-                    textSize = 25f
-                    gravity = Gravity.CENTER
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    setTextColor(Color.rgb(66, 133, 244))
+                ImageView(this@FloatingInputService).apply {
+                    setImageResource(R.drawable.maliyati_floating_icon)
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setPadding(
+                        (4 * density).toInt(),
+                        (4 * density).toInt(),
+                        (4 * density).toInt(),
+                        (4 * density).toInt(),
+                    )
+                    contentDescription = "Open Maliyati quick input"
                 },
                 FrameLayout.LayoutParams(
-                    (34 * density).toInt(),
-                    (34 * density).toInt(),
-                    Gravity.START or Gravity.CENTER_VERTICAL,
-                ).apply {
-                    leftMargin = (8 * density).toInt()
-                },
-            )
-            addView(
-                TextView(this@FloatingInputService).apply {
-                    text = "文"
-                    textSize = 18f
-                    gravity = Gravity.CENTER
-                    typeface = android.graphics.Typeface.DEFAULT_BOLD
-                    setTextColor(Color.rgb(95, 99, 104))
-                },
-                FrameLayout.LayoutParams(
-                    (28 * density).toInt(),
-                    (28 * density).toInt(),
-                    Gravity.END or Gravity.CENTER_VERTICAL,
-                ).apply {
-                    rightMargin = (8 * density).toInt()
-                },
-            )
-            addView(
-                TextView(this@FloatingInputService).apply {
-                    text = "↔"
-                    textSize = 14f
-                    gravity = Gravity.CENTER
-                    setTextColor(Color.rgb(52, 168, 83))
-                },
-                FrameLayout.LayoutParams(
-                    (22 * density).toInt(),
-                    (22 * density).toInt(),
+                    size,
+                    size,
                     Gravity.CENTER,
                 ),
             )
-
         }
     }
 
@@ -356,7 +328,7 @@ class FloatingInputService : Service() {
             Notification.Builder(this)
         }
         return builder
-            .setSmallIcon(android.R.drawable.ic_input_add)
+            .setSmallIcon(R.drawable.ic_launcher_finance)
             .setContentTitle("Maliyati quick input")
             .setContentText("Tap the floating button after copying text")
             .build()

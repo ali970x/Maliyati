@@ -102,6 +102,16 @@ Open `Extensions > Apps Script`, paste the append-only script from:
 docs/apps_script_append_only_v4.js
 ```
 
+In Apps Script, open **Project Settings > Script properties** and add:
+
+```text
+Property: MALIYATI_SECRET
+Value: use-a-long-random-secret
+```
+
+Use the same value for the Flutter `SHEET_EXPORT_SECRET` dart-define. Never put
+the production secret directly in the script or commit it to Git.
+
 Then deploy as a Web App.
 
 ```javascript

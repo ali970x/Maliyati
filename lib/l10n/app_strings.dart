@@ -79,8 +79,24 @@ class AppStrings {
   String get income => isArabic ? 'الدخل' : 'Income';
   String get expense => isArabic ? 'المصاريف' : 'Expense';
   String get expenses => isArabic ? 'المصاريف' : 'Expenses';
-  String get reserveable => 'Credit';
-  String get reserveables => 'Credits';
+  String get reserveable => isArabic ? 'مستحق لي' : 'Receivable';
+  String get reserveables => isArabic ? 'مستحقات لي' : 'Receivables';
+  String get debt => isArabic ? 'دين عليّ' : 'Payable';
+  String get debts => isArabic ? 'ديون عليّ' : 'Payables';
+  String get outstandingReceivables =>
+      isArabic ? 'مستحقات غير محصّلة' : 'Outstanding receivables';
+  String get collectedReceivables =>
+      isArabic ? 'مستحقات محصّلة' : 'Collected receivables';
+  String get outstandingPayables =>
+      isArabic ? 'ديون غير مسددة' : 'Outstanding payables';
+  String get settledPayables => isArabic ? 'ديون مسددة' : 'Settled payables';
+  String get totalWalletBalance =>
+      isArabic ? 'إجمالي رصيد المحافظ' : 'Total wallet balance';
+  String get netCashFlow => isArabic ? 'صافي التدفق النقدي' : 'Net cash flow';
+  String get expenseOverview =>
+      isArabic ? 'نظرة على المصاريف' : 'Expense overview';
+  String get add => isArabic ? 'إضافة' : 'Add';
+  String get alerts => isArabic ? 'التنبيهات' : 'Alerts';
   String get showIncomeTransactions =>
       isArabic ? 'عمليات الدخل' : 'Income transactions';
   String get showExpenseTransactions =>

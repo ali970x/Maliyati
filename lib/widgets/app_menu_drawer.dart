@@ -24,10 +24,12 @@ class AppMenuScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isArabic = controller.language == AppLanguage.arabic;
+    String t(String english, String arabic) => isArabic ? arabic : english;
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Settings'),
+        title: Text(controller.strings.settings),
         backgroundColor: theme.scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
         foregroundColor: theme.colorScheme.onSurface,
@@ -36,22 +38,20 @@ class AppMenuScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
         children: [
           _SettingsWelcomeHeader(controller: controller),
-          const SizedBox(height: 14),
-          _SettingsCard(
-            icon: Icons.cloud_sync_outlined,
-            title: 'Google Drive backup',
-            subtitle: 'Create, browse and restore cloud backups',
-            onTap: () =>
-                _open(context, BackupRestoreScreen(controller: controller)),
+          const SizedBox(height: 20),
+          _SettingsSectionLabel(
+            title: t('Account & security', 'الحساب والأمان'),
           ),
-          const SizedBox(height: 12),
           if (!kIsWeb) ...[
             _SettingsCard(
               icon: Icons.lock_outline_rounded,
-              title: 'Screen lock',
+              title: t('Screen lock', 'قفل التطبيق'),
               subtitle: controller.isAppLockEnabled
-                  ? 'Fingerprint unlock is on'
-                  : 'Protect Maliyati with a PIN or fingerprint',
+                  ? t('Fingerprint unlock is on', 'فتح التطبيق بالبصمة مفعّل')
+                  : t(
+                      'Protect Maliyati with your fingerprint',
+                      'احمِ ماليّاتي باستخدام البصمة',
+                    ),
               trailing: Switch(
                 value: controller.isAppLockEnabled,
                 onChanged: (value) => controller.updateAppLockEnabled(value),
@@ -62,39 +62,70 @@ class AppMenuScreen extends StatelessWidget {
             const SizedBox(height: 12),
           ],
           _SettingsCard(
-            icon: Icons.table_chart_outlined,
-            title: 'Sheet connection',
-            subtitle: 'Save, import or export your sheet data',
+            icon: Icons.person_outline_rounded,
+            title: t('Account information', 'معلومات الحساب'),
+            subtitle:
+                controller.user?.email ?? t('Signed in', 'تم تسجيل الدخول'),
             onTap: () =>
-                _open(context, SheetConnectionScreen(controller: controller)),
+                _open(context, AccountSettingsScreen(controller: controller)),
           ),
-          const SizedBox(height: 12),
-          _SettingsCard(
-            icon: Icons.category_rounded,
-            title: 'Categories',
-            subtitle: 'Rename, add and choose where each category appears',
-            onTap: () =>
-                _open(context, CategorySettingsScreen(controller: controller)),
-          ),
-          const SizedBox(height: 12),
-          if (!kIsWeb) ...[
-            const _FloatingQuickInputSettingsCard(),
-            const SizedBox(height: 12),
-          ],
+          const SizedBox(height: 22),
+          _SettingsSectionLabel(title: t('Finance & data', 'المال والبيانات')),
           _SettingsCard(
             icon: Icons.currency_exchange_rounded,
-            title: 'Exchange rate',
-            subtitle: 'LBP value used for conversion',
+            title: t('Exchange rate', 'سعر الصرف'),
+            subtitle: t(
+              'LBP value used for USD conversion',
+              'قيمة الليرة المستخدمة للتحويل إلى الدولار',
+            ),
             onTap: () =>
                 _open(context, ExchangeRateScreen(controller: controller)),
           ),
           const SizedBox(height: 12),
           _SettingsCard(
+            icon: Icons.category_rounded,
+            title: t('Categories', 'الفئات'),
+            subtitle: t(
+              'Organize income and expense categories',
+              'تنظيم فئات الدخل والمصاريف',
+            ),
+            onTap: () =>
+                _open(context, CategorySettingsScreen(controller: controller)),
+          ),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.table_chart_outlined,
+            title: t('Google Sheet backup', 'نسخة Google Sheet'),
+            subtitle: t(
+              'Import or export a manual backup',
+              'استيراد أو تصدير نسخة احتياطية يدوياً',
+            ),
+            onTap: () =>
+                _open(context, SheetConnectionScreen(controller: controller)),
+          ),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.cloud_sync_outlined,
+            title: t('Google Drive backup', 'نسخة Google Drive'),
+            subtitle: t(
+              'Create and restore account backups',
+              'إنشاء واستعادة نسخ الحساب الاحتياطية',
+            ),
+            onTap: () =>
+                _open(context, BackupRestoreScreen(controller: controller)),
+          ),
+          const SizedBox(height: 22),
+          _SettingsSectionLabel(title: t('Preferences', 'التفضيلات')),
+          if (!kIsWeb) ...[
+            const _FloatingQuickInputSettingsCard(),
+            const SizedBox(height: 12),
+          ],
+          _SettingsCard(
             icon: Icons.palette_outlined,
-            title: 'Appearance',
+            title: t('Appearance', 'المظهر'),
             subtitle: controller.themeMode == ThemeMode.dark
-                ? 'Dark theme is on'
-                : 'Light theme is on',
+                ? t('Dark theme is on', 'الوضع الداكن مفعّل')
+                : t('Light theme is on', 'الوضع الفاتح مفعّل'),
             trailing: Switch(
               value: controller.themeMode == ThemeMode.dark,
               onChanged: (enabled) => controller.updateThemeMode(
@@ -110,26 +141,29 @@ class AppMenuScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _SettingsCard(
             icon: Icons.language_rounded,
-            title: 'Language',
+            title: t('Language', 'اللغة'),
             subtitle: controller.language == AppLanguage.arabic
-                ? 'Arabic'
+                ? 'العربية'
                 : 'English',
             onTap: () =>
                 _open(context, LanguagePickerScreen(controller: controller)),
           ),
-          const SizedBox(height: 12),
-          const SizedBox(height: 8),
+          const SizedBox(height: 22),
+          _SettingsSectionLabel(title: t('Application', 'التطبيق')),
           _SettingsCard(
             icon: Icons.share_outlined,
-            title: 'Share app',
-            subtitle: 'Share Maliyati with your friends',
+            title: t('Share app', 'مشاركة التطبيق'),
+            subtitle: t(
+              'Share Maliyati with your team',
+              'شارك ماليّاتي مع فريقك',
+            ),
             onTap: () => Share.share('Track your money with Maliyati.'),
           ),
           const SizedBox(height: 12),
           _SettingsCard(
             icon: Icons.apps_rounded,
-            title: 'More applications',
-            subtitle: 'Coming soon',
+            title: t('More applications', 'تطبيقات أخرى'),
+            subtitle: t('Coming soon', 'قريباً'),
             onTap: () => ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('More apps will be added soon.')),
             ),
@@ -137,23 +171,33 @@ class AppMenuScreen extends StatelessWidget {
           const SizedBox(height: 12),
           _SettingsCard(
             icon: Icons.info_outline_rounded,
-            title: 'About application',
-            subtitle: 'Version ${AppConfig.fullVersion}',
+            title: t('About Maliyati', 'عن ماليّاتي'),
+            subtitle: t(
+              'Version ${AppConfig.fullVersion}',
+              'الإصدار ${AppConfig.fullVersion}',
+            ),
             onTap: () => _open(context, const AboutApplicationScreen()),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 22),
+          _SettingsSectionLabel(
+            title: t('Danger zone', 'منطقة حساسة'),
+            color: theme.colorScheme.error,
+          ),
           _SettingsCard(
             icon: Icons.delete_forever_outlined,
-            title: 'Reset account data',
-            subtitle: 'Delete every transaction and reset both wallets to zero',
+            title: t('Reset account data', 'تصفير بيانات الحساب'),
+            subtitle: t(
+              'Permanently delete transactions and wallet history',
+              'حذف العمليات وسجل المحافظ نهائياً',
+            ),
             onTap: () => _confirmResetAccount(context),
           ),
           const SizedBox(height: 18),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(54),
-              foregroundColor: const Color(0xFF7252B5),
-              side: const BorderSide(color: Color(0xFFD7CBED)),
+              foregroundColor: theme.colorScheme.primary,
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -168,9 +212,9 @@ class AppMenuScreen extends StatelessWidget {
               }
             },
             icon: const Icon(Icons.logout_rounded),
-            label: const Text(
-              'Log out',
-              style: TextStyle(fontWeight: FontWeight.w900),
+            label: Text(
+              t('Log out', 'تسجيل الخروج'),
+              style: const TextStyle(fontWeight: FontWeight.w900),
             ),
           ),
         ],
@@ -1245,6 +1289,9 @@ class _SettingsWelcomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = controller.user;
     final theme = Theme.of(context);
+    final isArabic = controller.language == AppLanguage.arabic;
+    final displayName = user?.displayName?.trim() ?? '';
+    final email = user?.email?.trim() ?? '';
     return Row(
       children: [
         CircleAvatar(
@@ -1264,14 +1311,18 @@ class _SettingsWelcomeHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Welcome ${user?.displayName ?? 'Ali Dandash'}',
+                displayName.isNotEmpty
+                    ? displayName
+                    : controller.strings.appName,
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w900,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
-                user?.email ?? 'alimjdandash@gmail.com',
+                email.isNotEmpty
+                    ? email
+                    : (isArabic ? 'تم تسجيل الدخول' : 'Signed in'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -1280,6 +1331,28 @@ class _SettingsWelcomeHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SettingsSectionLabel extends StatelessWidget {
+  const _SettingsSectionLabel({required this.title, this.color});
+
+  final String title;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(4, 0, 4, 8),
+      child: Text(
+        title,
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: color ?? theme.colorScheme.primary,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
     );
   }
 }

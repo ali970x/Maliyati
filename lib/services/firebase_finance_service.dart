@@ -70,7 +70,15 @@ class WalletSyncSettings {
   final String wishComparisonRange;
 }
 
+class SettlementWriteResult {
+  const SettlementWriteResult({required this.parent, required this.payment});
+
+  final FinancialTransaction parent;
+  final FinancialTransaction payment;
+}
+
 class FirebaseFinanceService {
+  static const _batchSize = 400;
   static const adminEmail = 'labdev99@gmail.com';
 
   FirebaseFinanceService({
@@ -350,24 +358,29 @@ class FirebaseFinanceService {
   }) async {
     _requireAdmin();
     final existing = await _transactions(uid).get();
-    final deleteBatch = _firestore.batch();
-    for (final doc in existing.docs) {
-      deleteBatch.delete(doc.reference);
-    }
-    await deleteBatch.commit();
     if (transactions.isEmpty) {
+      await _deleteReferences(existing.docs.map((doc) => doc.reference));
       return const [];
     }
-    final writeBatch = _firestore.batch();
-    for (final transaction in transactions) {
-      final id = _requireTransactionId(transaction);
-      writeBatch.set(
-        _transactions(uid).doc(id),
-        _toFirestore(AccountingRules.normalize(transaction)),
-      );
+
+    final normalized = transactions
+        .map(AccountingRules.normalize)
+        .toList(growable: false);
+    for (var start = 0; start < normalized.length; start += _batchSize) {
+      final writeBatch = _firestore.batch();
+      for (final transaction in normalized.skip(start).take(_batchSize)) {
+        final id = _requireTransactionId(transaction);
+        writeBatch.set(_transactions(uid).doc(id), _toFirestore(transaction));
+      }
+      await writeBatch.commit();
     }
-    await writeBatch.commit();
-    return transactions;
+    final incomingIds = normalized.map((transaction) => transaction.id).toSet();
+    await _deleteReferences(
+      existing.docs
+          .where((document) => !incomingIds.contains(document.id))
+          .map((document) => document.reference),
+    );
+    return normalized;
   }
 
   Future<List<FinancialTransaction>> fetchTransactions() async {
@@ -406,6 +419,113 @@ class FirebaseFinanceService {
     await _transactions(user.uid).doc(id).delete();
   }
 
+  Future<void> deleteTransactionCascade(String id) async {
+    final user = _requireUser();
+    final collection = _transactions(user.uid);
+    final linked = await collection
+        .where('linkedTransactionId', isEqualTo: id)
+        .get();
+    final references = <DocumentReference<Map<String, dynamic>>>{
+      collection.doc(id),
+      for (final document in linked.docs) document.reference,
+    }.toList(growable: false);
+    for (var start = 0; start < references.length; start += _batchSize) {
+      final batch = _firestore.batch();
+      for (final reference in references.skip(start).take(_batchSize)) {
+        batch.delete(reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<SettlementWriteResult> settleTransaction({
+    required String transactionId,
+    required String walletId,
+    required DateTime date,
+    required double amountUsd,
+    required double amountLbp,
+    required double exchangeRate,
+  }) async {
+    final user = _requireUser();
+    final collection = _transactions(user.uid);
+    final parentReference = collection.doc(transactionId);
+    final paymentReference = collection.doc();
+
+    return _firestore.runTransaction((databaseTransaction) async {
+      final snapshot = await databaseTransaction.get(parentReference);
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        throw const FirebaseFinanceException(
+          'The Credit or Debt record no longer exists.',
+        );
+      }
+      final current = _fromFirestore(data, fallbackId: snapshot.id);
+      if (!current.isCredit && !current.isDebt) {
+        throw const FirebaseFinanceException(
+          'Only Credit and Debt transactions can be settled.',
+        );
+      }
+      if (current.isSettled || !current.hasOutstandingBalance) {
+        throw const FirebaseFinanceException(
+          'This transaction is already settled.',
+        );
+      }
+      if (exchangeRate <= 0) {
+        throw const FirebaseFinanceException('Enter a valid exchange rate.');
+      }
+      if (amountUsd < 0 || amountLbp < 0) {
+        throw const FirebaseFinanceException(
+          'Settlement amounts cannot be negative.',
+        );
+      }
+      if (amountUsd <= 0.0001 && amountLbp <= 0.5) {
+        throw const FirebaseFinanceException('Enter an amount to settle.');
+      }
+
+      late final ({double amountUsd, double amountLbp}) allocation;
+      try {
+        allocation = AccountingRules.settlementAllocation(
+          current,
+          paidUsd: amountUsd,
+          paidLbp: amountLbp,
+          exchangeRate: exchangeRate,
+        );
+      } on ArgumentError catch (error) {
+        throw FirebaseFinanceException(
+          error.message?.toString() ??
+              'The payment is greater than the remaining balance.',
+        );
+      }
+      final parent = AccountingRules.applySettlement(
+        current,
+        amountUsd: allocation.amountUsd,
+        amountLbp: allocation.amountLbp,
+      );
+      final paymentDraft = AccountingRules.settlementEntry(
+        current,
+        walletId: walletId.trim().isEmpty ? current.walletId : walletId,
+        date: date,
+        amountUsd: amountUsd,
+        amountLbp: amountLbp,
+        allocatedUsd: allocation.amountUsd,
+        allocatedLbp: allocation.amountLbp,
+        exchangeRate: exchangeRate,
+      );
+      final payment = paymentDraft.copyWith(
+        id: paymentReference.id,
+        raw: {
+          ...paymentDraft.raw,
+          'ID': paymentReference.id,
+          'Transaction ID': paymentReference.id,
+        },
+      );
+
+      databaseTransaction.set(parentReference, _toFirestore(parent));
+      databaseTransaction.set(paymentReference, _toFirestore(payment));
+      return SettlementWriteResult(parent: parent, payment: payment);
+    });
+  }
+
   /// Deletes only the signed-in user's transaction records. User profile and
   /// login credentials remain intact, so this can safely power "Reset account".
   Future<void> clearTransactions() async {
@@ -439,19 +559,34 @@ class FirebaseFinanceService {
     }
   }
 
+  Future<void> _deleteReferences(
+    Iterable<DocumentReference<Map<String, dynamic>>> references,
+  ) async {
+    final items = references.toList(growable: false);
+    for (var start = 0; start < items.length; start += _batchSize) {
+      final batch = _firestore.batch();
+      for (final reference in items.skip(start).take(_batchSize)) {
+        batch.delete(reference);
+      }
+      await batch.commit();
+    }
+  }
+
   Future<void> upsertTransactions(
     List<FinancialTransaction> transactions,
   ) async {
     final user = _requireUser();
-    final batch = _firestore.batch();
-    for (final transaction in transactions) {
-      final id = _requireTransactionId(transaction);
-      batch.set(
-        _transactions(user.uid).doc(id),
-        _toFirestore(AccountingRules.normalize(transaction)),
-      );
+    for (var start = 0; start < transactions.length; start += _batchSize) {
+      final batch = _firestore.batch();
+      for (final transaction in transactions.skip(start).take(_batchSize)) {
+        final id = _requireTransactionId(transaction);
+        batch.set(
+          _transactions(user.uid).doc(id),
+          _toFirestore(AccountingRules.normalize(transaction)),
+        );
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
   Future<List<FinancialTransaction>> replaceTransactions(
@@ -459,13 +594,8 @@ class FirebaseFinanceService {
   ) async {
     final user = _requireUser();
     final existing = await _transactions(user.uid).get();
-    final deleteBatch = _firestore.batch();
-    for (final doc in existing.docs) {
-      deleteBatch.delete(doc.reference);
-    }
-    await deleteBatch.commit();
-
     if (transactions.isEmpty) {
+      await deleteTransactionsByIds(existing.docs.map((doc) => doc.id));
       return const [];
     }
 
@@ -474,14 +604,13 @@ class FirebaseFinanceService {
       transactions.map(AccountingRules.normalize).toList(growable: false),
       accountId: accountId,
     );
-    final writeBatch = _firestore.batch();
-    for (final transaction in saved) {
-      writeBatch.set(
-        _transactions(user.uid).doc(transaction.id!),
-        _toFirestore(transaction),
-      );
-    }
-    await writeBatch.commit();
+    await upsertTransactions(saved);
+    final incomingIds = saved.map((transaction) => transaction.id).toSet();
+    await deleteTransactionsByIds(
+      existing.docs
+          .map((document) => document.id)
+          .where((id) => !incomingIds.contains(id)),
+    );
     return saved;
   }
 

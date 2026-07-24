@@ -253,6 +253,9 @@ class AccountingRules {
     required DateTime date,
     required double amountUsd,
     required double amountLbp,
+    double? allocatedUsd,
+    double? allocatedLbp,
+    double? exchangeRate,
   }) {
     final isDebtSettlement = target.isDebt;
     final type = isDebtSettlement
@@ -282,6 +285,10 @@ class AccountingRules {
           'Amount (LBP)': amountLbp.toString(),
           'settlement_amount_usd': amountUsd.toString(),
           'settlement_amount_lbp': amountLbp.toString(),
+          'settlement_allocation_usd': (allocatedUsd ?? amountUsd).toString(),
+          'settlement_allocation_lbp': (allocatedLbp ?? amountLbp).toString(),
+          if (exchangeRate != null)
+            'settlement_exchange_rate': exchangeRate.toString(),
           'wallet_id': walletId,
           'payment_method': walletId,
           'Payment Method': walletId,

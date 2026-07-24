@@ -1,92 +1,134 @@
-# Finance Tracker
+# Maliyati
 
-A complete Flutter mobile app for tracking income and expenses from a public Google Sheet CSV feed.
+Maliyati is a Flutter finance workspace for individuals and small service
+businesses. It tracks income, expenses, receivables, payables, wallet movement,
+settlements, analytics, and manual backups in one account-scoped ledger.
 
-## Features
+## Product capabilities
 
-- Material 3 mobile-first dashboard.
-- Reads directly from a public Google Sheet without login.
-- Automatically converts normal Google Sheet URLs to CSV export URLs.
-- Pull to refresh and refresh buttons.
-- Loading, error, and empty states.
-- Time filters: today, this week, this month, last 30 days, custom range, all time.
-- Dashboard totals for USD, LBP, converted USD totals, net balance, expense ratio, top categories, averages, largest transactions, and previous-period comparison.
-- Transactions screen with search, type/currency/category filters, and sorting by date or amount.
-- Analytics screen with category charts, daily trend, weekly/monthly summaries, and best/worst days.
-- Settings screen for Google Sheet URL, exchange rate, refresh, and last update info.
+- Firebase Authentication with isolated data for every account.
+- Cloud Firestore as the live source of truth.
+- My Wallet and Whish Money balances with transaction history.
+- Income, expenses, receivables, payables, partial settlements, and service
+  balances.
+- USD and LBP support with a configurable exchange rate.
+- Dashboard period filters and financial analytics.
+- Manual Google Sheet import/export and Google Drive JSON backup.
+- English and Arabic interface with light and dark themes.
+- Android and responsive web builds.
+- Optional Android floating quick input for sending copied text to Smart Input.
 
-## Google Sheet Columns
+Google Sheet is a manual backup/integration channel. Normal application edits
+are stored in Firestore and are not sent to a sheet until the user exports.
 
-The first row should contain these headers:
-
-```text
-date,type,category,description,currency,amount,payment method,notes
-```
-
-Accepted values:
-
-- `type`: `income` or `expense`
-- `currency`: `usd` or `lbp`
-- `amount`: values can include commas, `$`, `USD`, or `LBP`
-- `date`: common formats such as `2026-07-07`, `7/7/2026`, `07/07/2026`, `Jul 7, 2026`
-
-## Default Configuration
-
-Configuration lives in:
+## Architecture
 
 ```text
-lib/config/app_config.dart
+lib/
+  config/       Runtime defaults and release metadata
+  controllers/  Account state and finance workflows
+  l10n/         English and Arabic application copy
+  models/       Ledger and transaction models
+  screens/      Dashboard, transactions, analytics, add, and settings
+  services/     Firebase, accounting, CSV, backup, and smart-input services
+  widgets/      Shared interface components
 ```
 
-Defaults:
+Critical accounting rules are centralized in
+`lib/services/accounting_rules.dart`. Firestore persistence is implemented in
+`lib/services/firebase_finance_service.dart`.
 
-- Google Sheet URL: `https://docs.google.com/spreadsheets/d/1CMtELArv48IVjIo_u5wKSPR8Bqe7JfFqMI0qLLG5Zck/edit?usp=sharing`
-- Exchange rate: `89000 LBP = 1 USD`
+## Local setup
 
-The app also lets you change these from the Settings screen and stores them locally.
+Requirements:
 
-## Google Drive backups
+- Flutter stable compatible with Dart `^3.12.1`
+- Android Studio and Android SDK
+- A Firebase project configured for Android and Web
 
-The **Setting** page can create and restore JSON backups in the signed-in
-Google account's Drive. The app requests the restricted `drive.file` scope, so
-it can access only backup files created by Maliyati.
-
-Before the first backup, enable **Google Drive API** in the Google Cloud project
-connected to Firebase (`maliyati-app-2026`). If the OAuth consent screen is in
-testing mode, add the backup user's Google account as a test user. The first
-backup prompts the user to grant Drive permission.
-
-## Run in Android Studio
-
-1. Open this folder in Android Studio:
-
-```text
-C:\Users\User\Desktop\test
-```
-
-2. Run:
+From the project root:
 
 ```bash
 flutter pub get
+flutter analyze
+flutter test
+flutter run
 ```
 
-3. Select an Android emulator or connected device.
+Open `C:\Users\User\Desktop\test` in Android Studio and run
+`lib/main.dart` on a connected device.
 
-4. Run `lib/main.dart`.
+## Firebase
 
-## Important Files
+The repository is configured for the Firebase project `maliyati-app-2026`.
+Authentication providers and Firestore must be enabled in that project.
 
-```text
-lib/main.dart
-lib/config/app_config.dart
-lib/models/transaction.dart
-lib/services/google_sheet_service.dart
-lib/services/csv_parser.dart
-lib/controllers/dashboard_controller.dart
-lib/screens/dashboard_screen.dart
-lib/screens/transactions_screen.dart
-lib/screens/analytics_screen.dart
-lib/screens/settings_screen.dart
-lib/widgets/
-android/app/src/main/AndroidManifest.xml
+Deploy the checked-in security rules after reviewing the administrator email:
+
+```bash
+firebase deploy --only firestore:rules
 ```
+
+The web hostname must also be listed in Firebase Authentication under
+**Authorized domains** for Google sign-in.
+
+## Runtime configuration
+
+Non-secret defaults live in `lib/config/app_config.dart`.
+
+The Google Sheet export endpoint and secret are optional build-time values:
+
+```bash
+flutter run \
+  --dart-define=SHEET_EXPORT_ENDPOINT=https://example.com/export \
+  --dart-define=SHEET_EXPORT_SECRET=your-secret
+```
+
+Do not commit production secrets to source control.
+
+## Release builds
+
+Web:
+
+```bash
+flutter build web --release
+```
+
+Android uses `android/key.properties` for release signing. That file and the
+keystore are ignored by Git. A local file has this shape:
+
+```properties
+storePassword=...
+keyPassword=...
+keyAlias=maliyati
+storeFile=../maliyati-upload.jks
+```
+
+Build the signed package:
+
+```bash
+flutter build appbundle --release
+```
+
+For device demonstrations:
+
+```bash
+flutter build apk --debug
+flutter install
+```
+
+## Quality gate
+
+Before a company demo or release:
+
+```bash
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test
+flutter build apk --debug
+flutter build web --release
+```
+
+Use a separate Firebase test account and test the full cycle: create a
+receivable/payable, add partial and full settlements in both currencies, move
+wallets, export a backup, restore it, sign out, and confirm account isolation.

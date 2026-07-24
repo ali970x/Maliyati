@@ -2,14 +2,14 @@ class AppConfig {
   const AppConfig._();
 
   static const appName = 'Maliyati';
-  static const appVersion = '1.4.5';
-  static const buildNumber = '21';
+  static const appVersion = '1.5.0';
+  static const buildNumber = '22';
   static const fullVersion = '$appVersion+$buildNumber';
-  static const serverVersion = '1.4.5';
-  static const flutterVersion = '1.4.5';
+  static const serverVersion = appVersion;
+  static const flutterVersion = appVersion;
 
-  static const defaultGoogleSheetUrl =
-      'https://docs.google.com/spreadsheets/d/1CMtELArv48IVjIo_u5wKSPR8Bqe7JfFqMI0qLLG5Zck/edit?usp=sharing';
+  // New accounts start disconnected. Existing users keep their saved URL.
+  static const defaultGoogleSheetUrl = '';
 
   // Web OAuth client from the Firebase project. It is used only by the
   // Google Drive picker/backup flow in browsers.
@@ -41,9 +41,8 @@ class AppConfig {
   );
   static const sheetExportSecret = String.fromEnvironment(
     'SHEET_EXPORT_SECRET',
-    defaultValue: defaultSheetExportSecret,
+    defaultValue: '',
   );
-  static const defaultSheetExportSecret = 'maliyati-2026';
 
   static bool get isFirebaseConfigured =>
       firebaseApiKey.isNotEmpty &&

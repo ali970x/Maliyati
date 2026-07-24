@@ -568,9 +568,10 @@ class DashboardController extends ChangeNotifier {
       _selectedMonth = DateTime(now.year, now.month);
       _timeFilter = TimeFilter.thisMonth;
       _themeStyle = AppThemeStyle.cyberGrid;
-      _themeMode = ThemeMode.light;
-      await prefs.setString(_themeStyleKey, _themeStyle.name);
-      await prefs.setString(_themeModeKey, _themeMode.name);
+      _themeMode = ThemeMode.values.firstWhere(
+        (mode) => mode.name == prefs.getString(_themeModeKey),
+        orElse: () => ThemeMode.light,
+      );
       _appLockEnabled = prefs.getBool(_appLockEnabledKey) ?? false;
       _appLockMethod = AppLockMethod.values.firstWhere(
         (method) => method.name == prefs.getString(_appLockMethodKey),
@@ -586,7 +587,10 @@ class DashboardController extends ChangeNotifier {
       // My Wallet and Whish balances. They are loaded only from this Firebase
       // UID.
       _resetWalletState();
-      _categoryRules = _loadCategoryRules(prefs);
+      _categoryRules = _loadCategoryRules(
+        prefs,
+        key: _categoryRulesStorageKey(),
+      );
       _lastAutoBackup = DateTime.tryParse(
         prefs.getString(_lastAutoBackupKey) ?? '',
       );
@@ -605,6 +609,10 @@ class DashboardController extends ChangeNotifier {
           } catch (_) {}
         }
       }
+      _categoryRules = _loadCategoryRules(
+        prefs,
+        key: _categoryRulesStorageKey(),
+      );
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
       await _runDailyAutoBackupIfDue();
@@ -744,9 +752,7 @@ class DashboardController extends ChangeNotifier {
         ? sheetUrl!.trim()
         : _sheetUrl;
     _sheetExportEndpoint = sheetExportEndpoint.trim();
-    _sheetExportSecret = sheetExportSecret.trim().isEmpty
-        ? AppConfig.defaultSheetExportSecret
-        : sheetExportSecret.trim();
+    _sheetExportSecret = sheetExportSecret.trim();
     _exchangeRate = exchangeRate <= 0
         ? AppConfig.defaultExchangeRate
         : exchangeRate;
@@ -865,6 +871,10 @@ class DashboardController extends ChangeNotifier {
       _resetWalletState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
+      _categoryRules = _loadCategoryRules(
+        prefs,
+        key: _categoryRulesStorageKey(),
+      );
       // Sheet settings are optional. They must not block a successful login.
       try {
         await _loadSheetIntegrationSettings();
@@ -945,6 +955,10 @@ class DashboardController extends ChangeNotifier {
       _resetWalletState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
+      _categoryRules = _loadCategoryRules(
+        prefs,
+        key: _categoryRulesStorageKey(),
+      );
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
       await refresh();
@@ -1013,14 +1027,24 @@ class DashboardController extends ChangeNotifier {
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
-      _categoryRulesKey,
+      _categoryRulesStorageKey(),
       jsonEncode(_categoryRules.map((rule) => rule.toJson()).toList()),
     );
     notifyListeners();
   }
 
-  List<CategoryRule> _loadCategoryRules(SharedPreferences prefs) {
-    final raw = prefs.getString(_categoryRulesKey);
+  String _categoryRulesStorageKey() {
+    final uid = _user?.uid.trim() ?? '';
+    return uid.isEmpty
+        ? '${_categoryRulesKey}_guest'
+        : '${_categoryRulesKey}_$uid';
+  }
+
+  List<CategoryRule> _loadCategoryRules(
+    SharedPreferences prefs, {
+    required String key,
+  }) {
+    final raw = prefs.getString(key);
     if (raw != null && raw.trim().isNotEmpty) {
       try {
         final decoded = jsonDecode(raw);
@@ -1048,10 +1072,9 @@ class DashboardController extends ChangeNotifier {
         statuses: {TransactionType.expense},
       ),
       CategoryRule(name: 'Other expense', statuses: {TransactionType.expense}),
-      CategoryRule(name: 'Internet income', statuses: {TransactionType.income}),
-      CategoryRule(name: 'Zougeib income', statuses: {TransactionType.income}),
+      CategoryRule(name: 'Sales income', statuses: {TransactionType.income}),
+      CategoryRule(name: 'Service income', statuses: {TransactionType.income}),
       CategoryRule(name: 'Other income', statuses: {TransactionType.income}),
-      CategoryRule(name: 'Aboudi income', statuses: {TransactionType.income}),
       CategoryRule(name: 'Payables', statuses: {TransactionType.debt}),
       CategoryRule(name: 'Debt', statuses: {TransactionType.debt}),
       CategoryRule(name: 'Loan', statuses: {TransactionType.debt}),
@@ -1592,32 +1615,45 @@ class DashboardController extends ChangeNotifier {
       paidLbp: paidLbp,
       exchangeRate: rate,
     );
-    final settled = AccountingRules.applySettlement(
-      current,
-      amountUsd: allocation.amountUsd,
-      amountLbp: allocation.amountLbp,
-    );
-    final settlement = AccountingRules.settlementEntry(
+    final provisionalSettlement = AccountingRules.settlementEntry(
       current,
       walletId: walletId.trim().isEmpty ? current.walletId : walletId,
       date: date ?? DateTime.now(),
       amountUsd: paidUsd,
       amountLbp: paidLbp,
+      allocatedUsd: allocation.amountUsd,
+      allocatedLbp: allocation.amountLbp,
+      exchangeRate: rate,
     );
     _ensureOutgoingWalletFunds(
-      afterTransactions: [..._transactions, settlement],
-      changedTransactions: [settlement],
+      afterTransactions: [..._transactions, provisionalSettlement],
+      changedTransactions: [provisionalSettlement],
     );
-    await updateTransaction(current, settled);
-    await addTransaction(settlement);
     final id = current.id?.trim() ?? '';
     if (id.isEmpty) {
-      return settled;
+      throw const FirebaseFinanceException(
+        'The Credit or Debt record has no database ID.',
+      );
     }
-    return _transactions.firstWhere(
-      (item) => item.id?.trim() == id && !item.isSettlementEntry,
-      orElse: () => settled,
+    final result = await _firebase.settleTransaction(
+      transactionId: id,
+      walletId: walletId,
+      date: date ?? DateTime.now(),
+      amountUsd: paidUsd,
+      amountLbp: paidLbp,
+      exchangeRate: rate,
     );
+    _transactions = [
+      result.payment,
+      for (final item in _transactions)
+        if (item.id?.trim() == id && !item.isSettlementEntry)
+          result.parent
+        else
+          item,
+    ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
+    _lastUpdated = DateTime.now();
+    notifyListeners();
+    return result.parent;
   }
 
   Future<void> archiveTransaction(FinancialTransaction transaction) async {
@@ -1798,10 +1834,8 @@ class DashboardController extends ChangeNotifier {
 
   Future<void> updateThemeStyle(AppThemeStyle style) async {
     _themeStyle = AppThemeStyle.cyberGrid;
-    _themeMode = ThemeMode.light;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_themeStyleKey, style.name);
-    await prefs.setString(_themeModeKey, _themeMode.name);
     notifyListeners();
   }
 
@@ -2305,10 +2339,26 @@ class DashboardController extends ChangeNotifier {
     if (!_isFirebaseConfigured) {
       throw const FirebaseFinanceException('Firebase is not configured.');
     }
-    await _firebase.deleteTransaction(id);
+    if (transaction.isSettlementEntry) {
+      throw const FirebaseFinanceException(
+        'Payments are part of the Credit or Debt history and cannot be deleted separately.',
+      );
+    }
+    final linkedIds = _transactions
+        .where((item) => item.linkedTransactionId == id)
+        .map((item) => item.id?.trim() ?? '')
+        .where((linkedId) => linkedId.isNotEmpty)
+        .toSet();
+    await _firebase.deleteTransactionCascade(id);
     _transactions = _transactions
-        .where((item) => item.id?.trim() != id)
+        .where(
+          (item) =>
+              item.id?.trim() != id &&
+              !linkedIds.contains(item.id?.trim()) &&
+              item.linkedTransactionId != id,
+        )
         .toList(growable: false);
+    _lastUpdated = DateTime.now();
     notifyListeners();
   }
 

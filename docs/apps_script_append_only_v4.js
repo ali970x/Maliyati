@@ -1,5 +1,4 @@
-const SECRET = 'maliyati-2026';
-const SCRIPT_VERSION = '1.4.5';
+const SCRIPT_VERSION = '1.5.0';
 const SHEET_NAME = '';
 const FIRST_DATA_ROW = 2;
 const SOURCE_VALUES = ['application', 'Google Sheet', 'script'];
@@ -22,7 +21,7 @@ function setupSheetMetadata() {
 function doGet(e) {
   try {
     const params = e && e.parameter ? e.parameter : {};
-    if (params.secret === SECRET && params.action === 'list_transactions') {
+    if (params.secret === getSecret_() && params.action === 'list_transactions') {
       const sheet = getSheet_();
       return json_({ ok: true, rows: listTransactions_(sheet) });
     }
@@ -40,7 +39,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     const payload = parsePayload_(e);
-    if (payload.secret !== SECRET) {
+    if (payload.secret !== getSecret_()) {
       return json_({ ok: false, error: 'Unauthorized' });
     }
 
@@ -87,7 +86,7 @@ function testAppendSample() {
   const fakeRequest = {
     postData: {
       contents: JSON.stringify({
-        secret: SECRET,
+        secret: getSecret_(),
         action: 'upsert_transaction',
         row: {
           Date: '2026-07-14',
@@ -113,6 +112,16 @@ function testAppendSample() {
   };
 
   Logger.log(doPost(fakeRequest).getContent());
+}
+
+function getSecret_() {
+  const secret = PropertiesService.getScriptProperties().getProperty('MALIYATI_SECRET');
+  if (!secret) {
+    throw new Error(
+      'Missing MALIYATI_SECRET. Add it in Apps Script > Project Settings > Script properties.'
+    );
+  }
+  return secret;
 }
 
 function upsertTransaction_(sheet, input) {

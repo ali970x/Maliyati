@@ -76,15 +76,16 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) => MaterialApp(
-        title: '${AppConfig.appName} ${AppConfig.fullVersion}',
+        title: AppConfig.appName,
         debugShowCheckedModeBanner: false,
         supportedLocales: const [Locale('en'), Locale('ar')],
+        locale: Locale(_controller.language.code),
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
-        themeMode: ThemeMode.light,
+        themeMode: _controller.themeMode,
         theme: _buildTheme(Brightness.light),
         darkTheme: _buildTheme(Brightness.dark),
         home: !_controller.isInitialized
@@ -99,7 +100,7 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
   ThemeData _buildTheme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
     final colorScheme = ColorScheme.fromSeed(
-      seedColor: isDark ? const Color(0xFF9E9E9E) : const Color(0xFF6B259E),
+      seedColor: const Color(0xFF0B5CAD),
       brightness: brightness,
     );
     final surface = isDark ? const Color(0xFF1E1E1E) : Colors.white;
@@ -155,7 +156,7 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(
-            color: isDark ? const Color(0xFFE0E0E0) : const Color(0xFF6B259E),
+            color: isDark ? const Color(0xFF75B9FF) : const Color(0xFF0B5CAD),
             width: 1.5,
           ),
         ),
@@ -163,8 +164,8 @@ class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: isDark ? const Color(0xFF151515) : Colors.white,
         indicatorColor: isDark
-            ? const Color(0xFF3A3A3A)
-            : const Color(0xFF6B259E).withValues(alpha: .14),
+            ? const Color(0xFF16324B)
+            : const Color(0xFF0B5CAD).withValues(alpha: .14),
         labelTextStyle: WidgetStateProperty.all(
           const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
         ),
@@ -504,21 +505,21 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
               selectedIcon: Icons.receipt_long_rounded,
               label: strings.transactions,
             ),
-            const _CyberNavData(
+            _CyberNavData(
               icon: Icons.add_rounded,
               selectedIcon: Icons.add_rounded,
-              label: 'Add',
+              label: strings.add,
               isAdd: true,
             ),
             _CyberNavData(
               icon: Icons.insights_outlined,
               selectedIcon: Icons.insights_rounded,
-              label: controller.language.code == 'ar' ? 'التقارير' : 'Reports',
+              label: strings.analytics,
             ),
             _CyberNavData(
               icon: Icons.notifications_active_outlined,
               selectedIcon: Icons.notifications_active_rounded,
-              label: controller.language.code == 'ar' ? 'المزيد' : 'More',
+              label: strings.alerts,
             ),
             if (controller.isAdmin)
               const _CyberNavData(
@@ -1014,7 +1015,7 @@ class _CyberNavItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final light = Theme.of(context).brightness == Brightness.light;
     final color = selected
-        ? (light ? const Color(0xFF6B259E) : const Color(0xFF12D9F4))
+        ? (light ? const Color(0xFF0B5CAD) : const Color(0xFF12D9F4))
         : (light ? const Color(0xFF77717D) : const Color(0xFF90AABE));
     if (data.isAdd) {
       return InkWell(
@@ -1028,14 +1029,14 @@ class _CyberNavItem extends StatelessWidget {
               shape: BoxShape.circle,
               gradient: LinearGradient(
                 colors: light
-                    ? const [Color(0xFF8F2DC2), Color(0xFF5B1E9A)]
+                    ? const [Color(0xFF1478D4), Color(0xFF073B66)]
                     : const [Color(0xFF12D9F4), Color(0xFF256BE8)],
               ),
               boxShadow: [
                 BoxShadow(
                   color:
                       (light
-                              ? const Color(0xFF7C38AD)
+                              ? const Color(0xFF0B5CAD)
                               : const Color(0xFF12D9F4))
                           .withValues(alpha: .30),
                   blurRadius: 17,

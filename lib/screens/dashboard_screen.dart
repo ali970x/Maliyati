@@ -18,6 +18,8 @@ enum _DashboardMetricKind { income, expense, reserveable, debit }
 
 enum _CreditListMode { open, completed }
 
+enum _DebtListMode { open, paid }
+
 enum _WalletTimeScope { today, thisWeek, thisMonth, allTime }
 
 enum _WalletDisplayMode { split, totalUsd, totalLbp }
@@ -37,6 +39,7 @@ void _openMetricFocus(
   _DashboardMetricKind kind, {
   required bool showCategories,
   _CreditListMode creditMode = _CreditListMode.open,
+  _DebtListMode debtMode = _DebtListMode.open,
 }) {
   Navigator.of(context).push(
     MaterialPageRoute(
@@ -45,6 +48,7 @@ void _openMetricFocus(
         kind: kind,
         showCategories: showCategories,
         creditMode: creditMode,
+        debtMode: debtMode,
       ),
     ),
   );
@@ -297,7 +301,9 @@ class _LightDashboard extends StatelessWidget {
                   trend: _chartSeries(summary.dailyNetTotals, 14),
                   visible: balanceVisible,
                   onToggle: onToggleBalance,
-                  label: showRealBalance ? 'Wallet balance' : 'Net cash flow',
+                  label: showRealBalance
+                      ? controller.strings.totalWalletBalance
+                      : controller.strings.netCashFlow,
                   onDoubleTap: onToggleRealBalance,
                   onLongPress: () =>
                       _showBalancePeriodSettings(context, controller),
@@ -363,7 +369,7 @@ class _LightDashboard extends StatelessWidget {
                         SizedBox(
                           width: itemWidth,
                           child: _LightMetric(
-                            title: 'Credit',
+                            title: controller.strings.reserveables,
                             value: FinanceFormatters.usd(
                               summary.totalReserveable,
                             ),
@@ -391,7 +397,7 @@ class _LightDashboard extends StatelessWidget {
                         SizedBox(
                           width: itemWidth,
                           child: _LightMetric(
-                            title: 'Debt',
+                            title: controller.strings.debts,
                             value: FinanceFormatters.usd(summary.totalDebt),
                             subtitle: FinanceFormatters.lbp(
                               summary.totalDebtLbp,
@@ -403,12 +409,14 @@ class _LightDashboard extends StatelessWidget {
                               controller,
                               _DashboardMetricKind.debit,
                               showCategories: false,
+                              debtMode: _DebtListMode.open,
                             ),
                             onLongPress: () => _openMetricFocus(
                               context,
                               controller,
                               _DashboardMetricKind.debit,
                               showCategories: false,
+                              debtMode: _DebtListMode.paid,
                             ),
                           ),
                         ),
@@ -418,7 +426,7 @@ class _LightDashboard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 _LightMetric(
-                  title: 'Net cash flow',
+                  title: controller.strings.netCashFlow,
                   value: netCashFlowInLbp
                       ? FinanceFormatters.lbp(summary.totalNetLbp)
                       : FinanceFormatters.usd(summary.totalNet),
@@ -463,7 +471,7 @@ class _LightCard extends StatelessWidget {
       border: Border.all(color: const Color(0xFFE1E2E8)),
       boxShadow: [
         BoxShadow(
-          color: const Color(0xFF3E3360).withValues(alpha: .10),
+          color: const Color(0xFF073B66).withValues(alpha: .10),
           blurRadius: 13,
           offset: const Offset(0, 5),
         ),
@@ -504,11 +512,11 @@ class _LightBalanceCard extends StatelessWidget {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF8F2DC2), Color(0xFF5B1E9A)],
+          colors: [Color(0xFF1478D4), Color(0xFF073B66)],
         ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6D259E).withValues(alpha: .30),
+            color: const Color(0xFF0B5CAD).withValues(alpha: .28),
             blurRadius: 16,
             offset: const Offset(0, 7),
           ),
@@ -613,7 +621,7 @@ class _LightAccountsState extends State<_LightAccounts> {
             usd: widget.wallets.cash.balanceUsd,
             lbp: widget.wallets.cash.balanceLbp,
             imageAsset: 'assets/branding/maliyati_wallet_icon_v2.png',
-            color: const Color(0xFF5B1E9A),
+            color: const Color(0xFF0B5CAD),
             visible: _cashVisible,
             onToggleVisibility: () =>
                 setState(() => _cashVisible = !_cashVisible),
@@ -634,7 +642,7 @@ class _LightAccountsState extends State<_LightAccounts> {
             title: 'Whish Money',
             usd: widget.wallets.wish.balanceUsd,
             lbp: widget.wallets.wish.balanceLbp,
-            color: const Color(0xFF8F2DC2),
+            color: const Color(0xFF087F8C),
             imageAsset: 'assets/branding/wish_money_logo.jpg',
             visible: _wishVisible,
             onToggleVisibility: () =>
@@ -1107,12 +1115,12 @@ class _MergedWalletCard extends StatelessWidget {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: const Color(0xFF6B259E).withValues(alpha: .11),
+                color: const Color(0xFF0B5CAD).withValues(alpha: .11),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.account_balance_wallet_rounded,
-                color: Color(0xFF6B259E),
+                color: Color(0xFF0B5CAD),
               ),
             ),
             const SizedBox(width: 11),
@@ -1200,12 +1208,12 @@ class _CombinedWalletBalanceState extends State<_CombinedWalletBalance> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: const Color(0xFF6B259E).withValues(alpha: .11),
+                color: const Color(0xFF0B5CAD).withValues(alpha: .11),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.account_balance_wallet_rounded,
-                color: Color(0xFF6B259E),
+                color: Color(0xFF0B5CAD),
               ),
             ),
             const SizedBox(width: 11),
@@ -1251,7 +1259,7 @@ class _LightExpenseFocus extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Expenses focus',
+            controller.strings.expenseOverview,
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               color: const Color(0xFF27232C),
               fontWeight: FontWeight.w900,
@@ -1562,6 +1570,7 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     required this.kind,
     required this.showCategories,
     this.creditMode = _CreditListMode.open,
+    this.debtMode = _DebtListMode.open,
     this.category,
   });
 
@@ -1569,11 +1578,12 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
   final _DashboardMetricKind kind;
   final bool showCategories;
   final _CreditListMode creditMode;
+  final _DebtListMode debtMode;
   final String? category;
 
   @override
   Widget build(BuildContext context) {
-    final transactions =
+    final matchedTransactions =
         controller.periodTransactions
             .where(_matches)
             .where(
@@ -1582,14 +1592,26 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
             )
             .toList()
           ..sort((a, b) => b.date.compareTo(a.date));
+    final transactions = kind == _DashboardMetricKind.debit && category == null
+        ? matchedTransactions
+              .where(
+                (transaction) => debtMode == _DebtListMode.open
+                    ? !transaction.isSettled
+                    : transaction.isSettled,
+              )
+              .toList()
+        : matchedTransactions;
     final title = switch (kind) {
       _DashboardMetricKind.income => controller.strings.income,
       _DashboardMetricKind.expense => controller.strings.expenses,
       _DashboardMetricKind.reserveable =>
         creditMode == _CreditListMode.open
-            ? 'Needs collection'
-            : 'Collection info',
-      _DashboardMetricKind.debit => 'Debt',
+            ? controller.strings.outstandingReceivables
+            : controller.strings.collectedReceivables,
+      _DashboardMetricKind.debit =>
+        debtMode == _DebtListMode.open
+            ? controller.strings.outstandingPayables
+            : controller.strings.settledPayables,
     };
     return Scaffold(
       appBar: AppBar(title: Text(category ?? title)),
@@ -1728,9 +1750,6 @@ class _CreditFocusBody extends StatefulWidget {
 }
 
 class _CreditFocusBodyState extends State<_CreditFocusBody> {
-  var _showOpen = true;
-  var _showCompleted = true;
-
   @override
   Widget build(BuildContext context) {
     final open = widget.transactions
@@ -1742,21 +1761,6 @@ class _CreditFocusBodyState extends State<_CreditFocusBody> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
-        _CreditSectionHeader(
-          title: widget.mode == _CreditListMode.open
-              ? 'Needs collection'
-              : 'Collection info',
-          count: widget.mode == _CreditListMode.open
-              ? open.length
-              : completed.length,
-          icon: widget.mode == _CreditListMode.open
-              ? Icons.pending_actions_rounded
-              : Icons.check_circle_rounded,
-          color: widget.mode == _CreditListMode.open
-              ? const Color(0xFFD97706)
-              : const Color(0xFF168A5B),
-        ),
-        const SizedBox(height: 8),
         if ((widget.mode == _CreditListMode.open ? open : completed).isEmpty)
           _CreditEmptyState(
             message: widget.mode == _CreditListMode.open
@@ -2251,7 +2255,7 @@ class _CategoryFocusList extends StatelessWidget {
 
 Color _kindColor(_DashboardMetricKind kind) => switch (kind) {
   _DashboardMetricKind.income => const Color(0xFF168A5B),
-  _DashboardMetricKind.expense => const Color(0xFF9358FF),
+  _DashboardMetricKind.expense => const Color(0xFFC74949),
   _DashboardMetricKind.reserveable => const Color(0xFFD97706),
   _DashboardMetricKind.debit => const Color(0xFF395EE9),
 };
@@ -2296,6 +2300,7 @@ class _DashboardContent extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         _BalanceHero(
+          title: controller.strings.netCashFlow,
           total: summary.totalNet,
           change: change,
           updatedAt: controller.lastUpdated,
@@ -2387,7 +2392,7 @@ class _DashboardContent extends StatelessWidget {
             ),
           ),
           second: _MetricPanel(
-            title: 'Debt',
+            title: controller.strings.debts,
             value: FinanceFormatters.usd(summary.totalDebt),
             change: 0,
             positive: false,
@@ -2397,12 +2402,14 @@ class _DashboardContent extends StatelessWidget {
               controller,
               _DashboardMetricKind.debit,
               showCategories: false,
+              debtMode: _DebtListMode.open,
             ),
             onLongPress: () => _openMetricFocus(
               context,
               controller,
               _DashboardMetricKind.debit,
               showCategories: false,
+              debtMode: _DebtListMode.paid,
             ),
           ),
         ),
@@ -2843,6 +2850,7 @@ class _ScopeChip extends StatelessWidget {
 
 class _BalanceHero extends StatelessWidget {
   const _BalanceHero({
+    required this.title,
     required this.total,
     required this.change,
     required this.updatedAt,
@@ -2852,6 +2860,7 @@ class _BalanceHero extends StatelessWidget {
     required this.onToggle,
   });
 
+  final String title;
   final double total;
   final double change;
   final DateTime? updatedAt;
@@ -2921,9 +2930,9 @@ class _BalanceHero extends StatelessWidget {
                           size: 19,
                         ),
                         const SizedBox(width: 7),
-                        const Text(
-                          'Net cash flow',
-                          style: TextStyle(
+                        Text(
+                          title,
+                          style: const TextStyle(
                             color: Color(0xFF9FB7C9),
                             fontWeight: FontWeight.w700,
                           ),
