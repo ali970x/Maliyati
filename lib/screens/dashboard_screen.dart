@@ -16,6 +16,8 @@ import 'wallet_screen.dart';
 
 enum _DashboardMetricKind { income, expense, reserveable, debit }
 
+enum _CreditListMode { open, completed }
+
 enum _WalletTimeScope { today, thisWeek, thisMonth, allTime }
 
 enum _WalletDisplayMode { split, totalUsd, totalLbp }
@@ -34,6 +36,7 @@ void _openMetricFocus(
   DashboardController controller,
   _DashboardMetricKind kind, {
   required bool showCategories,
+  _CreditListMode creditMode = _CreditListMode.open,
 }) {
   Navigator.of(context).push(
     MaterialPageRoute(
@@ -41,6 +44,7 @@ void _openMetricFocus(
         controller: controller,
         kind: kind,
         showCategories: showCategories,
+        creditMode: creditMode,
       ),
     ),
   );
@@ -373,12 +377,14 @@ class _LightDashboard extends StatelessWidget {
                               controller,
                               _DashboardMetricKind.reserveable,
                               showCategories: false,
+                              creditMode: _CreditListMode.open,
                             ),
                             onLongPress: () => _openMetricFocus(
                               context,
                               controller,
                               _DashboardMetricKind.reserveable,
                               showCategories: false,
+                              creditMode: _CreditListMode.completed,
                             ),
                           ),
                         ),
@@ -1555,12 +1561,14 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     required this.controller,
     required this.kind,
     required this.showCategories,
+    this.creditMode = _CreditListMode.open,
     this.category,
   });
 
   final DashboardController controller;
   final _DashboardMetricKind kind;
   final bool showCategories;
+  final _CreditListMode creditMode;
   final String? category;
 
   @override
@@ -1577,13 +1585,20 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     final title = switch (kind) {
       _DashboardMetricKind.income => controller.strings.income,
       _DashboardMetricKind.expense => controller.strings.expenses,
-      _DashboardMetricKind.reserveable => controller.strings.reserveables,
+      _DashboardMetricKind.reserveable =>
+        creditMode == _CreditListMode.open
+            ? 'Needs collection'
+            : 'Collection info',
       _DashboardMetricKind.debit => 'Debt',
     };
     return Scaffold(
       appBar: AppBar(title: Text(category ?? title)),
       body: kind == _DashboardMetricKind.reserveable && category == null
-          ? _CreditFocusBody(controller: controller, transactions: transactions)
+          ? _CreditFocusBody(
+              controller: controller,
+              transactions: transactions,
+              mode: creditMode,
+            )
           : showCategories && category == null
           ? _CategoryFocusList(
               controller: controller,
@@ -1701,10 +1716,12 @@ class _CreditFocusBody extends StatefulWidget {
   const _CreditFocusBody({
     required this.controller,
     required this.transactions,
+    required this.mode,
   });
 
   final DashboardController controller;
   final List<FinancialTransaction> transactions;
+  final _CreditListMode mode;
 
   @override
   State<_CreditFocusBody> createState() => _CreditFocusBodyState();
@@ -1726,61 +1743,29 @@ class _CreditFocusBodyState extends State<_CreditFocusBody> {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
         _CreditSectionHeader(
-          title: 'Needs collection',
-          count: open.length,
-          icon: Icons.pending_actions_rounded,
-          color: const Color(0xFFD97706),
-          expanded: _showOpen,
-          onTap: () => setState(() => _showOpen = !_showOpen),
+          title: widget.mode == _CreditListMode.open
+              ? 'Needs collection'
+              : 'Collection info',
+          count: widget.mode == _CreditListMode.open
+              ? open.length
+              : completed.length,
+          icon: widget.mode == _CreditListMode.open
+              ? Icons.pending_actions_rounded
+              : Icons.check_circle_rounded,
+          color: widget.mode == _CreditListMode.open
+              ? const Color(0xFFD97706)
+              : const Color(0xFF168A5B),
         ),
         const SizedBox(height: 8),
-        if (!_showOpen)
-          TextButton.icon(
-            onPressed: () => setState(() => _showOpen = true),
-            icon: const Icon(Icons.visibility_outlined),
-            label: Text('${open.length} open credits hidden'),
+        if ((widget.mode == _CreditListMode.open ? open : completed).isEmpty)
+          _CreditEmptyState(
+            message: widget.mode == _CreditListMode.open
+                ? 'No credit waiting for collection.'
+                : 'No collected credit yet.',
           )
-        else if (open.isEmpty)
-          const _CreditEmptyState(message: 'No credit waiting for collection.')
         else
-          for (final transaction in open) ...[
-            _CompactCreditRow(
-              controller: widget.controller,
-              transaction: transaction,
-              onTap: () => _openDashboardTransaction(
-                context,
-                widget.controller,
-                transaction,
-              ),
-              onLongPress: () => _openDashboardTransaction(
-                context,
-                widget.controller,
-                transaction,
-                startEditing: true,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        const SizedBox(height: 14),
-        _CreditSectionHeader(
-          title: 'Collected in full',
-          count: completed.length,
-          icon: Icons.check_circle_rounded,
-          color: const Color(0xFF168A5B),
-          expanded: _showCompleted,
-          onTap: () => setState(() => _showCompleted = !_showCompleted),
-        ),
-        const SizedBox(height: 8),
-        if (!_showCompleted)
-          TextButton.icon(
-            onPressed: () => setState(() => _showCompleted = true),
-            icon: const Icon(Icons.visibility_outlined),
-            label: Text('${completed.length} completed credits hidden'),
-          )
-        else if (completed.isEmpty)
-          const _CreditEmptyState(message: 'No completed credit yet.')
-        else
-          for (final transaction in completed) ...[
+          for (final transaction
+              in widget.mode == _CreditListMode.open ? open : completed) ...[
             _CompactCreditRow(
               controller: widget.controller,
               transaction: transaction,
@@ -2391,12 +2376,14 @@ class _DashboardContent extends StatelessWidget {
               controller,
               _DashboardMetricKind.reserveable,
               showCategories: false,
+              creditMode: _CreditListMode.open,
             ),
             onLongPress: () => _openMetricFocus(
               context,
               controller,
               _DashboardMetricKind.reserveable,
               showCategories: false,
+              creditMode: _CreditListMode.completed,
             ),
           ),
           second: _MetricPanel(

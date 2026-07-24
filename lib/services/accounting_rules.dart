@@ -263,6 +263,7 @@ class AccountingRules {
         // A collection/payment is a new ledger entry. It must never reuse the
         // Credit/Debt ID it is linked to.
         clearId: true,
+        createdAt: DateTime.now(),
         type: type,
         date: DateTime(date.year, date.month, date.day),
         hasDate: true,
