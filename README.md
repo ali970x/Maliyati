@@ -4,6 +4,10 @@ Maliyati is a Flutter finance workspace for individuals and small service
 businesses. It tracks income, expenses, receivables, payables, wallet movement,
 settlements, analytics, and manual backups in one account-scoped ledger.
 
+For a code-audited portfolio narrative, evidence matrix, security review, and
+bilingual case study, see
+[`docs/portfolio_case_study.md`](docs/portfolio_case_study.md).
+
 ## Product capabilities
 
 - Firebase Authentication with isolated data for every account.
