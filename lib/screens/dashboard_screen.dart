@@ -81,8 +81,11 @@ void _openDashboardTransaction(
   FinancialTransaction transaction, {
   bool startEditing = false,
 }) {
-  final route = transaction.isCredit && !startEditing
-      ? CreditCollectionScreen(controller: controller, credit: transaction)
+  final route = (transaction.isCredit || transaction.isDebt) && !startEditing
+      ? SettlementWorkspaceScreen(
+          controller: controller,
+          transaction: transaction,
+        )
       : TransactionDetailScreen(
           controller: controller,
           transaction: transaction,
@@ -1591,7 +1594,9 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
                   category == null || transaction.category == category,
             )
             .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+          ..sort(
+            (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+          );
     final transactions = kind == _DashboardMetricKind.debit && category == null
         ? matchedTransactions
               .where(
@@ -1615,11 +1620,17 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     };
     return Scaffold(
       appBar: AppBar(title: Text(category ?? title)),
-      body: kind == _DashboardMetricKind.reserveable && category == null
-          ? _CreditFocusBody(
+      body:
+          (kind == _DashboardMetricKind.reserveable ||
+                  kind == _DashboardMetricKind.debit) &&
+              category == null
+          ? _SettlementFocusBody(
               controller: controller,
               transactions: transactions,
-              mode: creditMode,
+              isDebt: kind == _DashboardMetricKind.debit,
+              showCompleted: kind == _DashboardMetricKind.debit
+                  ? debtMode == _DebtListMode.paid
+                  : creditMode == _CreditListMode.completed,
             )
           : showCategories && category == null
           ? _CategoryFocusList(
@@ -1640,7 +1651,8 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
               separatorBuilder: (_, _) => const SizedBox(height: 10),
               itemBuilder: (context, index) {
                 final transaction = transactions[index];
-                if (kind == _DashboardMetricKind.reserveable) {
+                if (kind == _DashboardMetricKind.reserveable ||
+                    kind == _DashboardMetricKind.debit) {
                   return _CreditOverviewTile(
                     controller: controller,
                     transaction: transaction,
@@ -1734,22 +1746,24 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
   );
 }
 
-class _CreditFocusBody extends StatefulWidget {
-  const _CreditFocusBody({
+class _SettlementFocusBody extends StatefulWidget {
+  const _SettlementFocusBody({
     required this.controller,
     required this.transactions,
-    required this.mode,
+    required this.isDebt,
+    required this.showCompleted,
   });
 
   final DashboardController controller;
   final List<FinancialTransaction> transactions;
-  final _CreditListMode mode;
+  final bool isDebt;
+  final bool showCompleted;
 
   @override
-  State<_CreditFocusBody> createState() => _CreditFocusBodyState();
+  State<_SettlementFocusBody> createState() => _SettlementFocusBodyState();
 }
 
-class _CreditFocusBodyState extends State<_CreditFocusBody> {
+class _SettlementFocusBodyState extends State<_SettlementFocusBody> {
   @override
   Widget build(BuildContext context) {
     final open = widget.transactions
@@ -1761,15 +1775,19 @@ class _CreditFocusBodyState extends State<_CreditFocusBody> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
       children: [
-        if ((widget.mode == _CreditListMode.open ? open : completed).isEmpty)
+        if ((widget.showCompleted ? completed : open).isEmpty)
           _CreditEmptyState(
-            message: widget.mode == _CreditListMode.open
-                ? 'No credit waiting for collection.'
-                : 'No collected credit yet.',
+            message: widget.isDebt
+                ? (widget.showCompleted
+                      ? 'No paid payable yet.'
+                      : 'No payable waiting for payment.')
+                : (widget.showCompleted
+                      ? 'No collected receivable yet.'
+                      : 'No receivable waiting for collection.'),
           )
         else
           for (final transaction
-              in widget.mode == _CreditListMode.open ? open : completed) ...[
+              in widget.showCompleted ? completed : open) ...[
             _CompactCreditRow(
               controller: widget.controller,
               transaction: transaction,
@@ -1885,6 +1903,7 @@ class _CompactCreditRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDebt = transaction.isDebt;
     final rate = controller.exchangeRate;
     final total = transaction.amountInUsd(rate);
     final remaining =
@@ -1894,9 +1913,13 @@ class _CompactCreditRow extends StatelessWidget {
         ? 0.0
         : (collected / total).clamp(0, 1).toDouble();
     final isDone = transaction.isSettled;
-    final accent = isDone ? const Color(0xFF168A5B) : const Color(0xFFD97706);
+    final accent = isDone
+        ? const Color(0xFF168A5B)
+        : isDebt
+        ? const Color(0xFF7C3AED)
+        : const Color(0xFFD97706);
     final title = transaction.description.trim().isEmpty
-        ? 'Credit'
+        ? (isDebt ? 'Payable' : 'Receivable')
         : transaction.description.trim();
     return InkWell(
       onTap: onTap,
@@ -1916,6 +1939,8 @@ class _CompactCreditRow extends StatelessWidget {
                 Icon(
                   isDone
                       ? Icons.check_circle_rounded
+                      : isDebt
+                      ? Icons.payments_rounded
                       : Icons.request_quote_rounded,
                   color: accent,
                 ),
@@ -1940,8 +1965,8 @@ class _CompactCreditRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     isDone
-                        ? 'Collected ${FinanceFormatters.usd(collected)}'
-                        : 'Left ${FinanceFormatters.usd(transaction.remainingAmountUsd)}',
+                        ? '${isDebt ? 'Paid' : 'Collected'} ${FinanceFormatters.usd(collected)}'
+                        : '${isDebt ? 'Left to pay' : 'Left to collect'} ${FinanceFormatters.usd(transaction.remainingAmountUsd)}',
                     style: TextStyle(
                       color: accent,
                       fontWeight: FontWeight.w800,
@@ -1988,7 +2013,10 @@ class _CreditOverviewTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const creditColor = Color(0xFFD97706);
+    final isDebt = transaction.isDebt;
+    final primaryColor = isDebt
+        ? const Color(0xFF7C3AED)
+        : const Color(0xFFD97706);
     final rate = controller.exchangeRate;
     final total = transaction.amountInUsd(rate);
     final remaining =
@@ -2000,20 +2028,20 @@ class _CreditOverviewTile extends StatelessWidget {
     final history = controller.transactions
         .where((item) => item.linkedTransactionId == transaction.id)
         .toList();
-    final collectionWallets = history
+    final settlementWallets = history
         .map((item) => item.walletId)
         .where((wallet) => wallet.trim().isNotEmpty)
         .toSet()
         .join(', ');
     final title = transaction.description.trim().isEmpty
-        ? 'Credit'
+        ? (isDebt ? 'Payable' : 'Receivable')
         : transaction.description.trim();
     final sourceLabel = transaction.isServiceSource
-        ? 'Service credit'
-        : 'From ${transaction.walletId}';
+        ? (isDebt ? 'Service payable' : 'Service receivable')
+        : '${isDebt ? 'Received through' : 'From'} ${transaction.walletId}';
     final statusLabel = transaction.isSettled
-        ? 'Collected in full'
-        : 'Remaining to collect';
+        ? (isDebt ? 'Paid in full' : 'Collected in full')
+        : (isDebt ? 'Remaining to pay' : 'Remaining to collect');
 
     return InkWell(
       onTap: onTap,
@@ -2024,7 +2052,7 @@ class _CreditOverviewTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: creditColor.withValues(alpha: .22)),
+          border: Border.all(color: primaryColor.withValues(alpha: .22)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2035,12 +2063,14 @@ class _CreditOverviewTile extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: creditColor.withValues(alpha: .12),
+                    color: primaryColor.withValues(alpha: .12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.request_quote_rounded,
-                    color: creditColor,
+                  child: Icon(
+                    isDebt
+                        ? Icons.payments_rounded
+                        : Icons.request_quote_rounded,
+                    color: primaryColor,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -2065,8 +2095,8 @@ class _CreditOverviewTile extends StatelessWidget {
                 ),
                 Text(
                   FinanceFormatters.usd(transaction.amountUsd),
-                  style: const TextStyle(
-                    color: creditColor,
+                  style: TextStyle(
+                    color: primaryColor,
                     fontSize: 16,
                     fontWeight: FontWeight.w900,
                   ),
@@ -2084,12 +2114,12 @@ class _CreditOverviewTile extends StatelessWidget {
                     ),
                     color: transaction.isSettled
                         ? const Color(0xFF168A5B)
-                        : creditColor,
+                        : primaryColor,
                   ),
                 ),
                 Expanded(
                   child: _CreditAmountLabel(
-                    label: 'Collected',
+                    label: isDebt ? 'Paid' : 'Collected',
                     value: FinanceFormatters.usd(transaction.settledAmountUsd),
                     alignEnd: true,
                     color: const Color(0xFF168A5B),
@@ -2104,13 +2134,13 @@ class _CreditOverviewTile extends StatelessWidget {
                 value: progress,
                 minHeight: 8,
                 color: const Color(0xFF168A5B),
-                backgroundColor: creditColor.withValues(alpha: .14),
+                backgroundColor: primaryColor.withValues(alpha: .14),
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              '${FinanceFormatters.usd(collected)} collected of ${FinanceFormatters.usd(total)}'
-              '${collectionWallets.isEmpty ? '' : ' · Received to $collectionWallets'}',
+              '${FinanceFormatters.usd(collected)} ${isDebt ? 'paid' : 'collected'} of ${FinanceFormatters.usd(total)}'
+              '${settlementWallets.isEmpty ? '' : ' · ${isDebt ? 'Paid from' : 'Received to'} $settlementWallets'}',
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(

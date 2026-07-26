@@ -205,19 +205,19 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final results = controller.periodTransactions.where((transaction) {
       switch (_typeFilter) {
         case TransactionTypeFilter.income:
-          if (!transaction.isIncome) {
+          if (!transaction.affectsIncomeStats) {
             return false;
           }
         case TransactionTypeFilter.expense:
-          if (!transaction.isExpense) {
+          if (!transaction.affectsExpenseStats) {
             return false;
           }
         case TransactionTypeFilter.debit:
-          if (!transaction.isDebt) {
+          if (!transaction.isDebt || transaction.isSettlementEntry) {
             return false;
           }
         case TransactionTypeFilter.credit:
-          if (!transaction.isReserveable) {
+          if (!transaction.isReserveable || transaction.isSettlementEntry) {
             return false;
           }
         case TransactionTypeFilter.all:
@@ -291,10 +291,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => transaction.isCredit && !startEditing
-            ? CreditCollectionScreen(
+        builder: (_) =>
+            (transaction.isCredit || transaction.isDebt) && !startEditing
+            ? SettlementWorkspaceScreen(
                 controller: widget.controller,
-                credit: transaction,
+                transaction: transaction,
               )
             : TransactionDetailScreen(
                 controller: widget.controller,

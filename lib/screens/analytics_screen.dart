@@ -374,10 +374,12 @@ class AnalyticsScreen extends StatelessWidget {
   ) {
     final values = <String, double>{};
     for (final transaction in transactions) {
-      if (!transaction.isIncome && !transaction.isExpense) {
+      final isIncome = transaction.affectsIncomeStats;
+      final isExpense = transaction.affectsExpenseStats;
+      if (!isIncome && !isExpense) {
         continue;
       }
-      final signed = transaction.isIncome
+      final signed = isIncome
           ? transaction.amountInUsd(exchangeRate)
           : -transaction.amountInUsd(exchangeRate);
       values.update(
@@ -397,7 +399,7 @@ class AnalyticsScreen extends StatelessWidget {
   }) {
     final values = <String, double>{};
     for (final transaction in transactions) {
-      if (transaction.type != type) {
+      if (!_matchesAccountingType(transaction, type)) {
         continue;
       }
       final key = transaction.paymentMethod.trim().isEmpty
@@ -420,8 +422,11 @@ class AnalyticsScreen extends StatelessWidget {
     required TransactionType type,
   }) {
     return controller.periodTransactions.where((transaction) {
-      return transaction.category == category && transaction.type == type;
-    }).toList()..sort((a, b) => b.date.compareTo(a.date));
+      return transaction.category == category &&
+          _matchesAccountingType(transaction, type);
+    }).toList()..sort(
+      (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+    );
   }
 
   static List<FinancialTransaction> _transactionsForPaymentMethod(
@@ -431,15 +436,31 @@ class AnalyticsScreen extends StatelessWidget {
     required TransactionType type,
   }) {
     return controller.periodTransactions.where((transaction) {
-      if (transaction.type != type) {
+      if (!_matchesAccountingType(transaction, type)) {
         return false;
       }
       final key = transaction.paymentMethod.trim().isEmpty
           ? strings.unspecifiedPaymentMethod
           : transaction.paymentMethod.trim();
       return key == paymentMethod;
-    }).toList()..sort((a, b) => b.date.compareTo(a.date));
+    }).toList()..sort(
+      (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+    );
   }
+
+  static bool _matchesAccountingType(
+    FinancialTransaction transaction,
+    TransactionType type,
+  ) => switch (type) {
+    TransactionType.income => transaction.affectsIncomeStats,
+    TransactionType.expense => transaction.affectsExpenseStats,
+    TransactionType.reserveable =>
+      transaction.isCredit && !transaction.isSettlementEntry,
+    TransactionType.debt =>
+      transaction.isDebt && !transaction.isSettlementEntry,
+    TransactionType.transfer => transaction.isTransfer,
+    TransactionType.unknown => transaction.type == TransactionType.unknown,
+  };
 }
 
 class _CategoryReportsScreen extends StatelessWidget {
@@ -802,15 +823,28 @@ class _CategoryRankingCard extends StatelessWidget {
                         Navigator.of(sheetContext).pop();
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => transaction.isCredit
-                                ? CreditCollectionScreen(
+                            builder: (_) =>
+                                transaction.isCredit || transaction.isDebt
+                                ? SettlementWorkspaceScreen(
                                     controller: controller,
-                                    credit: transaction,
+                                    transaction: transaction,
                                   )
                                 : TransactionDetailScreen(
                                     controller: controller,
                                     transaction: transaction,
                                   ),
+                          ),
+                        );
+                      },
+                      onLongPress: () {
+                        Navigator.of(sheetContext).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => TransactionDetailScreen(
+                              controller: controller,
+                              transaction: transaction,
+                              startEditing: true,
+                            ),
                           ),
                         );
                       },

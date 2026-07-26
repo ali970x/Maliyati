@@ -173,7 +173,7 @@ class _SettlementSheetState extends State<_SettlementSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isDebt ? 'Pay debt' : 'Collect credit',
+              isDebt ? 'Pay payable' : 'Collect receivable',
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
@@ -284,7 +284,9 @@ class _SettlementSheetState extends State<_SettlementSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${isDebt ? 'Payment' : 'Collection'} will be recorded in $_walletId.',
+              isDebt
+                  ? 'Payment will be taken from $_walletId.'
+                  : 'Collection will be added to $_walletId.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 20),
@@ -331,99 +333,110 @@ class _SettlementSheetState extends State<_SettlementSheet> {
   }
 }
 
-/// A focused collection workspace for receivables. It deliberately avoids the
-/// editable transaction form so receiving a payment stays a quick workflow.
-class CreditCollectionScreen extends StatefulWidget {
-  const CreditCollectionScreen({
+/// A focused settlement workspace shared by receivables and payables.
+///
+/// A normal tap stays focused on collecting/paying. Editing remains available
+/// through the long-press routes used by the surrounding lists.
+class SettlementWorkspaceScreen extends StatefulWidget {
+  const SettlementWorkspaceScreen({
     super.key,
     required this.controller,
-    required this.credit,
+    required this.transaction,
   });
 
   final DashboardController controller;
-  final FinancialTransaction credit;
+  final FinancialTransaction transaction;
 
   @override
-  State<CreditCollectionScreen> createState() => _CreditCollectionScreenState();
+  State<SettlementWorkspaceScreen> createState() =>
+      _SettlementWorkspaceScreenState();
 }
 
-class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
-  late FinancialTransaction _credit;
+class _SettlementWorkspaceScreenState extends State<SettlementWorkspaceScreen> {
+  late FinancialTransaction _transaction;
   var _isSaving = false;
+
+  bool get _isDebt => _transaction.isDebt;
 
   @override
   void initState() {
     super.initState();
-    _credit = widget.credit;
-    widget.controller.addListener(_syncCredit);
+    _transaction = widget.transaction;
+    widget.controller.addListener(_syncTransaction);
   }
 
   @override
   void dispose() {
-    widget.controller.removeListener(_syncCredit);
+    widget.controller.removeListener(_syncTransaction);
     super.dispose();
   }
 
-  void _syncCredit() {
-    final id = _credit.id;
+  void _syncTransaction() {
+    final id = _transaction.id;
     if (id == null || id.isEmpty) return;
     final latest = widget.controller.transactions.where(
       (item) => item.id == id && !item.isSettlementEntry,
     );
     if (latest.isEmpty) return;
     final transaction = latest.first;
-    if (mounted && transaction != _credit) {
-      setState(() => _credit = transaction);
+    if (mounted && transaction.raw.toString() != _transaction.raw.toString()) {
+      setState(() => _transaction = transaction);
     }
   }
 
   List<FinancialTransaction> get _history {
-    final id = _credit.id;
+    final id = _transaction.id;
     if (id == null || id.isEmpty) return const [];
     final items =
         widget.controller.transactions
             .where((item) => item.linkedTransactionId == id)
             .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+          ..sort(
+            (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+          );
     return items;
   }
 
-  Future<void> _addCollection() async {
+  Future<void> _addSettlement() async {
     final request = await showModalBottomSheet<_SettlementRequest>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => _SettlementSheet(
-        target: _credit,
-        initialWalletId: _credit.walletId,
+        target: _transaction,
+        initialWalletId: _transaction.walletId,
         exchangeRate: widget.controller.exchangeRate,
       ),
     );
     if (request == null || !mounted) return;
-    final creditId = _credit.id;
+    final transactionId = _transaction.id;
     setState(() => _isSaving = true);
     try {
       final updated = await widget.controller.settleTransaction(
-        _credit,
+        _transaction,
         walletId: request.walletId,
         amountUsd: request.amountUsd,
         amountLbp: request.amountLbp,
         conversionRate: widget.controller.exchangeRate,
       );
       if (!mounted) return;
-      final refreshedCredit = creditId == null
+      final refreshedTransaction = transactionId == null
           ? updated
           : widget.controller.transactions.firstWhere(
-              (item) => item.id == creditId && !item.isSettlementEntry,
+              (item) => item.id == transactionId && !item.isSettlementEntry,
               orElse: () => updated,
             );
-      setState(() => _credit = refreshedCredit);
+      setState(() => _transaction = refreshedTransaction);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            refreshedCredit.isSettled
-                ? 'Credit collected in full.'
-                : 'Collection saved. The progress was updated.',
+            refreshedTransaction.isSettled
+                ? (_isDebt
+                      ? 'Payable paid in full.'
+                      : 'Receivable collected in full.')
+                : (_isDebt
+                      ? 'Payment saved. The progress was updated.'
+                      : 'Collection saved. The progress was updated.'),
           ),
         ),
       );
@@ -438,17 +451,17 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
     }
   }
 
-  Future<void> _showAllCollections() => showModalBottomSheet<void>(
+  Future<void> _showAllSettlements() => showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     builder: (_) => _SettlementHistorySheet(
-      isDebt: false,
+      isDebt: _isDebt,
       history: _history,
-      onShare: _shareCollections,
+      onShare: _shareSettlements,
     ),
   );
 
-  Future<void> _shareCollections() async {
+  Future<void> _shareSettlements() async {
     if (_history.isEmpty) return;
     final lines = _history
         .map(
@@ -457,9 +470,9 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
         )
         .join('\n');
     await Share.share(
-      'Maliyati - Credit collection log\n'
-      'Total: ${FinanceFormatters.usd(_credit.amountUsd)} | ${FinanceFormatters.lbp(_credit.amountLbp)}\n'
-      'Remaining: ${FinanceFormatters.usd(_credit.remainingAmountUsd)} | ${FinanceFormatters.lbp(_credit.remainingAmountLbp)}\n\n'
+      'Maliyati - ${_isDebt ? 'Payable payment' : 'Receivable collection'} log\n'
+      'Total: ${FinanceFormatters.usd(_transaction.amountUsd)} | ${FinanceFormatters.lbp(_transaction.amountLbp)}\n'
+      'Remaining: ${FinanceFormatters.usd(_transaction.remainingAmountUsd)} | ${FinanceFormatters.lbp(_transaction.remainingAmountLbp)}\n\n'
       '$lines',
     );
   }
@@ -467,67 +480,24 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Credit collection')),
+      appBar: AppBar(
+        title: Text(_isDebt ? 'Payable payment' : 'Receivable collection'),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          if (false)
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFFDBA74)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFEDD5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.request_quote_rounded,
-                      color: Color(0xFFD97706),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _credit.description.isEmpty
-                              ? 'Credit account'
-                              : _credit.description,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _credit.isServiceSource
-                              ? 'Service credit · collect when paid'
-                              : 'Credit from ${_credit.walletId}',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 12),
           _SettlementProgressCard(
-            transaction: _credit,
+            transaction: _transaction,
             history: _history,
-            onShowAll: _showAllCollections,
+            onShowAll: _showAllSettlements,
+            exchangeRate: widget.controller.exchangeRate,
             showHistory: false,
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: _credit.isSettled || _isSaving ? null : _addCollection,
+            onPressed: _transaction.isSettled || _isSaving
+                ? null
+                : _addSettlement,
             icon: _isSaving
                 ? const SizedBox(
                     width: 18,
@@ -536,14 +506,17 @@ class _CreditCollectionScreenState extends State<CreditCollectionScreen> {
                   )
                 : const Icon(Icons.add_card_rounded),
             label: Text(
-              _credit.isSettled ? 'Collection complete' : 'Add collection',
+              _transaction.isSettled
+                  ? (_isDebt ? 'Payment complete' : 'Collection complete')
+                  : (_isDebt ? 'Add payment' : 'Add collection'),
             ),
           ),
           const SizedBox(height: 16),
-          _CreditPaymentLog(
+          _SettlementPaymentLog(
+            isDebt: _isDebt,
             history: _history,
-            onShowAll: _showAllCollections,
-            onShare: _shareCollections,
+            onShowAll: _showAllSettlements,
+            onShare: _shareSettlements,
           ),
         ],
       ),
@@ -918,7 +891,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
         widget.controller.transactions
             .where((item) => item.linkedTransactionId == targetId)
             .toList()
-          ..sort((a, b) => b.date.compareTo(a.date));
+          ..sort(
+            (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+          );
     return entries;
   }
 
@@ -937,7 +912,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     if (history.isEmpty) {
       return;
     }
-    final label = _transaction.isDebt ? 'Debt payment' : 'Credit collection';
+    final label = _transaction.isDebt
+        ? 'Payable payment'
+        : 'Receivable collection';
     final lines = history
         .map(
           (entry) =>
@@ -1479,6 +1456,7 @@ class _EditBody extends StatelessWidget {
               transaction: state._transaction,
               history: state._settlementHistory,
               onShowAll: state._showSettlementHistory,
+              exchangeRate: state.widget.controller.exchangeRate,
             ),
             const SizedBox(height: 12),
           ],
@@ -1849,12 +1827,14 @@ class _SettlementProgressCard extends StatelessWidget {
     required this.transaction,
     required this.history,
     required this.onShowAll,
+    required this.exchangeRate,
     this.showHistory = true,
   });
 
   final FinancialTransaction transaction;
   final List<FinancialTransaction> history;
   final VoidCallback onShowAll;
+  final double exchangeRate;
   final bool showHistory;
 
   @override
@@ -1866,8 +1846,8 @@ class _SettlementProgressCard extends StatelessWidget {
     final paidLbp = transaction.settledAmountLbp;
     final remainingUsd = transaction.remainingAmountUsd;
     final remainingLbp = transaction.remainingAmountLbp;
-    final total = totalUsd + totalLbp / 89000;
-    final remaining = remainingUsd + remainingLbp / 89000;
+    final total = totalUsd + totalLbp / exchangeRate;
+    final remaining = remainingUsd + remainingLbp / exchangeRate;
     final progress = total <= 0 ? 0.0 : (1 - remaining / total).clamp(0.0, 1.0);
     final color = isDebt ? const Color(0xFFB45309) : const Color(0xFF168A5B);
     return Card(
@@ -1945,13 +1925,15 @@ class _SettlementProgressCard extends StatelessWidget {
   }
 }
 
-class _CreditPaymentLog extends StatelessWidget {
-  const _CreditPaymentLog({
+class _SettlementPaymentLog extends StatelessWidget {
+  const _SettlementPaymentLog({
+    required this.isDebt,
     required this.history,
     required this.onShowAll,
     required this.onShare,
   });
 
+  final bool isDebt;
   final List<FinancialTransaction> history;
   final VoidCallback onShowAll;
   final VoidCallback onShare;
@@ -1975,7 +1957,9 @@ class _CreditPaymentLog extends StatelessWidget {
             ),
             subtitle: Text(
               history.isEmpty
-                  ? 'No collection recorded yet'
+                  ? (isDebt
+                        ? 'No payment recorded yet'
+                        : 'No collection recorded yet')
                   : '${history.length} recorded payment${history.length == 1 ? '' : 's'}',
             ),
             trailing: IconButton(
@@ -1989,8 +1973,12 @@ class _CreditPaymentLog extends StatelessWidget {
             for (final entry in history.take(3))
               ListTile(
                 dense: true,
-                leading: const Icon(Icons.south_west_rounded),
-                title: Text('Collection via ${entry.walletId}'),
+                leading: Icon(
+                  isDebt ? Icons.north_east_rounded : Icons.south_west_rounded,
+                ),
+                title: Text(
+                  '${isDebt ? 'Payment' : 'Collection'} via ${entry.walletId}',
+                ),
                 subtitle: Text(FinanceFormatters.date(entry.date)),
                 trailing: Text(
                   '${FinanceFormatters.usd(entry.amountUsd)}\n${FinanceFormatters.lbp(entry.amountLbp)}',
@@ -2033,7 +2021,9 @@ class _SettlementHistorySheet extends StatelessWidget {
               isDebt ? Icons.payments_rounded : Icons.savings_rounded,
             ),
             title: Text(
-              isDebt ? 'Debt payment history' : 'Credit collection history',
+              isDebt
+                  ? 'Payable payment history'
+                  : 'Receivable collection history',
             ),
             subtitle: Text('${history.length} recorded activities'),
             trailing: IconButton(

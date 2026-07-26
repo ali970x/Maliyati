@@ -544,8 +544,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         );
         if (!mounted) return;
         final message = settlementTarget.isDebt
-            ? 'Debt payment saved.'
-            : 'Credit collection saved.';
+            ? 'Payable payment saved.'
+            : 'Receivable collection saved.';
         _clear();
         ScaffoldMessenger.of(
           context,
@@ -897,8 +897,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     setState(() {
       _settlementTarget = target;
       _titleController.text = target.isDebt
-          ? 'Debt payment: ${target.description}'
-          : 'Credit collection: ${target.description}';
+          ? 'Payable payment: ${target.description}'
+          : 'Receivable collection: ${target.description}';
       _categoryController.text = target.category;
       _amountUsdController.text = _amountText(target.remainingAmountUsd);
       _amountLbpController.text = _amountText(target.remainingAmountLbp);
@@ -1784,10 +1784,10 @@ class _RecentTransactionsPanelState extends State<_RecentTransactionsPanel> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => transaction.isCredit
-                          ? CreditCollectionScreen(
+                      builder: (_) => transaction.isCredit || transaction.isDebt
+                          ? SettlementWorkspaceScreen(
                               controller: widget.controller,
-                              credit: transaction,
+                              transaction: transaction,
                             )
                           : TransactionDetailScreen(
                               controller: widget.controller,

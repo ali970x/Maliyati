@@ -285,6 +285,89 @@ void main() {
     expect(summary.totalIncome, 110);
     expect(summary.totalNet, 0);
   });
+
+  test(
+    'wallet-funded payable increases its wallet and repayment becomes expense',
+    () {
+      final date = DateTime(2026, 7, 26);
+      final payable = AccountingRules.moveWallet(
+        _transaction(date, TransactionType.debt, 60).copyWith(id: 'payable-1'),
+        walletId: 'Whish Money',
+      );
+      final payment = AccountingRules.settlementEntry(
+        payable,
+        walletId: 'Whish Money',
+        date: date,
+        amountUsd: 20,
+        amountLbp: 0,
+      );
+      final updatedPayable = AccountingRules.applySettlement(
+        payable,
+        amountUsd: 20,
+        amountLbp: 0,
+      );
+
+      final summary = FinancialSummary.fromTransactions([
+        updatedPayable,
+        payment,
+      ], exchangeRate: 89000);
+      final wallets = WalletSummary.fromTransactions(
+        [updatedPayable, payment],
+        cashOpeningUsd: 100,
+        cashOpeningLbp: 0,
+        wishOpeningUsd: 10,
+        wishOpeningLbp: 0,
+        ignoredCashTransactionIds: const {},
+        ignoredWishTransactionIds: const {},
+      );
+
+      expect(summary.totalIncome, 60);
+      expect(summary.totalExpense, 20);
+      expect(summary.totalDebt, 40);
+      expect(wallets.cash.balanceUsd, 100);
+      expect(wallets.wish.balanceUsd, 50);
+    },
+  );
+
+  test('service payable stays outside wallets until repayment is made', () {
+    final date = DateTime(2026, 7, 26);
+    final payable = AccountingRules.moveWallet(
+      _transaction(date, TransactionType.debt, 30).copyWith(id: 'service-1'),
+      walletId: 'Service',
+    );
+    final payment = AccountingRules.settlementEntry(
+      payable,
+      walletId: 'My Wallet',
+      date: date,
+      amountUsd: 10,
+      amountLbp: 0,
+    );
+    final updatedPayable = AccountingRules.applySettlement(
+      payable,
+      amountUsd: 10,
+      amountLbp: 0,
+    );
+
+    final summary = FinancialSummary.fromTransactions([
+      updatedPayable,
+      payment,
+    ], exchangeRate: 89000);
+    final wallets = WalletSummary.fromTransactions(
+      [updatedPayable, payment],
+      cashOpeningUsd: 100,
+      cashOpeningLbp: 0,
+      wishOpeningUsd: 50,
+      wishOpeningLbp: 0,
+      ignoredCashTransactionIds: const {},
+      ignoredWishTransactionIds: const {},
+    );
+
+    expect(summary.totalIncome, 0);
+    expect(summary.totalExpense, 10);
+    expect(summary.totalDebt, 20);
+    expect(wallets.cash.balanceUsd, 90);
+    expect(wallets.wish.balanceUsd, 50);
+  });
 }
 
 FinancialTransaction _transaction(
