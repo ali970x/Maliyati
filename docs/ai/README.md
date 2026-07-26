@@ -3,8 +3,16 @@
 This folder contains the canonical contract for generating scripts accepted by
 Maliyati's **Input by script** feature.
 
+## Easiest option: one prompt only
+
+Open `MALIYATI_ALL_IN_ONE_PROMPT.txt`, copy all of its contents, and paste it
+into ChatGPT, Gemini, or another AI assistant as the main instruction. It is
+standalone and does not require uploading any of the other files.
+
 ## Files
 
+- `MALIYATI_ALL_IN_ONE_PROMPT.txt`: complete standalone prompt containing the
+  workflow, accounting rules, operations, validation, and examples.
 - `MALIYATI_SYSTEM_PROMPT.md`: upload or paste this as the AI system
   instruction.
 - `SUPPORTED_OPERATIONS.md`: human-readable command and accounting reference.
@@ -40,4 +48,3 @@ provider's current dataset requirements before starting a training job.
 - Omitting settlement amounts means **settle the full remaining balance**.
 - Editing by title requires the exact existing title. Transaction ID is safer.
 - Firestore remains the live database. These files contain no credentials.
-
