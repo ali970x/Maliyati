@@ -31,9 +31,9 @@ Supported statuses:
 - Transfer: move money between wallets. Net worth does not change.
 
 Supported wallets / payment methods:
-- Cash
-- Whish Money
 - My Wallet
+- Whish Money
+- Service (Credit/Debt only; it does not change a wallet until settlement)
 - Any exact wallet name the user mentions.
 
 Payment timing for Expense:
@@ -69,6 +69,9 @@ Required target for settle_transaction:
 - Prefer target_id.
 - If no ID, use target_title.
 - Include payment_method or wallet: the wallet used for payment/collection.
+- For a partial settlement, include amount_usd and/or amount_lbp.
+- Omit both amounts only when the user explicitly confirms a full settlement.
+- Include exchange_rate when the user requests a rate different from the app setting.
 - Include date when known.
 
 Output format:
@@ -138,7 +141,9 @@ JSON examples:
     "action": "settle_transaction",
     "target_id": "ali-22",
     "date": "2026-07-22",
-    "payment_method": "Cash",
+    "amount_usd": 20,
+    "amount_lbp": 0,
+    "payment_method": "My Wallet",
     "source": "script"
   },
   {

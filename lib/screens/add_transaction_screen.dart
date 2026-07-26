@@ -1207,15 +1207,26 @@ class _ScriptAddFormState extends State<_ScriptAddForm> {
       if (!mounted) {
         return;
       }
-      _clear();
+      if (!result.hasFailures) {
+        _clear();
+      }
       _showExecutionResult(result);
     } catch (error) {
-      setState(() => _error = error.toString());
+      if (mounted) {
+        setState(() => _error = _friendlyScriptError(error));
+      }
     } finally {
       if (mounted) {
         setState(() => _isSaving = false);
       }
     }
+  }
+
+  String _friendlyScriptError(Object error) {
+    final message = error.toString().trim();
+    return message
+        .replaceFirst('GeminiTransactionParseException: ', '')
+        .replaceFirst('FirebaseFinanceException: ', '');
   }
 
   void _showExecutionResult(SmartActionExecutionSummary result) {

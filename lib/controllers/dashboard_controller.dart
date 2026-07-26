@@ -1460,6 +1460,13 @@ class DashboardController extends ChangeNotifier {
               ? action.settlementWallet!.trim()
               : current.walletId,
           date: action.settlementDate,
+          amountUsd: action.settlementAmountUsd > 0
+              ? action.settlementAmountUsd
+              : null,
+          amountLbp: action.settlementAmountLbp > 0
+              ? action.settlementAmountLbp
+              : null,
+          conversionRate: action.settlementExchangeRate,
         );
     }
   }

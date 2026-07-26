@@ -30,8 +30,13 @@ class LabelNormalizer {
     }
     if (normalized == 'mywallet' ||
         normalized == 'wallet' ||
-        normalized == 'cash') {
+        normalized == 'cash' ||
+        trimmed == 'محفظتي' ||
+        trimmed == 'المحفظة') {
       return myWallet;
+    }
+    if (trimmed.contains('ويش') || trimmed.contains('وش موني')) {
+      return wishMoney;
     }
     return text(trimmed);
   }
