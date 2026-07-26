@@ -1,5 +1,9 @@
 # Maliyati Voice Smart Input Prompt
 
+> This legacy prompt is kept for compatibility. The current AI integration
+> package is in [`docs/ai/`](ai/README.md), including the canonical system
+> prompt, JSON Schema, supported operations, and training examples.
+
 Use this prompt with ChatGPT or Gemini when you want voice/audio to become
 paste-ready JSON for the Maliyati app.
 
