@@ -14,7 +14,9 @@ import 'add_transaction_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'wallet_screen.dart';
 
-enum _DashboardMetricKind { income, expense, reserveable, debit }
+enum _DashboardMetricKind { income, expense, reserveable, debit, transfer }
+
+enum _ComparisonScope { day, week, month, selectedPeriod }
 
 enum _CreditListMode { open, completed }
 
@@ -23,6 +25,28 @@ enum _DebtListMode { open, paid }
 enum _WalletTimeScope { today, thisWeek, thisMonth, allTime }
 
 enum _WalletDisplayMode { split, totalUsd, totalLbp }
+
+double _transferTotalUsd(
+  Iterable<FinancialTransaction> transactions,
+  double exchangeRate,
+) => transactions
+    .where((transaction) => transaction.isTransfer)
+    .fold<double>(
+      0,
+      (total, transaction) => total + transaction.amountInUsd(exchangeRate),
+    );
+
+double _transferTotalLbp(Iterable<FinancialTransaction> transactions) =>
+    transactions
+        .where((transaction) => transaction.isTransfer)
+        .fold<double>(0, (total, transaction) => total + transaction.amountLbp);
+
+double _percentageChange(double current, double previous) {
+  if (previous == 0) {
+    return current == 0 ? 0 : 1;
+  }
+  return (current - previous) / previous.abs();
+}
 
 extension on _WalletTimeScope {
   String get label => switch (this) {
@@ -418,6 +442,29 @@ class _LightDashboard extends StatelessWidget {
                               _DashboardMetricKind.debit,
                               showCategories: false,
                               debtMode: _DebtListMode.paid,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: itemWidth,
+                          child: _LightMetric(
+                            title: 'Transfers',
+                            value: FinanceFormatters.usd(
+                              _transferTotalUsd(
+                                controller.periodTransactions,
+                                controller.exchangeRate,
+                              ),
+                            ),
+                            subtitle: FinanceFormatters.lbp(
+                              _transferTotalLbp(controller.periodTransactions),
+                            ),
+                            icon: Icons.swap_horiz_rounded,
+                            color: const Color(0xFF0F6CBD),
+                            onTap: () => _openMetricFocus(
+                              context,
+                              controller,
+                              _DashboardMetricKind.transfer,
+                              showCategories: false,
                             ),
                           ),
                         ),
@@ -1498,7 +1545,9 @@ class _RecentDashboardRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = transaction.isIncome
+    final color = transaction.isTransfer
+        ? const Color(0xFF0F6CBD)
+        : transaction.isIncome
         ? const Color(0xFF168A5B)
         : transaction.isReserveable
         ? const Color(0xFFD97706)
@@ -1521,7 +1570,9 @@ class _RecentDashboardRow extends StatelessWidget {
               backgroundColor: color.withValues(alpha: .12),
               foregroundColor: color,
               child: Icon(
-                transaction.isIncome
+                transaction.isTransfer
+                    ? Icons.swap_horiz_rounded
+                    : transaction.isIncome
                     ? Icons.south_west_rounded
                     : transaction.isReserveable
                     ? Icons.request_quote_rounded
@@ -1615,9 +1666,26 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
         debtMode == _DebtListMode.open
             ? controller.strings.outstandingPayables
             : controller.strings.settledPayables,
+      _DashboardMetricKind.transfer => 'Transfers',
     };
     return Scaffold(
-      appBar: AppBar(title: Text(category ?? title)),
+      appBar: AppBar(
+        title: Text(category ?? title),
+        actions: [
+          if (kind == _DashboardMetricKind.income ||
+              kind == _DashboardMetricKind.expense)
+            IconButton(
+              tooltip: 'Compare periods',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      _IncomeExpenseComparisonScreen(controller: controller),
+                ),
+              ),
+              icon: const Icon(Icons.compare_arrows_rounded),
+            ),
+        ],
+      ),
       body:
           (kind == _DashboardMetricKind.reserveable ||
                   kind == _DashboardMetricKind.debit) &&
@@ -1701,24 +1769,34 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
                 );
               },
             ),
-      floatingActionButton:
-          kind == _DashboardMetricKind.reserveable ||
-              kind == _DashboardMetricKind.debit
-          ? FloatingActionButton.extended(
-              onPressed: () => _openContextualAdd(
-                context,
-                controller,
-                type: kind == _DashboardMetricKind.reserveable
-                    ? TransactionType.reserveable
-                    : TransactionType.debt,
-                title: kind == _DashboardMetricKind.reserveable
-                    ? 'Add credit'
-                    : 'Add debt',
-              ),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add'),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openContextualAdd(
+          context,
+          controller,
+          type: switch (kind) {
+            _DashboardMetricKind.income => TransactionType.income,
+            _DashboardMetricKind.expense => TransactionType.expense,
+            _DashboardMetricKind.reserveable => TransactionType.reserveable,
+            _DashboardMetricKind.debit => TransactionType.debt,
+            _DashboardMetricKind.transfer => TransactionType.transfer,
+          },
+          title: switch (kind) {
+            _DashboardMetricKind.income => 'Add income',
+            _DashboardMetricKind.expense => 'Add expense',
+            _DashboardMetricKind.reserveable => 'Add credit',
+            _DashboardMetricKind.debit => 'Add debt',
+            _DashboardMetricKind.transfer => 'Add transfer',
+          },
+        ),
+        icon: const Icon(Icons.add_rounded),
+        label: Text(switch (kind) {
+          _DashboardMetricKind.income => 'Add income',
+          _DashboardMetricKind.expense => 'Add expense',
+          _DashboardMetricKind.reserveable => 'Add credit',
+          _DashboardMetricKind.debit => 'Add debt',
+          _DashboardMetricKind.transfer => 'Add transfer',
+        }),
+      ),
     );
   }
 
@@ -1729,6 +1807,7 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
       transaction.isReserveable && !transaction.isSettlementEntry,
     _DashboardMetricKind.debit =>
       transaction.isDebt && !transaction.isSettlementEntry,
+    _DashboardMetricKind.transfer => transaction.isTransfer,
   };
 
   void _openTransaction(
@@ -1743,6 +1822,326 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     startEditing: startEditing,
   );
 }
+
+class _IncomeExpenseComparisonScreen extends StatefulWidget {
+  const _IncomeExpenseComparisonScreen({required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  State<_IncomeExpenseComparisonScreen> createState() =>
+      _IncomeExpenseComparisonScreenState();
+}
+
+class _IncomeExpenseComparisonScreenState
+    extends State<_IncomeExpenseComparisonScreen> {
+  _ComparisonScope _scope = _ComparisonScope.month;
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final windows = _comparisonWindows(controller, _scope);
+    final current = FinancialSummary.fromTransactions(
+      controller.calculationTransactions
+          .where((transaction) => windows.$1.contains(transaction.date))
+          .toList(growable: false),
+      exchangeRate: controller.exchangeRate,
+      window: windows.$1,
+    );
+    final previous = FinancialSummary.fromTransactions(
+      controller.calculationTransactions
+          .where((transaction) => windows.$2.contains(transaction.date))
+          .toList(growable: false),
+      exchangeRate: controller.exchangeRate,
+      window: windows.$2,
+    );
+    final incomeChange = _percentageChange(
+      current.totalIncome,
+      previous.totalIncome,
+    );
+    final expenseChange = _percentageChange(
+      current.totalExpense,
+      previous.totalExpense,
+    );
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Income & expense comparison')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+        children: [
+          Text(
+            'Compare with',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final scope in _ComparisonScope.values)
+                ChoiceChip(
+                  selected: _scope == scope,
+                  label: Text(_comparisonScopeLabel(scope)),
+                  onSelected: (_) => setState(() => _scope = scope),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ComparisonPeriodHeader(current: windows.$1, previous: windows.$2),
+          const SizedBox(height: 12),
+          _ComparisonMetricCard(
+            title: 'Income',
+            icon: Icons.south_west_rounded,
+            color: const Color(0xFF168A5B),
+            current: current.totalIncome,
+            previous: previous.totalIncome,
+            change: incomeChange,
+            lowerIsBetter: false,
+          ),
+          const SizedBox(height: 12),
+          _ComparisonMetricCard(
+            title: 'Expenses',
+            icon: Icons.north_east_rounded,
+            color: const Color(0xFFC74949),
+            current: current.totalExpense,
+            previous: previous.totalExpense,
+            change: expenseChange,
+            lowerIsBetter: true,
+          ),
+          const SizedBox(height: 12),
+          Card(
+            elevation: 0,
+            child: ListTile(
+              leading: const Icon(Icons.balance_rounded),
+              title: const Text(
+                'Net difference',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text(
+                'Previous ${FinanceFormatters.usd(previous.totalNet)}',
+              ),
+              trailing: Text(
+                FinanceFormatters.usd(current.totalNet),
+                style: TextStyle(
+                  color: current.totalNet >= 0
+                      ? const Color(0xFF168A5B)
+                      : const Color(0xFFC74949),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComparisonPeriodHeader extends StatelessWidget {
+  const _ComparisonPeriodHeader({
+    required this.current,
+    required this.previous,
+  });
+
+  final DateWindow current;
+  final DateWindow previous;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    elevation: 0,
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ComparisonPeriodColumn(label: 'Current', window: current),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 10),
+            child: Icon(Icons.compare_arrows_rounded),
+          ),
+          Expanded(
+            child: _ComparisonPeriodColumn(label: 'Previous', window: previous),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ComparisonPeriodColumn extends StatelessWidget {
+  const _ComparisonPeriodColumn({required this.label, required this.window});
+
+  final String label;
+  final DateWindow window;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = window.start;
+    final end = window.endExclusive?.subtract(const Duration(days: 1));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+        const SizedBox(height: 3),
+        Text(
+          start == null || end == null
+              ? 'All available data'
+              : start == end
+              ? FinanceFormatters.shortDate(start)
+              : '${FinanceFormatters.shortDate(start)} - '
+                    '${FinanceFormatters.shortDate(end)}',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _ComparisonMetricCard extends StatelessWidget {
+  const _ComparisonMetricCard({
+    required this.title,
+    required this.icon,
+    required this.color,
+    required this.current,
+    required this.previous,
+    required this.change,
+    required this.lowerIsBetter,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color color;
+  final double current;
+  final double previous;
+  final double change;
+  final bool lowerIsBetter;
+
+  @override
+  Widget build(BuildContext context) {
+    final favourable = lowerIsBetter ? change <= 0 : change >= 0;
+    final changeColor = favourable
+        ? const Color(0xFF168A5B)
+        : const Color(0xFFC74949);
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: color.withValues(alpha: .22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: color.withValues(alpha: .12),
+              foregroundColor: color,
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    'Previous ${FinanceFormatters.usd(previous)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  FinanceFormatters.usd(current),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+                Text(
+                  '${change >= 0 ? '+' : ''}${FinanceFormatters.percent(change)}',
+                  style: TextStyle(
+                    color: changeColor,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+(DateWindow, DateWindow) _comparisonWindows(
+  DashboardController controller,
+  _ComparisonScope scope,
+) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  switch (scope) {
+    case _ComparisonScope.day:
+      return (
+        DateWindow(
+          start: today,
+          endExclusive: today.add(const Duration(days: 1)),
+        ),
+        DateWindow(
+          start: today.subtract(const Duration(days: 1)),
+          endExclusive: today,
+        ),
+      );
+    case _ComparisonScope.week:
+      final start = today.subtract(Duration(days: now.weekday % 7));
+      final end = today.add(const Duration(days: 1));
+      final duration = end.difference(start);
+      final previousStart = start.subtract(const Duration(days: 7));
+      return (
+        DateWindow(start: start, endExclusive: end),
+        DateWindow(
+          start: previousStart,
+          endExclusive: previousStart.add(duration),
+        ),
+      );
+    case _ComparisonScope.month:
+      final start = DateTime(now.year, now.month);
+      final end = today.add(const Duration(days: 1));
+      final previousStart = DateTime(now.year, now.month - 1);
+      final previousMonthEnd = DateTime(now.year, now.month);
+      final candidateEnd = previousStart.add(end.difference(start));
+      return (
+        DateWindow(start: start, endExclusive: end),
+        DateWindow(
+          start: previousStart,
+          endExclusive: candidateEnd.isAfter(previousMonthEnd)
+              ? previousMonthEnd
+              : candidateEnd,
+        ),
+      );
+    case _ComparisonScope.selectedPeriod:
+      final previous = controller.previousWindow;
+      if (previous != null) {
+        return (controller.currentWindow, previous);
+      }
+      return (
+        DateWindow.forMonth(today),
+        DateWindow.forMonth(DateTime(now.year, now.month - 1)),
+      );
+  }
+}
+
+String _comparisonScopeLabel(_ComparisonScope scope) => switch (scope) {
+  _ComparisonScope.day => 'Yesterday',
+  _ComparisonScope.week => 'Previous week',
+  _ComparisonScope.month => 'Previous month',
+  _ComparisonScope.selectedPeriod => 'Selected period',
+};
 
 class _SettlementFocusBody extends StatefulWidget {
   const _SettlementFocusBody({
@@ -2286,6 +2685,7 @@ Color _kindColor(_DashboardMetricKind kind) => switch (kind) {
   _DashboardMetricKind.expense => const Color(0xFFC74949),
   _DashboardMetricKind.reserveable => const Color(0xFFD97706),
   _DashboardMetricKind.debit => const Color(0xFF395EE9),
+  _DashboardMetricKind.transfer => const Color(0xFF0F6CBD),
 };
 
 IconData _kindIcon(_DashboardMetricKind kind) => switch (kind) {
@@ -2293,6 +2693,7 @@ IconData _kindIcon(_DashboardMetricKind kind) => switch (kind) {
   _DashboardMetricKind.expense => Icons.north_east_rounded,
   _DashboardMetricKind.reserveable => Icons.request_quote_rounded,
   _DashboardMetricKind.debit => Icons.account_balance_rounded,
+  _DashboardMetricKind.transfer => Icons.swap_horiz_rounded,
 };
 
 class _DashboardContent extends StatelessWidget {
@@ -2439,6 +2840,34 @@ class _DashboardContent extends StatelessWidget {
               showCategories: false,
               debtMode: _DebtListMode.paid,
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _MetricPanel(
+          title: 'Transfers',
+          value: FinanceFormatters.usd(
+            _transferTotalUsd(
+              controller.periodTransactions,
+              controller.exchangeRate,
+            ),
+          ),
+          change: _percentageChange(
+            _transferTotalUsd(
+              controller.periodTransactions,
+              controller.exchangeRate,
+            ),
+            _transferTotalUsd(
+              controller.previousPeriodTransactions,
+              controller.exchangeRate,
+            ),
+          ),
+          positive: true,
+          icon: Icons.swap_horiz_rounded,
+          onTap: () => _openMetricFocus(
+            context,
+            controller,
+            _DashboardMetricKind.transfer,
+            showCategories: false,
           ),
         ),
         const SizedBox(height: 12),

@@ -1841,6 +1841,50 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
     }
   }
 
+  Future<void> _toggleAutoBackup(bool enabled) async {
+    setState(() {
+      _busy = true;
+      _progress = enabled ? .2 : 0;
+      _progressLabel = enabled
+          ? 'Connecting Google Drive and creating the first backup...'
+          : 'Automatic backup disabled';
+    });
+    try {
+      await widget.controller.updateAutoBackupEnabled(enabled);
+      if (!mounted) return;
+      setState(() {
+        _progress = enabled ? 1 : 0;
+        _progressLabel = enabled
+            ? 'Automatic Google Drive backup is active'
+            : 'Automatic backup disabled';
+      });
+      if (enabled) {
+        await _load();
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            enabled
+                ? 'Auto backup is active and the first backup was created.'
+                : 'Auto backup is off.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _progress = 0;
+        _progressLabel = 'Google Drive backup could not be completed';
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _backupLocal() async {
     setState(() {
       _busy = true;
@@ -2083,11 +2127,30 @@ class _BackupRestoreScreenState extends State<BackupRestoreScreen> {
           SwitchListTile.adaptive(
             title: const Text('Auto backup'),
             subtitle: const Text(
-              'Back up when Maliyati is opened after midnight.',
+              'Create one Google Drive backup daily and retry after changes.',
             ),
             value: widget.controller.isAutoBackupEnabled,
-            onChanged: _busy ? null : widget.controller.updateAutoBackupEnabled,
+            onChanged: _busy ? null : _toggleAutoBackup,
           ),
+          if (widget.controller.lastAutoBackup != null)
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.cloud_done_rounded),
+              title: const Text('Last automatic backup'),
+              subtitle: Text(
+                widget.controller.lastAutoBackup!.toLocal().toString(),
+              ),
+            ),
+          if (widget.controller.lastAutoBackupError != null)
+            ListTile(
+              dense: true,
+              leading: Icon(
+                Icons.cloud_off_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: const Text('Automatic backup needs attention'),
+              subtitle: Text(widget.controller.lastAutoBackupError!),
+            ),
           const SizedBox(height: 16),
           const Text(
             'Google Drive backups',

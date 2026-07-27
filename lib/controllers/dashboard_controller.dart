@@ -15,6 +15,7 @@ import '../services/google_drive_backup_service.dart';
 import '../services/google_sheet_service.dart';
 import '../services/label_normalizer.dart';
 import '../services/sheet_export_service.dart';
+import '../services/spending_notification_service.dart';
 
 enum TimeFilter { today, last3Days, thisWeek, thisMonth, custom, allTime }
 
@@ -205,6 +206,7 @@ class DashboardController extends ChangeNotifier {
   WalletComparisonRange _cashWalletComparisonRange = WalletComparisonRange.week;
   WalletComparisonRange _wishWalletComparisonRange = WalletComparisonRange.week;
   DateTime? _lastAutoBackup;
+  String? _lastAutoBackupError;
   TimeFilter _timeFilter = TimeFilter.thisMonth;
   DateTime? _selectedRecentDay;
   DateTime? _selectedMonth;
@@ -354,6 +356,10 @@ class DashboardController extends ChangeNotifier {
   DateTime? get calculationStartMonth => _calculationStartMonth;
 
   DateTime? get lastUpdated => _lastUpdated;
+
+  DateTime? get lastAutoBackup => _lastAutoBackup;
+
+  String? get lastAutoBackupError => _lastAutoBackupError;
 
   String? get errorMessage => _errorMessage;
 
@@ -591,9 +597,6 @@ class DashboardController extends ChangeNotifier {
         prefs,
         key: _categoryRulesStorageKey(),
       );
-      _lastAutoBackup = DateTime.tryParse(
-        prefs.getString(_lastAutoBackupKey) ?? '',
-      );
       _calculationStartMonth = _monthFromStorage(
         prefs.getString(_calculationStartMonthKey),
       );
@@ -609,6 +612,7 @@ class DashboardController extends ChangeNotifier {
           } catch (_) {}
         }
       }
+      _loadAutoBackupState(prefs);
       _categoryRules = _loadCategoryRules(
         prefs,
         key: _categoryRulesStorageKey(),
@@ -875,6 +879,7 @@ class DashboardController extends ChangeNotifier {
         prefs,
         key: _categoryRulesStorageKey(),
       );
+      _loadAutoBackupState(prefs);
       // Sheet settings are optional. They must not block a successful login.
       try {
         await _loadSheetIntegrationSettings();
@@ -959,6 +964,7 @@ class DashboardController extends ChangeNotifier {
         prefs,
         key: _categoryRulesStorageKey(),
       );
+      _loadAutoBackupState(prefs);
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
       await refresh();
@@ -1066,6 +1072,20 @@ class DashboardController extends ChangeNotifier {
     return uid.isEmpty
         ? '${_categoryRulesKey}_guest'
         : '${_categoryRulesKey}_$uid';
+  }
+
+  String _lastAutoBackupStorageKey() {
+    final uid = _user?.uid.trim() ?? '';
+    return uid.isEmpty
+        ? '${_lastAutoBackupKey}_guest'
+        : '${_lastAutoBackupKey}_$uid';
+  }
+
+  void _loadAutoBackupState(SharedPreferences prefs) {
+    _lastAutoBackup = DateTime.tryParse(
+      prefs.getString(_lastAutoBackupStorageKey()) ?? '',
+    );
+    _lastAutoBackupError = null;
   }
 
   List<CategoryRule> _loadCategoryRules(
@@ -1219,9 +1239,13 @@ class DashboardController extends ChangeNotifier {
     return _restoreBackupDocument(Map<String, dynamic>.from(decoded));
   }
 
-  Future<GoogleDriveBackupFile> createGoogleDriveBackup({String? label}) {
+  Future<GoogleDriveBackupFile> createGoogleDriveBackup({
+    String? label,
+    bool allowInteractiveSignIn = true,
+  }) {
     return _googleDriveBackupService.uploadBackup(
       _createBackupDocument(label: label),
+      allowInteractiveSignIn: allowInteractiveSignIn,
     );
   }
 
@@ -1547,6 +1571,7 @@ class DashboardController extends ChangeNotifier {
     ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
     _lastUpdated = DateTime.now();
     notifyListeners();
+    await _afterTransactionMutation();
   }
 
   Future<void> addTransactions(List<FinancialTransaction> transactions) async {
@@ -1573,6 +1598,7 @@ class DashboardController extends ChangeNotifier {
     ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
     _lastUpdated = DateTime.now();
     notifyListeners();
+    await _afterTransactionMutation();
   }
 
   Future<void> addExpenseWithPaymentTiming(
@@ -1690,6 +1716,7 @@ class DashboardController extends ChangeNotifier {
     ]..sort((a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date));
     _lastUpdated = DateTime.now();
     notifyListeners();
+    await _afterTransactionMutation();
     return result.parent;
   }
 
@@ -1895,6 +1922,12 @@ class DashboardController extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoBackupEnabledKey, enabled);
     notifyListeners();
+    if (enabled) {
+      await _runDailyAutoBackupIfDue(force: true, rethrowError: true);
+    } else {
+      _lastAutoBackupError = null;
+      notifyListeners();
+    }
   }
 
   Future<void> updateWalletOpeningBalances({
@@ -2088,24 +2121,48 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  Future<void> _runDailyAutoBackupIfDue() async {
+  Future<void> _afterTransactionMutation() async {
+    try {
+      await SpendingNotificationService.instance.evaluateAndNotify(
+        transactions: _transactions,
+        exchangeRate: _exchangeRate,
+      );
+    } catch (_) {
+      // A notification failure must never undo a saved transaction.
+    }
+    _runDailyAutoBackupIfDue().ignore();
+  }
+
+  Future<void> _runDailyAutoBackupIfDue({
+    bool force = false,
+    bool rethrowError = false,
+  }) async {
     if (!_autoBackupEnabled || _user == null) {
       return;
     }
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    if (_lastAutoBackup != null && !_lastAutoBackup!.isBefore(today)) {
+    if (!force &&
+        _lastAutoBackup != null &&
+        !_lastAutoBackup!.isBefore(today)) {
       return;
     }
     try {
       await createGoogleDriveBackup(
         label: 'Auto backup ${now.toIso8601String()}',
+        allowInteractiveSignIn: rethrowError,
       );
       _lastAutoBackup = now;
+      _lastAutoBackupError = null;
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_lastAutoBackupKey, now.toIso8601String());
-    } catch (_) {
-      // Backup can retry when the app is opened again with a working account.
+      await prefs.setString(_lastAutoBackupStorageKey(), now.toIso8601String());
+      notifyListeners();
+    } catch (error) {
+      _lastAutoBackupError = error.toString();
+      notifyListeners();
+      if (rethrowError) {
+        rethrow;
+      }
     }
   }
 
@@ -2321,6 +2378,7 @@ class DashboardController extends ChangeNotifier {
       ..._transactions.skip(index + 1),
     ];
     notifyListeners();
+    await _afterTransactionMutation();
   }
 
   void _ensureOutgoingWalletFunds({
@@ -2397,6 +2455,7 @@ class DashboardController extends ChangeNotifier {
         .toList(growable: false);
     _lastUpdated = DateTime.now();
     notifyListeners();
+    await _afterTransactionMutation();
   }
 
   /// Permanently removes every transaction for the active Firebase account and

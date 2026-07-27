@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../controllers/dashboard_controller.dart';
-import '../models/transaction.dart';
+import '../services/spending_notification_service.dart';
 import '../widgets/finance_formatters.dart';
 import '../widgets/responsive_layout.dart';
 
@@ -16,14 +16,12 @@ class SpendingAlertsScreen extends StatefulWidget {
 }
 
 class _SpendingAlertsScreenState extends State<SpendingAlertsScreen> {
-  static const _dailyKey = 'spending_limit_daily';
-  static const _weeklyKey = 'spending_limit_weekly';
-  static const _monthlyKey = 'spending_limit_monthly';
-
   final _dailyController = TextEditingController();
   final _weeklyController = TextEditingController();
   final _monthlyController = TextEditingController();
   bool _saving = false;
+  bool _notificationsEnabled = false;
+  bool _permissionBusy = false;
 
   @override
   void initState() {
@@ -41,27 +39,44 @@ class _SpendingAlertsScreenState extends State<SpendingAlertsScreen> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    final notificationsEnabled = await SpendingNotificationService.instance
+        .isEnabled();
     if (!mounted) {
       return;
     }
-    _dailyController.text = (prefs.getDouble(_dailyKey) ?? 0).toStringAsFixed(
-      0,
-    );
-    _weeklyController.text = (prefs.getDouble(_weeklyKey) ?? 0).toStringAsFixed(
-      0,
-    );
-    _monthlyController.text = (prefs.getDouble(_monthlyKey) ?? 0)
-        .toStringAsFixed(0);
-    setState(() {});
+    _dailyController.text =
+        (prefs.getDouble(SpendingNotificationService.dailyLimitKey) ?? 0)
+            .toStringAsFixed(0);
+    _weeklyController.text =
+        (prefs.getDouble(SpendingNotificationService.weeklyLimitKey) ?? 0)
+            .toStringAsFixed(0);
+    _monthlyController.text =
+        (prefs.getDouble(SpendingNotificationService.monthlyLimitKey) ?? 0)
+            .toStringAsFixed(0);
+    setState(() => _notificationsEnabled = notificationsEnabled);
   }
 
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setDouble(_dailyKey, _amount(_dailyController.text));
-      await prefs.setDouble(_weeklyKey, _amount(_weeklyController.text));
-      await prefs.setDouble(_monthlyKey, _amount(_monthlyController.text));
+      await prefs.setDouble(
+        SpendingNotificationService.dailyLimitKey,
+        _amount(_dailyController.text),
+      );
+      await prefs.setDouble(
+        SpendingNotificationService.weeklyLimitKey,
+        _amount(_weeklyController.text),
+      );
+      await prefs.setDouble(
+        SpendingNotificationService.monthlyLimitKey,
+        _amount(_monthlyController.text),
+      );
+      await SpendingNotificationService.instance.resetSentMarkers();
+      await SpendingNotificationService.instance.evaluateAndNotify(
+        transactions: widget.controller.transactions,
+        exchangeRate: widget.controller.exchangeRate,
+      );
       if (!mounted) {
         return;
       }
@@ -72,6 +87,40 @@ class _SpendingAlertsScreenState extends State<SpendingAlertsScreen> {
     } finally {
       if (mounted) {
         setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<void> _toggleNotifications(bool enabled) async {
+    if (_permissionBusy) {
+      return;
+    }
+    setState(() => _permissionBusy = true);
+    try {
+      final active = enabled
+          ? await SpendingNotificationService.instance.enable()
+          : false;
+      if (!enabled) {
+        await SpendingNotificationService.instance.disable();
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() => _notificationsEnabled = active);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            active
+                ? 'Spending notifications are active.'
+                : enabled
+                ? 'Notification permission was not granted.'
+                : 'Spending notifications are off.',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _permissionBusy = false);
       }
     }
   }
@@ -127,6 +176,32 @@ class _SpendingAlertsScreenState extends State<SpendingAlertsScreen> {
                 ),
               ),
             ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          elevation: 0,
+          child: SwitchListTile(
+            value: _notificationsEnabled,
+            onChanged: _permissionBusy ? null : _toggleNotifications,
+            secondary: _permissionBusy
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(
+                    _notificationsEnabled
+                        ? Icons.notifications_active_rounded
+                        : Icons.notifications_off_outlined,
+                  ),
+            title: const Text(
+              'Phone notifications',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+            subtitle: const Text(
+              'Notify me when a daily, weekly, or monthly limit is reached.',
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -198,7 +273,7 @@ class _SpendingAlertsScreenState extends State<SpendingAlertsScreen> {
     return widget.controller.transactions
         .where(
           (transaction) =>
-              transaction.type == TransactionType.expense &&
+              transaction.affectsExpenseStats &&
               !transaction.date.isBefore(start) &&
               transaction.date.isBefore(end),
         )

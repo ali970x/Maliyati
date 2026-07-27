@@ -14,7 +14,7 @@ import 'transaction_detail_screen.dart';
 
 enum TransactionSort { newest, oldest, highestAmount, lowestAmount }
 
-enum TransactionTypeFilter { all, income, expense, debit, credit }
+enum TransactionTypeFilter { all, income, expense, debit, credit, transfer }
 
 enum TransactionCurrencyFilter { all, usd, lbp }
 
@@ -218,6 +218,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           }
         case TransactionTypeFilter.credit:
           if (!transaction.isReserveable || transaction.isSettlementEntry) {
+            return false;
+          }
+        case TransactionTypeFilter.transfer:
+          if (!transaction.isTransfer) {
             return false;
           }
         case TransactionTypeFilter.all:
@@ -515,6 +519,7 @@ class _ResultsSummary extends StatelessWidget {
     var expenses = 0.0;
     var credits = 0.0;
     var debt = 0.0;
+    var transfers = 0.0;
     for (final transaction in transactions) {
       final amount = transaction.amountInUsd(exchangeRate);
       if (transaction.isIncome) {
@@ -529,6 +534,8 @@ class _ResultsSummary extends StatelessWidget {
         debt +=
             transaction.remainingAmountUsd +
             transaction.remainingAmountLbp / exchangeRate;
+      } else if (transaction.isTransfer) {
+        transfers += amount;
       }
     }
     final net = income - expenses;
@@ -567,6 +574,11 @@ class _ResultsSummary extends StatelessWidget {
               label: 'Debt',
               value: FinanceFormatters.compactUsd(debt),
               color: const Color(0xFF2563EB),
+            ),
+            _SummaryPill(
+              label: 'Transfers',
+              value: FinanceFormatters.compactUsd(transfers),
+              color: const Color(0xFF0F6CBD),
             ),
             _SummaryPill(
               label: strings.netBalance,
@@ -774,6 +786,7 @@ class _Filters extends StatelessWidget {
                       TransactionTypeFilter.expense => strings.expense,
                       TransactionTypeFilter.debit => 'Debt',
                       TransactionTypeFilter.credit => 'Credit',
+                      TransactionTypeFilter.transfer => 'Transfer',
                     };
                     return DropdownMenuItem(value: value, child: Text(label));
                   }).toList(),

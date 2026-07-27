@@ -38,9 +38,12 @@ class GoogleDriveBackupService {
   final http.Client _client;
 
   Future<GoogleDriveBackupFile> uploadBackup(
-    Map<String, dynamic> backup,
-  ) async {
-    final token = await _accessToken();
+    Map<String, dynamic> backup, {
+    bool allowInteractiveSignIn = true,
+  }) async {
+    final token = await _accessToken(
+      allowInteractiveSignIn: allowInteractiveSignIn,
+    );
     final savedAt = '${backup['savedAt'] ?? DateTime.now().toIso8601String()}';
     final fileName = '$_filePrefix$savedAt.json';
     const boundary = 'maliyati_drive_backup_boundary';
@@ -111,8 +114,11 @@ class GoogleDriveBackupService {
     return data;
   }
 
-  Future<String> _accessToken() async {
-    final account = await _signIn.signIn();
+  Future<String> _accessToken({bool allowInteractiveSignIn = true}) async {
+    final account =
+        _signIn.currentUser ??
+        await _signIn.signInSilently() ??
+        (allowInteractiveSignIn ? await _signIn.signIn() : null);
     if (account == null) {
       throw const GoogleDriveBackupException(
         'Google Drive connection was cancelled.',
