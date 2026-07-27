@@ -586,69 +586,92 @@ class _UserDialogState extends State<_UserDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       title: Text(widget.user == null ? 'Add user profile' : 'Edit user'),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _uid,
-              decoration: const InputDecoration(labelText: 'UID'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _accountId,
-              decoration: const InputDecoration(labelText: 'User ID'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _email,
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            const SizedBox(height: 10),
-            SwitchListTile.adaptive(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Blocked'),
-              subtitle: const Text('Blocked users cannot enter the app.'),
-              value: _blocked,
-              onChanged: (value) => setState(() => _blocked = value),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_available_rounded),
-              title: const Text('Trial ends at'),
-              subtitle: Text(
-                _trialEndsAt == null
-                    ? 'No trial limit'
-                    : '${_trialEndsAt!.year}-${_trialEndsAt!.month.toString().padLeft(2, '0')}-${_trialEndsAt!.day.toString().padLeft(2, '0')}',
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _uid,
+                decoration: const InputDecoration(labelText: 'UID'),
               ),
-              trailing: Wrap(
-                children: [
-                  IconButton(
-                    tooltip: 'Pick date',
-                    onPressed: _pickTrialDate,
-                    icon: const Icon(Icons.calendar_month_rounded),
-                  ),
-                  IconButton(
-                    tooltip: 'Clear',
-                    onPressed: _trialEndsAt == null
-                        ? null
-                        : () => setState(() => _trialEndsAt = null),
-                    icon: const Icon(Icons.clear_rounded),
-                  ),
-                ],
+              const SizedBox(height: 10),
+              TextField(
+                controller: _accountId,
+                decoration: const InputDecoration(labelText: 'User ID'),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              TextField(
+                controller: _email,
+                decoration: const InputDecoration(labelText: 'Email'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _name,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              const SizedBox(height: 10),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Blocked'),
+                subtitle: const Text('Blocked users cannot enter the app.'),
+                value: _blocked,
+                onChanged: (value) => setState(() => _blocked = value),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsetsDirectional.fromSTEB(12, 10, 6, 10),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.event_available_rounded),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Trial ends at',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          Text(
+                            _trialEndsAt == null
+                                ? 'No trial limit'
+                                : '${_trialEndsAt!.year}-${_trialEndsAt!.month.toString().padLeft(2, '0')}-${_trialEndsAt!.day.toString().padLeft(2, '0')}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Pick date',
+                      onPressed: _pickTrialDate,
+                      icon: const Icon(Icons.calendar_month_rounded),
+                    ),
+                    if (_trialEndsAt != null)
+                      IconButton(
+                        tooltip: 'Clear',
+                        onPressed: () => setState(() => _trialEndsAt = null),
+                        icon: const Icon(Icons.clear_rounded),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+      actionsOverflowButtonSpacing: 8,
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),

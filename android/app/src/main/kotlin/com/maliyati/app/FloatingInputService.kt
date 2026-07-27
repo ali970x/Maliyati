@@ -17,6 +17,7 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewOutlineProvider
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
@@ -66,9 +67,9 @@ class FloatingInputService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         val density = resources.displayMetrics.density
-        val size = (60 * density).toInt()
-        val edge = (12 * density).toInt()
-        val touchSlop = 7 * density
+        val size = (44 * density).toInt()
+        val edge = (8 * density).toInt()
+        val touchSlop = 6 * density
         val bubbleView = createBubbleView(size)
         val params = overlayParams(size, size).apply {
             gravity = Gravity.START or Gravity.TOP
@@ -150,24 +151,25 @@ class FloatingInputService : Service() {
         val density = resources.displayMetrics.density
 
         return FrameLayout(this).apply {
-            alpha = 0.96f
-            elevation = 18f
+            alpha = 0.98f
+            elevation = 12f
             background = GradientDrawable().apply {
-                shape = GradientDrawable.RECTANGLE
-                cornerRadius = 18 * density
+                shape = GradientDrawable.OVAL
                 setColor(Color.WHITE)
-                setStroke((1.2f * density).toInt(), Color.argb(72, 11, 92, 173))
+                setStroke((1 * density).toInt(), Color.argb(82, 11, 92, 173))
             }
+            outlineProvider = ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
 
             addView(
                 ImageView(this@FloatingInputService).apply {
                     setImageResource(R.drawable.maliyati_floating_icon)
                     scaleType = ImageView.ScaleType.CENTER_CROP
                     setPadding(
-                        (4 * density).toInt(),
-                        (4 * density).toInt(),
-                        (4 * density).toInt(),
-                        (4 * density).toInt(),
+                        (2 * density).toInt(),
+                        (2 * density).toInt(),
+                        (2 * density).toInt(),
+                        (2 * density).toInt(),
                     )
                     contentDescription = "Open Maliyati quick input"
                 },

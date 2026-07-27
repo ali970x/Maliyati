@@ -18,6 +18,15 @@ enum _DashboardMetricKind { income, expense, reserveable, debit, transfer }
 
 enum _ComparisonScope { day, week, month, selectedPeriod }
 
+enum _MetricFocusSort {
+  newest,
+  oldest,
+  highestAmount,
+  lowestAmount,
+  mostTransactions,
+  categoryName,
+}
+
 enum _CreditListMode { open, completed }
 
 enum _DebtListMode { open, paid }
@@ -1616,7 +1625,7 @@ class _RecentDashboardRow extends StatelessWidget {
   }
 }
 
-class _DashboardMetricFocusScreen extends StatelessWidget {
+class _DashboardMetricFocusScreen extends StatefulWidget {
   const _DashboardMetricFocusScreen({
     required this.controller,
     required this.kind,
@@ -1634,19 +1643,39 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
   final String? category;
 
   @override
+  State<_DashboardMetricFocusScreen> createState() =>
+      _DashboardMetricFocusScreenState();
+}
+
+class _DashboardMetricFocusScreenState
+    extends State<_DashboardMetricFocusScreen> {
+  late bool _showCategories;
+  _MetricFocusSort _sort = _MetricFocusSort.newest;
+
+  @override
+  void initState() {
+    super.initState();
+    _showCategories = widget.showCategories;
+    if (_showCategories) {
+      _sort = _MetricFocusSort.highestAmount;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final matchedTransactions =
-        controller.periodTransactions
-            .where(_matches)
-            .where(
-              (transaction) =>
-                  category == null || transaction.category == category,
-            )
-            .toList()
-          ..sort(
-            (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
-          );
-    final transactions = kind == _DashboardMetricKind.debit && category == null
+    final controller = widget.controller;
+    final kind = widget.kind;
+    final category = widget.category;
+    final creditMode = widget.creditMode;
+    final debtMode = widget.debtMode;
+    final matchedTransactions = controller.periodTransactions
+        .where(_matches)
+        .where(
+          (transaction) => category == null || transaction.category == category,
+        )
+        .toList();
+    final filteredTransactions =
+        kind == _DashboardMetricKind.debit && category == null
         ? matchedTransactions
               .where(
                 (transaction) => debtMode == _DebtListMode.open
@@ -1655,6 +1684,7 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
               )
               .toList()
         : matchedTransactions;
+    final transactions = _sortTransactions(filteredTransactions);
     final title = switch (kind) {
       _DashboardMetricKind.income => controller.strings.income,
       _DashboardMetricKind.expense => controller.strings.expenses,
@@ -1686,89 +1716,114 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
             ),
         ],
       ),
-      body:
-          (kind == _DashboardMetricKind.reserveable ||
-                  kind == _DashboardMetricKind.debit) &&
-              category == null
-          ? _SettlementFocusBody(
-              controller: controller,
-              transactions: transactions,
-              isDebt: kind == _DashboardMetricKind.debit,
-              showCompleted: kind == _DashboardMetricKind.debit
-                  ? debtMode == _DebtListMode.paid
-                  : creditMode == _CreditListMode.completed,
-            )
-          : showCategories && category == null
-          ? _CategoryFocusList(
-              controller: controller,
-              kind: kind,
-              title: title,
-              transactions: transactions,
-            )
-          : transactions.isEmpty
-          ? Center(
-              child: Text(
-                'No $title transactions for ${periodFilterLabel(controller)}.',
-              ),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-              itemCount: transactions.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final transaction = transactions[index];
-                if (kind == _DashboardMetricKind.reserveable ||
-                    kind == _DashboardMetricKind.debit) {
-                  return _CreditOverviewTile(
+      body: Column(
+        children: [
+          _MetricFocusControls(
+            showCategories: _showCategories,
+            supportsCategories:
+                category == null &&
+                (kind == _DashboardMetricKind.income ||
+                    kind == _DashboardMetricKind.expense ||
+                    kind == _DashboardMetricKind.transfer),
+            sort: _sort,
+            onViewChanged: (showCategories) => setState(() {
+              _showCategories = showCategories;
+              if (showCategories && _sort == _MetricFocusSort.newest) {
+                _sort = _MetricFocusSort.highestAmount;
+              }
+            }),
+            onSortChanged: (sort) => setState(() => _sort = sort),
+          ),
+          Expanded(
+            child:
+                (kind == _DashboardMetricKind.reserveable ||
+                        kind == _DashboardMetricKind.debit) &&
+                    category == null
+                ? _SettlementFocusBody(
                     controller: controller,
-                    transaction: transaction,
-                    onTap: () => _openTransaction(context, transaction),
-                    onLongPress: () => _openTransaction(
-                      context,
-                      transaction,
-                      startEditing: true,
+                    transactions: transactions,
+                    isDebt: kind == _DashboardMetricKind.debit,
+                    showCompleted: kind == _DashboardMetricKind.debit
+                        ? debtMode == _DebtListMode.paid
+                        : creditMode == _CreditListMode.completed,
+                  )
+                : _showCategories && category == null
+                ? _CategoryFocusList(
+                    controller: controller,
+                    kind: kind,
+                    title: title,
+                    transactions: transactions,
+                    sort: _sort,
+                  )
+                : transactions.isEmpty
+                ? Center(
+                    child: Text(
+                      'No $title transactions for ${periodFilterLabel(controller)}.',
                     ),
-                  );
-                }
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: _kindColor(kind).withValues(alpha: .15),
-                    foregroundColor: _kindColor(kind),
-                    child: Icon(_kindIcon(kind)),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                    itemCount: transactions.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final transaction = transactions[index];
+                      if (kind == _DashboardMetricKind.reserveable ||
+                          kind == _DashboardMetricKind.debit) {
+                        return _CreditOverviewTile(
+                          controller: controller,
+                          transaction: transaction,
+                          onTap: () => _openTransaction(context, transaction),
+                          onLongPress: () => _openTransaction(
+                            context,
+                            transaction,
+                            startEditing: true,
+                          ),
+                        );
+                      }
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: _kindColor(
+                            kind,
+                          ).withValues(alpha: .15),
+                          foregroundColor: _kindColor(kind),
+                          child: Icon(_kindIcon(kind)),
+                        ),
+                        title: Text(
+                          transaction.description.isEmpty
+                              ? transaction.category
+                              : transaction.description,
+                        ),
+                        subtitle: Text(
+                          kind == _DashboardMetricKind.reserveable ||
+                                  kind == _DashboardMetricKind.debit
+                              ? '${transaction.walletId} · ${FinanceFormatters.shortDate(transaction.date)}'
+                              : '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
+                        ),
+                        trailing: Text(
+                          FinanceFormatters.amount(transaction),
+                          style: TextStyle(
+                            color: _kindColor(kind),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        onTap: () => _openTransaction(
+                          context,
+                          transaction,
+                          openSettlement:
+                              (transaction.isDebt || transaction.isCredit) &&
+                              !transaction.isSettled,
+                        ),
+                        onLongPress: () => _openTransaction(
+                          context,
+                          transaction,
+                          startEditing: true,
+                        ),
+                      );
+                    },
                   ),
-                  title: Text(
-                    transaction.description.isEmpty
-                        ? transaction.category
-                        : transaction.description,
-                  ),
-                  subtitle: Text(
-                    kind == _DashboardMetricKind.reserveable ||
-                            kind == _DashboardMetricKind.debit
-                        ? '${transaction.walletId} · ${FinanceFormatters.shortDate(transaction.date)}'
-                        : '${transaction.category} · ${FinanceFormatters.shortDate(transaction.date)}',
-                  ),
-                  trailing: Text(
-                    FinanceFormatters.amount(transaction),
-                    style: TextStyle(
-                      color: _kindColor(kind),
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  onTap: () => _openTransaction(
-                    context,
-                    transaction,
-                    openSettlement:
-                        (transaction.isDebt || transaction.isCredit) &&
-                        !transaction.isSettled,
-                  ),
-                  onLongPress: () => _openTransaction(
-                    context,
-                    transaction,
-                    startEditing: true,
-                  ),
-                );
-              },
-            ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openContextualAdd(
           context,
@@ -1800,7 +1855,41 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     );
   }
 
-  bool _matches(FinancialTransaction transaction) => switch (kind) {
+  List<FinancialTransaction> _sortTransactions(
+    List<FinancialTransaction> source,
+  ) {
+    final categoryCounts = <String, int>{};
+    for (final transaction in source) {
+      categoryCounts.update(
+        transaction.category,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    final sorted = [...source];
+    sorted.sort((a, b) {
+      final createdA = a.createdAt ?? a.date;
+      final createdB = b.createdAt ?? b.date;
+      final amountA = a.amountInUsd(widget.controller.exchangeRate);
+      final amountB = b.amountInUsd(widget.controller.exchangeRate);
+      return switch (_sort) {
+        _MetricFocusSort.newest => createdB.compareTo(createdA),
+        _MetricFocusSort.oldest => createdA.compareTo(createdB),
+        _MetricFocusSort.highestAmount => amountB.compareTo(amountA),
+        _MetricFocusSort.lowestAmount => amountA.compareTo(amountB),
+        _MetricFocusSort.mostTransactions =>
+          (categoryCounts[b.category] ?? 0).compareTo(
+            categoryCounts[a.category] ?? 0,
+          ),
+        _MetricFocusSort.categoryName => a.category.toLowerCase().compareTo(
+          b.category.toLowerCase(),
+        ),
+      };
+    });
+    return sorted;
+  }
+
+  bool _matches(FinancialTransaction transaction) => switch (widget.kind) {
     _DashboardMetricKind.income => transaction.affectsIncomeStats,
     _DashboardMetricKind.expense => transaction.affectsExpenseStats,
     _DashboardMetricKind.reserveable =>
@@ -1817,11 +1906,106 @@ class _DashboardMetricFocusScreen extends StatelessWidget {
     bool startEditing = false,
   }) => _openDashboardTransaction(
     context,
-    controller,
+    widget.controller,
     transaction,
     startEditing: startEditing,
   );
 }
+
+class _MetricFocusControls extends StatelessWidget {
+  const _MetricFocusControls({
+    required this.showCategories,
+    required this.supportsCategories,
+    required this.sort,
+    required this.onViewChanged,
+    required this.onSortChanged,
+  });
+
+  final bool showCategories;
+  final bool supportsCategories;
+  final _MetricFocusSort sort;
+  final ValueChanged<bool> onViewChanged;
+  final ValueChanged<_MetricFocusSort> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surface,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 9),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              if (supportsCategories) ...[
+                ChoiceChip(
+                  selected: !showCategories,
+                  avatar: const Icon(Icons.view_list_rounded, size: 18),
+                  label: const Text('Transactions'),
+                  onSelected: (_) => onViewChanged(false),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  selected: showCategories,
+                  avatar: const Icon(Icons.category_outlined, size: 18),
+                  label: const Text('Categories'),
+                  onSelected: (_) => onViewChanged(true),
+                ),
+                const SizedBox(width: 10),
+              ],
+              PopupMenuButton<_MetricFocusSort>(
+                initialValue: sort,
+                onSelected: onSortChanged,
+                itemBuilder: (context) => [
+                  for (final option in _MetricFocusSort.values)
+                    PopupMenuItem(
+                      value: option,
+                      child: Row(
+                        children: [
+                          Icon(_metricSortIcon(option), size: 19),
+                          const SizedBox(width: 10),
+                          Text(_metricSortLabel(option)),
+                        ],
+                      ),
+                    ),
+                ],
+                child: Chip(
+                  avatar: const Icon(Icons.sort_rounded, size: 18),
+                  label: Text(_metricSortLabel(sort)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _metricSortLabel(_MetricFocusSort sort) => switch (sort) {
+  _MetricFocusSort.newest => 'Newest',
+  _MetricFocusSort.oldest => 'Oldest',
+  _MetricFocusSort.highestAmount => 'Highest amount',
+  _MetricFocusSort.lowestAmount => 'Lowest amount',
+  _MetricFocusSort.mostTransactions => 'Most transactions',
+  _MetricFocusSort.categoryName => 'Category A-Z',
+};
+
+IconData _metricSortIcon(_MetricFocusSort sort) => switch (sort) {
+  _MetricFocusSort.newest => Icons.schedule_rounded,
+  _MetricFocusSort.oldest => Icons.history_rounded,
+  _MetricFocusSort.highestAmount => Icons.arrow_downward_rounded,
+  _MetricFocusSort.lowestAmount => Icons.arrow_upward_rounded,
+  _MetricFocusSort.mostTransactions => Icons.format_list_numbered_rounded,
+  _MetricFocusSort.categoryName => Icons.sort_by_alpha_rounded,
+};
 
 class _IncomeExpenseComparisonScreen extends StatefulWidget {
   const _IncomeExpenseComparisonScreen({required this.controller});
@@ -2586,33 +2770,59 @@ class _CategoryFocusList extends StatelessWidget {
     required this.kind,
     required this.title,
     required this.transactions,
+    required this.sort,
   });
 
   final DashboardController controller;
   final _DashboardMetricKind kind;
   final String title;
   final List<FinancialTransaction> transactions;
+  final _MetricFocusSort sort;
 
   @override
   Widget build(BuildContext context) {
-    final totals = <String, double>{};
+    final grouped = <String, List<FinancialTransaction>>{};
     for (final transaction in transactions) {
       final label = transaction.category.trim().isEmpty
           ? 'Uncategorized'
           : transaction.category.trim();
-      totals.update(
-        label,
-        (value) => value + transaction.amountInUsd(controller.exchangeRate),
-        ifAbsent: () => transaction.amountInUsd(controller.exchangeRate),
-      );
+      grouped.putIfAbsent(label, () => []).add(transaction);
     }
-    final entries = totals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final total = entries.fold<double>(0, (sum, item) => sum + item.value);
+    final entries =
+        grouped.entries.map((entry) {
+          final rows = entry.value;
+          final dates = rows.map((item) => item.createdAt ?? item.date).toList()
+            ..sort();
+          return _CategoryFocusStat(
+            name: entry.key,
+            total: rows.fold<double>(
+              0,
+              (sum, item) => sum + item.amountInUsd(controller.exchangeRate),
+            ),
+            count: rows.length,
+            oldest: dates.first,
+            newest: dates.last,
+          );
+        }).toList()..sort((a, b) {
+          return switch (sort) {
+            _MetricFocusSort.newest => b.newest.compareTo(a.newest),
+            _MetricFocusSort.oldest => a.oldest.compareTo(b.oldest),
+            _MetricFocusSort.highestAmount => b.total.compareTo(a.total),
+            _MetricFocusSort.lowestAmount => a.total.compareTo(b.total),
+            _MetricFocusSort.mostTransactions => b.count.compareTo(a.count),
+            _MetricFocusSort.categoryName => a.name.toLowerCase().compareTo(
+              b.name.toLowerCase(),
+            ),
+          };
+        });
+    final total = entries.fold<double>(0, (sum, item) => sum + item.total);
     if (entries.isEmpty) {
       return Center(child: Text('No $title categories for this period.'));
     }
-    final largest = entries.first.value;
+    final largest = entries.fold<double>(
+      0,
+      (largest, item) => math.max(largest, item.total),
+    );
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: entries.length,
@@ -2628,18 +2838,18 @@ class _CategoryFocusList extends StatelessWidget {
               child: Icon(_kindIcon(kind)),
             ),
             title: Text(
-              entry.key,
+              entry.name,
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${transactions.where((item) => item.category == entry.key).length} transactions',
+                  '${entry.count} transactions · latest ${FinanceFormatters.shortDate(entry.newest)}',
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${total == 0 ? 0 : (entry.value / total * 100).round()}% of $title',
+                  '${total == 0 ? 0 : (entry.total / total * 100).round()}% of $title',
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
                 const SizedBox(height: 4),
@@ -2648,7 +2858,7 @@ class _CategoryFocusList extends StatelessWidget {
                   child: LinearProgressIndicator(
                     // The largest category fills its track; the remaining
                     // rows are visually ranked against that leading one.
-                    value: largest == 0 ? 0 : entry.value / largest,
+                    value: largest == 0 ? 0 : entry.total / largest,
                     minHeight: 7,
                     color: _kindColor(kind),
                     backgroundColor: _kindColor(kind).withValues(alpha: .13),
@@ -2657,7 +2867,7 @@ class _CategoryFocusList extends StatelessWidget {
               ],
             ),
             trailing: Text(
-              FinanceFormatters.usd(entry.value),
+              FinanceFormatters.usd(entry.total),
               style: TextStyle(
                 color: _kindColor(kind),
                 fontWeight: FontWeight.w900,
@@ -2669,7 +2879,7 @@ class _CategoryFocusList extends StatelessWidget {
                   controller: controller,
                   kind: kind,
                   showCategories: false,
-                  category: entry.key,
+                  category: entry.name,
                 ),
               ),
             ),
@@ -2678,6 +2888,22 @@ class _CategoryFocusList extends StatelessWidget {
       },
     );
   }
+}
+
+class _CategoryFocusStat {
+  const _CategoryFocusStat({
+    required this.name,
+    required this.total,
+    required this.count,
+    required this.oldest,
+    required this.newest,
+  });
+
+  final String name;
+  final double total;
+  final int count;
+  final DateTime oldest;
+  final DateTime newest;
 }
 
 Color _kindColor(_DashboardMetricKind kind) => switch (kind) {
