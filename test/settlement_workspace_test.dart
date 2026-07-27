@@ -1,10 +1,17 @@
 import 'package:finance_tracker/controllers/dashboard_controller.dart';
 import 'package:finance_tracker/models/transaction.dart';
 import 'package:finance_tracker/screens/transaction_detail_screen.dart';
+import 'package:finance_tracker/widgets/finance_formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUpAll(() async {
+    FinanceFormatters.localeCode = 'en';
+    await initializeDateFormatting('en');
+  });
+
   testWidgets('payable uses the shared settlement workspace', (tester) async {
     final controller = DashboardController();
     addTearDown(controller.dispose);
@@ -43,6 +50,29 @@ void main() {
     expect(find.text('Add collection'), findsOneWidget);
     expect(find.text('Payment log'), findsOneWidget);
     expect(find.text('No collection recorded yet'), findsOneWidget);
+  });
+
+  testWidgets('long-press account view is compact and keeps edit available', (
+    tester,
+  ) async {
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SettlementWorkspaceScreen(
+          controller: controller,
+          transaction: _account(TransactionType.debt),
+          showAccountDetails: true,
+        ),
+      ),
+    );
+
+    expect(find.text('Payable details'), findsOneWidget);
+    expect(find.text('Supplier invoice'), findsOneWidget);
+    expect(find.text('Amount left to pay'), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
   });
 }
 

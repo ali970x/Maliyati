@@ -81,18 +81,16 @@ void _openDashboardTransaction(
   FinancialTransaction transaction, {
   bool startEditing = false,
 }) {
-  final route = (transaction.isCredit || transaction.isDebt) && !startEditing
+  final route = transaction.isCredit || transaction.isDebt
       ? SettlementWorkspaceScreen(
           controller: controller,
           transaction: transaction,
+          showAccountDetails: startEditing,
         )
       : TransactionDetailScreen(
           controller: controller,
           transaction: transaction,
           startEditing: startEditing,
-          openSettlement:
-              (transaction.isDebt || transaction.isCredit) &&
-              !transaction.isSettled,
         );
   Navigator.of(context).push(MaterialPageRoute(builder: (_) => route));
 }

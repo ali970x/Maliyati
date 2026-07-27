@@ -1033,6 +1033,34 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> registerCategoryForTransaction(
+    FinancialTransaction transaction,
+  ) async {
+    final name = transaction.category.trim();
+    final type = transaction.type;
+    if (name.isEmpty ||
+        name.toLowerCase() == 'uncategorized' ||
+        type == TransactionType.unknown) {
+      return;
+    }
+    final index = _categoryRules.indexWhere(
+      (rule) => rule.name.trim().toLowerCase() == name.toLowerCase(),
+    );
+    if (index >= 0 && _categoryRules[index].statuses.contains(type)) {
+      return;
+    }
+    final updated = [..._categoryRules];
+    if (index >= 0) {
+      updated[index] = CategoryRule(
+        name: _categoryRules[index].name,
+        statuses: {..._categoryRules[index].statuses, type},
+      );
+    } else {
+      updated.add(CategoryRule(name: name, statuses: {type}));
+    }
+    await saveCategoryRules(updated);
+  }
+
   String _categoryRulesStorageKey() {
     final uid = _user?.uid.trim() ?? '';
     return uid.isEmpty
@@ -1422,6 +1450,7 @@ class DashboardController extends ChangeNotifier {
         } else {
           await addTransaction(transaction);
         }
+        await registerCategoryForTransaction(transaction);
       case SmartTransactionActionType.edit:
         final updated = action.transaction;
         if (updated == null) {
@@ -1439,6 +1468,7 @@ class DashboardController extends ChangeNotifier {
           current,
           updated.copyWith(id: current.id, source: TransactionSource.script),
         );
+        await registerCategoryForTransaction(updated);
       case SmartTransactionActionType.delete:
         final current = _findSmartTarget(action);
         if (current == null) {

@@ -342,10 +342,12 @@ class SettlementWorkspaceScreen extends StatefulWidget {
     super.key,
     required this.controller,
     required this.transaction,
+    this.showAccountDetails = false,
   });
 
   final DashboardController controller;
   final FinancialTransaction transaction;
+  final bool showAccountDetails;
 
   @override
   State<SettlementWorkspaceScreen> createState() =>
@@ -481,11 +483,35 @@ class _SettlementWorkspaceScreenState extends State<SettlementWorkspaceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isDebt ? 'Payable payment' : 'Receivable collection'),
+        title: Text(
+          widget.showAccountDetails
+              ? (_isDebt ? 'Payable details' : 'Receivable details')
+              : (_isDebt ? 'Payable payment' : 'Receivable collection'),
+        ),
+        actions: [
+          if (widget.showAccountDetails)
+            IconButton(
+              tooltip: 'Edit transaction',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => TransactionDetailScreen(
+                    controller: widget.controller,
+                    transaction: _transaction,
+                    startEditing: true,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
+          if (widget.showAccountDetails) ...[
+            _SettlementAccountHeader(transaction: _transaction),
+            const SizedBox(height: 12),
+          ],
           _SettlementProgressCard(
             transaction: _transaction,
             history: _history,
@@ -517,6 +543,76 @@ class _SettlementWorkspaceScreenState extends State<SettlementWorkspaceScreen> {
             history: _history,
             onShowAll: _showAllSettlements,
             onShare: _shareSettlements,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettlementAccountHeader extends StatelessWidget {
+  const _SettlementAccountHeader({required this.transaction});
+
+  final FinancialTransaction transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDebt = transaction.isDebt;
+    final accent = isDebt ? const Color(0xFF7C3AED) : const Color(0xFFD97706);
+    final title = transaction.description.trim().isEmpty
+        ? (isDebt ? 'Payable account' : 'Receivable account')
+        : transaction.description.trim();
+    final source = transaction.isServiceSource
+        ? 'Service'
+        : transaction.walletId;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: .22)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              isDebt ? Icons.payments_rounded : Icons.request_quote_rounded,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$source · ${FinanceFormatters.shortDate(transaction.date)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            FinanceFormatters.amount(transaction),
+            style: TextStyle(color: accent, fontWeight: FontWeight.w900),
           ),
         ],
       ),

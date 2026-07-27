@@ -291,11 +291,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            (transaction.isCredit || transaction.isDebt) && !startEditing
+        builder: (_) => transaction.isCredit || transaction.isDebt
             ? SettlementWorkspaceScreen(
                 controller: widget.controller,
                 transaction: transaction,
+                showAccountDetails: startEditing,
               )
             : TransactionDetailScreen(
                 controller: widget.controller,

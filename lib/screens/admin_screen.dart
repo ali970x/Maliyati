@@ -206,6 +206,29 @@ class _AdminScreenState extends State<AdminScreen> {
     if (id == null || id.isEmpty) {
       return;
     }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete transaction?'),
+        content: Text(
+          'Delete "${transaction.description.isEmpty ? transaction.category : transaction.description}" permanently?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.delete_rounded),
+            label: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
     await widget.controller.deleteAdminTransaction(uid: uid, transactionId: id);
   }
 }

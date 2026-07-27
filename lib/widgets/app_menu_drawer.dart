@@ -148,6 +148,17 @@ class AppMenuScreen extends StatelessWidget {
             onTap: () =>
                 _open(context, LanguagePickerScreen(controller: controller)),
           ),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.delete_forever_outlined,
+            color: theme.colorScheme.error,
+            title: t('Reset account data', 'تصفير بيانات الحساب'),
+            subtitle: t(
+              'Permanently delete transactions and wallet history',
+              'حذف العمليات وسجل المحافظ نهائياً',
+            ),
+            onTap: () => _confirmResetAccount(context),
+          ),
           const SizedBox(height: 22),
           _SettingsSectionLabel(title: t('Application', 'التطبيق')),
           _SettingsCard(
@@ -177,20 +188,6 @@ class AppMenuScreen extends StatelessWidget {
               'الإصدار ${AppConfig.fullVersion}',
             ),
             onTap: () => _open(context, const AboutApplicationScreen()),
-          ),
-          const SizedBox(height: 22),
-          _SettingsSectionLabel(
-            title: t('Danger zone', 'منطقة حساسة'),
-            color: theme.colorScheme.error,
-          ),
-          _SettingsCard(
-            icon: Icons.delete_forever_outlined,
-            title: t('Reset account data', 'تصفير بيانات الحساب'),
-            subtitle: t(
-              'Permanently delete transactions and wallet history',
-              'حذف العمليات وسجل المحافظ نهائياً',
-            ),
-            onTap: () => _confirmResetAccount(context),
           ),
           const SizedBox(height: 18),
           OutlinedButton.icon(
@@ -1367,6 +1364,7 @@ class _SettingsCard extends StatelessWidget {
     this.onLongPress,
     this.showChevron = true,
     this.avatar = false,
+    this.color,
   });
   final IconData icon;
   final String title;
@@ -1376,6 +1374,7 @@ class _SettingsCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final bool showChevron;
   final bool avatar;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -1399,10 +1398,12 @@ class _SettingsCard extends StatelessWidget {
                 width: avatar ? 44 : 40,
                 height: avatar ? 44 : 40,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest,
+                  color:
+                      color?.withValues(alpha: 0.1) ??
+                      theme.colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(avatar ? 22 : 12),
                 ),
-                child: Icon(icon, color: theme.colorScheme.onSurface),
+                child: Icon(icon, color: color ?? theme.colorScheme.onSurface),
               ),
               const SizedBox(width: 13),
               Expanded(
@@ -1412,7 +1413,7 @@ class _SettingsCard extends StatelessWidget {
                     Text(
                       title,
                       style: TextStyle(
-                        color: theme.colorScheme.onSurface,
+                        color: color ?? theme.colorScheme.onSurface,
                         fontWeight: FontWeight.w800,
                       ),
                     ),

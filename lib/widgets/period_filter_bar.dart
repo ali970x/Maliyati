@@ -158,13 +158,16 @@ class PeriodFilterBar extends StatelessWidget {
 
     final selected = await showModalBottomSheet<int>(
       context: context,
+      isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (sheetContext) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * .72,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),

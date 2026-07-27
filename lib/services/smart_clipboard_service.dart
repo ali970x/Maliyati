@@ -30,6 +30,13 @@ class SmartClipboardService {
     required FutureOr<void> Function(String script) onOpenSmartInput,
   }) async {
     _onOpenSmartInput = onOpenSmartInput;
+    if (isSupported) {
+      _channel.setMethodCallHandler((call) async {
+        if (call.method == 'bubbleTapped') {
+          await _openClipboardAfterBubbleTap(force: true);
+        }
+      });
+    }
     if (await isEnabled) {
       await _showBubble();
     }
@@ -70,6 +77,9 @@ class SmartClipboardService {
   Future<void> dispose() async {
     _tapWatcher?.cancel();
     _tapWatcher = null;
+    if (isSupported) {
+      _channel.setMethodCallHandler(null);
+    }
   }
 
   void _startTapWatcher() {
@@ -94,14 +104,22 @@ class SmartClipboardService {
     }
   }
 
-  Future<void> _openClipboardAfterBubbleTap() async {
+  Future<void> _openClipboardAfterBubbleTap({bool force = false}) async {
     final prefs = await _prefs;
-    if (prefs.getBool(bubbleTapKey) != true) {
+    // Android writes this preference outside the shared_preferences plugin.
+    // Reloading is required when the activity is already alive.
+    await prefs.reload();
+    if (!force && prefs.getBool(bubbleTapKey) != true) {
+      return;
+    }
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      // Keep the flag so the resumed lifecycle/watch timer can retry after
+      // Android grants foreground clipboard access.
       return;
     }
     await prefs.remove(bubbleTapKey);
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    final text = data?.text?.trim() ?? '';
     await _onOpenSmartInput?.call(text);
   }
 }
