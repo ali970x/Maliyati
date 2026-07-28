@@ -1,4 +1,5 @@
 import '../models/transaction.dart';
+import 'category_taxonomy.dart';
 import 'label_normalizer.dart';
 
 class AccountingRules {
@@ -9,7 +10,10 @@ class AccountingRules {
 
   static FinancialTransaction normalize(FinancialTransaction transaction) {
     final raw = Map<String, String>.from(transaction.raw);
-    final category = LabelNormalizer.category(transaction.category);
+    final normalizedCategory = LabelNormalizer.category(transaction.category);
+    final category = CategoryTaxonomy.forTransaction(
+      transaction.copyWith(category: normalizedCategory),
+    );
     final paymentMethod = LabelNormalizer.wallet(transaction.paymentMethod);
     final walletId = LabelNormalizer.wallet(transaction.walletId);
     final destinationWalletId = LabelNormalizer.wallet(

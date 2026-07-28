@@ -991,6 +991,7 @@ class CategorySettingsScreen extends StatefulWidget {
 
 class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
   late List<_EditableCategoryRule> _rules;
+  bool _cleaning = false;
 
   static const _statusOptions = [
     TransactionType.expense,
@@ -1057,6 +1058,59 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
     });
   }
 
+  Future<void> _standardizeExistingTransactions() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Organize all categories?'),
+        content: const Text(
+          'This renames and groups existing transaction categories in clear English. Titles, amounts, dates, wallets, notes, and payment history will not change.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Organize'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _cleaning = true);
+    try {
+      final result = await widget.controller.standardizeTransactionCategories();
+      if (!mounted) return;
+      for (final rule in _rules) {
+        rule.controller.dispose();
+      }
+      _rules = widget.controller.categoryRules
+          .map(
+            (rule) => _EditableCategoryRule(
+              controller: TextEditingController(text: rule.name),
+              statuses: {...rule.statuses},
+            ),
+          )
+          .toList();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${result.updated} of ${result.scanned} transactions organized into ${result.categories} clear categories.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not organize categories: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _cleaning = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => _PlainSettingsScaffold(
     title: 'Categories',
@@ -1066,6 +1120,17 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
         const Text(
           'Choose where every category appears. Expense categories will show only when you add an Expense, income categories only with Income, and so on.',
           style: TextStyle(color: Color(0xFF77717D)),
+        ),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: _cleaning ? null : _standardizeExistingTransactions,
+          icon: _cleaning
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.auto_fix_high_rounded),
+          label: const Text('Organize existing categories'),
         ),
         const SizedBox(height: 14),
         FilledButton.icon(

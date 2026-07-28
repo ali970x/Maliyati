@@ -8,6 +8,7 @@ import '../config/app_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/transaction.dart';
 import '../services/accounting_rules.dart';
+import '../services/category_taxonomy.dart';
 import '../services/firebase_finance_service.dart';
 import '../services/firebase_bootstrap.dart';
 import '../services/gemini_transaction_parser.dart';
@@ -114,6 +115,18 @@ class SmartActionExecutionSummary {
   int get succeeded => added + edited + deleted + settled;
 
   bool get hasFailures => failures.isNotEmpty;
+}
+
+class CategoryCleanupResult {
+  const CategoryCleanupResult({
+    required this.scanned,
+    required this.updated,
+    required this.categories,
+  });
+
+  final int scanned;
+  final int updated;
+  final int categories;
 }
 
 extension TimeFilterLabel on TimeFilter {
@@ -669,9 +682,14 @@ class DashboardController extends ChangeNotifier {
         return;
       }
       _user = await _firebase.loadCurrentUser() ?? basicUser;
-      _transactions = _cleanTransactionLabels(
-        await _firebase.fetchTransactions(),
-      );
+      final fetchedTransactions = await _firebase.fetchTransactions();
+      _transactions = _cleanTransactionLabels(fetchedTransactions);
+      try {
+        await _persistCategoryCleanup(fetchedTransactions);
+      } catch (_) {
+        // Category cleanup must never hide otherwise valid account data.
+        await saveCategoryRules(_standardCategoryRules(_transactions));
+      }
       if (isAdmin) {
         await refreshAdminUsers(silent: true);
       }
@@ -1039,6 +1057,84 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<CategoryCleanupResult> standardizeTransactionCategories() async {
+    final original = [..._transactions];
+    _transactions = _cleanTransactionLabels(original);
+    final updated = await _persistCategoryCleanup(original);
+    _lastUpdated = DateTime.now();
+    notifyListeners();
+    return CategoryCleanupResult(
+      scanned: original.length,
+      updated: updated,
+      categories: _categoryRules.length,
+    );
+  }
+
+  Future<int> _persistCategoryCleanup(
+    List<FinancialTransaction> original,
+  ) async {
+    final cleanedById = {
+      for (final transaction in _transactions)
+        if ((transaction.id?.trim() ?? '').isNotEmpty)
+          transaction.id!.trim(): transaction,
+    };
+    final changed = <FinancialTransaction>[];
+    for (final transaction in original) {
+      final id = transaction.id?.trim() ?? '';
+      final cleaned = cleanedById[id];
+      if (id.isEmpty || cleaned == null) {
+        continue;
+      }
+      final oldCategory = transaction.category.trim();
+      final oldRawCategory =
+          (transaction.raw['category'] ?? transaction.raw['Category'] ?? '')
+              .trim();
+      if (oldCategory != cleaned.category ||
+          (oldRawCategory.isNotEmpty && oldRawCategory != cleaned.category)) {
+        changed.add(cleaned);
+      }
+    }
+    if (changed.isNotEmpty &&
+        _isFirebaseConfigured &&
+        _firebase.currentUser != null) {
+      await _firebase.upsertTransactions(changed);
+    }
+    await saveCategoryRules(_standardCategoryRules(_transactions));
+    return changed.length;
+  }
+
+  List<CategoryRule> _standardCategoryRules(
+    List<FinancialTransaction> transactions,
+  ) {
+    final rules = <String, CategoryRule>{};
+
+    void add(String name, TransactionType type) {
+      final key = name.toLowerCase();
+      final current = rules[key];
+      rules[key] = CategoryRule(
+        name: name,
+        statuses: {...?current?.statuses, type},
+      );
+    }
+
+    for (final name in CategoryTaxonomy.expenseCategories) {
+      add(name, TransactionType.expense);
+    }
+    for (final name in CategoryTaxonomy.incomeCategories) {
+      add(name, TransactionType.income);
+    }
+    add(CategoryTaxonomy.receivableCategory, TransactionType.reserveable);
+    add(CategoryTaxonomy.payableCategory, TransactionType.debt);
+    add(CategoryTaxonomy.transferCategory, TransactionType.transfer);
+    for (final transaction in transactions) {
+      if (transaction.type != TransactionType.unknown &&
+          transaction.category.trim().isNotEmpty) {
+        add(transaction.category.trim(), transaction.type);
+      }
+    }
+    return rules.values.toList(growable: false);
+  }
+
   Future<void> registerCategoryForTransaction(
     FinancialTransaction transaction,
   ) async {
@@ -1109,34 +1205,7 @@ class DashboardController extends ChangeNotifier {
         }
       } catch (_) {}
     }
-    return const [
-      CategoryRule(name: 'Home expenses', statuses: {TransactionType.expense}),
-      CategoryRule(name: 'Transportation', statuses: {TransactionType.expense}),
-      CategoryRule(name: 'Hospitality', statuses: {TransactionType.expense}),
-      CategoryRule(name: 'Debt payments', statuses: {TransactionType.expense}),
-      CategoryRule(name: 'Subscriptions', statuses: {TransactionType.expense}),
-      CategoryRule(
-        name: 'Small purchases',
-        statuses: {TransactionType.expense},
-      ),
-      CategoryRule(name: 'Other expense', statuses: {TransactionType.expense}),
-      CategoryRule(name: 'Sales income', statuses: {TransactionType.income}),
-      CategoryRule(name: 'Service income', statuses: {TransactionType.income}),
-      CategoryRule(name: 'Other income', statuses: {TransactionType.income}),
-      CategoryRule(name: 'Payables', statuses: {TransactionType.debt}),
-      CategoryRule(name: 'Debt', statuses: {TransactionType.debt}),
-      CategoryRule(name: 'Loan', statuses: {TransactionType.debt}),
-      CategoryRule(name: 'Other payable', statuses: {TransactionType.debt}),
-      CategoryRule(name: 'Receivable', statuses: {TransactionType.reserveable}),
-      CategoryRule(
-        name: 'Friend payment',
-        statuses: {TransactionType.reserveable},
-      ),
-      CategoryRule(
-        name: 'Wallet transfer',
-        statuses: {TransactionType.transfer},
-      ),
-    ];
+    return _standardCategoryRules(const []);
   }
 
   Future<void> refreshAdminUsers({bool silent = false}) async {
