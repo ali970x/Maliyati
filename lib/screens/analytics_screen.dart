@@ -818,6 +818,9 @@ class _CategoryRankingCard extends StatelessWidget {
                       transaction: transaction,
                       exchangeRate: controller.exchangeRate,
                       strings: strings,
+                      categoryColor: controller.categoryColorFor(
+                        transaction.category,
+                      ),
                       margin: const EdgeInsets.symmetric(vertical: 6),
                       onTap: () {
                         Navigator.of(sheetContext).pop();

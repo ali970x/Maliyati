@@ -43,20 +43,65 @@ enum AppThemeStyle { cyberGrid }
 enum AppLockMethod { biometric, pin }
 
 class CategoryRule {
-  const CategoryRule({required this.name, required this.statuses});
+  const CategoryRule({
+    required this.name,
+    required this.statuses,
+    this.colorValue,
+  });
+
+  static const colorPalette = <int>[
+    0xFF0F766E,
+    0xFF0891B2,
+    0xFF2563EB,
+    0xFF4F46E5,
+    0xFF7C3AED,
+    0xFF9333EA,
+    0xFFC026D3,
+    0xFFDB2777,
+    0xFFE11D48,
+    0xFFDC2626,
+    0xFFEA580C,
+    0xFFD97706,
+    0xFFCA8A04,
+    0xFF65A30D,
+    0xFF16A34A,
+    0xFF059669,
+    0xFF0D9488,
+    0xFF0284C7,
+    0xFF475569,
+    0xFF334155,
+    0xFF6D4C41,
+    0xFF9F1239,
+    0xFF5B21B6,
+    0xFF0369A1,
+  ];
 
   final String name;
   final Set<TransactionType> statuses;
+  final int? colorValue;
+
+  int get effectiveColorValue {
+    if (colorValue case final value?) return value;
+    final seed = name.toLowerCase().codeUnits.fold<int>(
+      0,
+      (total, value) => total + value,
+    );
+    return colorPalette[seed % colorPalette.length];
+  }
+
+  Color get color => Color(effectiveColorValue);
 
   bool appliesTo(TransactionType type) => statuses.contains(type);
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'statuses': statuses.map((status) => status.name).toList(),
+    'color': effectiveColorValue,
   };
 
   static CategoryRule fromJson(Map<String, dynamic> json) {
     final rawStatuses = json['statuses'];
+    final rawColor = json['color'];
     return CategoryRule(
       name: '${json['name'] ?? ''}'.trim(),
       statuses: rawStatuses is List
@@ -65,6 +110,9 @@ class CategoryRule {
                 .where((value) => value != TransactionType.unknown)
                 .toSet()
           : <TransactionType>{},
+      colorValue: rawColor is num
+          ? rawColor.toInt()
+          : int.tryParse('$rawColor'),
     );
   }
 
@@ -417,6 +465,16 @@ class DashboardController extends ChangeNotifier {
 
   List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
 
+  Color categoryColorFor(String category, {Color? fallback}) {
+    final normalized = category.trim().toLowerCase();
+    for (final rule in _categoryRules) {
+      if (rule.name.trim().toLowerCase() == normalized) {
+        return rule.color;
+      }
+    }
+    return fallback ?? const Color(0xFF475569);
+  }
+
   List<String> categoryOptionsFor(TransactionType type) {
     final values = {
       for (final rule in _categoryRules)
@@ -626,10 +684,7 @@ class DashboardController extends ChangeNotifier {
         }
       }
       _loadAutoBackupState(prefs);
-      _categoryRules = _loadCategoryRules(
-        prefs,
-        key: _categoryRulesStorageKey(),
-      );
+      await _loadCategorySettings(prefs);
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
       await _runDailyAutoBackupIfDue();
@@ -688,8 +743,8 @@ class DashboardController extends ChangeNotifier {
       try {
         await _persistCategoryCleanup(fetchedTransactions);
       } catch (_) {
-        // Category cleanup must never hide otherwise valid account data.
-        await saveCategoryRules(_standardCategoryRules(_transactions));
+        // Category cleanup must never hide otherwise valid account data or
+        // replace the user's saved category preferences.
       }
       if (isAdmin) {
         await refreshAdminUsers(silent: true);
@@ -894,10 +949,7 @@ class DashboardController extends ChangeNotifier {
       _resetWalletState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
-      _categoryRules = _loadCategoryRules(
-        prefs,
-        key: _categoryRulesStorageKey(),
-      );
+      await _loadCategorySettings(prefs);
       _loadAutoBackupState(prefs);
       // Sheet settings are optional. They must not block a successful login.
       try {
@@ -979,10 +1031,7 @@ class DashboardController extends ChangeNotifier {
       _resetWalletState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
-      _categoryRules = _loadCategoryRules(
-        prefs,
-        key: _categoryRulesStorageKey(),
-      );
+      await _loadCategorySettings(prefs);
       _loadAutoBackupState(prefs);
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
@@ -1046,6 +1095,7 @@ class DashboardController extends ChangeNotifier {
       cleaned[name.toLowerCase()] = CategoryRule(
         name: name,
         statuses: {...rule.statuses}..remove(TransactionType.unknown),
+        colorValue: rule.effectiveColorValue,
       );
     }
     _categoryRules = cleaned.values.toList()
@@ -1055,6 +1105,11 @@ class DashboardController extends ChangeNotifier {
       _categoryRulesStorageKey(),
       jsonEncode(_categoryRules.map((rule) => rule.toJson()).toList()),
     );
+    if (_isFirebaseConfigured && _firebase.currentUser != null) {
+      await _firebase.saveCategoryRules(
+        _categoryRules.map((rule) => rule.toJson()).toList(growable: false),
+      );
+    }
     notifyListeners();
   }
 
@@ -1062,6 +1117,7 @@ class DashboardController extends ChangeNotifier {
     final original = [..._transactions];
     _transactions = _cleanTransactionLabels(original);
     final updated = await _persistCategoryCleanup(original);
+    await saveCategoryRules(_standardCategoryRules(_transactions));
     _lastUpdated = DateTime.now();
     notifyListeners();
     return CategoryCleanupResult(
@@ -1100,7 +1156,6 @@ class DashboardController extends ChangeNotifier {
         _firebase.currentUser != null) {
       await _firebase.upsertTransactions(changed);
     }
-    await saveCategoryRules(_standardCategoryRules(_transactions));
     return changed.length;
   }
 
@@ -1115,6 +1170,7 @@ class DashboardController extends ChangeNotifier {
       rules[key] = CategoryRule(
         name: name,
         statuses: {...?current?.statuses, type},
+        colorValue: current?.effectiveColorValue,
       );
     }
 
@@ -1157,6 +1213,7 @@ class DashboardController extends ChangeNotifier {
       updated[index] = CategoryRule(
         name: _categoryRules[index].name,
         statuses: {..._categoryRules[index].statuses, type},
+        colorValue: _categoryRules[index].effectiveColorValue,
       );
     } else {
       updated.add(CategoryRule(name: name, statuses: {type}));
@@ -1207,6 +1264,37 @@ class DashboardController extends ChangeNotifier {
       } catch (_) {}
     }
     return _standardCategoryRules(const []);
+  }
+
+  Future<void> _loadCategorySettings(SharedPreferences prefs) async {
+    final storageKey = _categoryRulesStorageKey();
+    _categoryRules = _loadCategoryRules(prefs, key: storageKey);
+    if (!_isFirebaseConfigured || _firebase.currentUser == null) {
+      return;
+    }
+    try {
+      final remote = await _firebase.fetchCategoryRules();
+      if (remote == null) {
+        await _firebase.saveCategoryRules(
+          _categoryRules.map((rule) => rule.toJson()).toList(growable: false),
+        );
+        return;
+      }
+      final decoded = remote
+          .map(CategoryRule.fromJson)
+          .where((rule) => rule.name.isNotEmpty && rule.statuses.isNotEmpty)
+          .toList(growable: false);
+      if (decoded.isEmpty) {
+        return;
+      }
+      _categoryRules = decoded;
+      await prefs.setString(
+        storageKey,
+        jsonEncode(_categoryRules.map((rule) => rule.toJson()).toList()),
+      );
+    } catch (_) {
+      // The account keeps its local category preferences while offline.
+    }
   }
 
   Future<void> refreshAdminUsers({bool silent = false}) async {

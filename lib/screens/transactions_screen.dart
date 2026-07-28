@@ -169,6 +169,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               transaction: transaction,
                               exchangeRate: controller.exchangeRate,
                               strings: controller.strings,
+                              categoryColor: controller.categoryColorFor(
+                                transaction.category,
+                              ),
                               margin: isWide
                                   ? const EdgeInsets.symmetric(vertical: 6)
                                   : const EdgeInsets.symmetric(
@@ -481,6 +484,9 @@ class _ArchivedTransactionsSheet extends StatelessWidget {
                                 transaction: transaction,
                                 exchangeRate: controller.exchangeRate,
                                 strings: controller.strings,
+                                categoryColor: controller.categoryColorFor(
+                                  transaction.category,
+                                ),
                               ),
                             ),
                             IconButton(

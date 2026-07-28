@@ -638,6 +638,29 @@ class FirebaseFinanceService {
     }, SetOptions(merge: true));
   }
 
+  Future<List<Map<String, dynamic>>?> fetchCategoryRules() async {
+    final user = _requireUser();
+    final snapshot = await _settings(user.uid).get();
+    final raw = snapshot.data()?['categoryRules'];
+    if (raw is! List) {
+      return null;
+    }
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  Future<void> saveCategoryRules(
+    List<Map<String, dynamic>> categoryRules,
+  ) async {
+    final user = _requireUser();
+    await _settings(user.uid).set({
+      'categoryRules': categoryRules,
+      'categoryRulesUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<WalletSyncSettings?> fetchWalletSettings() async {
     final user = _requireUser();
     final snapshot = await _settings(user.uid).get();

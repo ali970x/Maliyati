@@ -991,7 +991,6 @@ class CategorySettingsScreen extends StatefulWidget {
 
 class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
   late List<_EditableCategoryRule> _rules;
-  bool _cleaning = false;
 
   static const _statusOptions = [
     TransactionType.expense,
@@ -1009,6 +1008,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
           (rule) => _EditableCategoryRule(
             controller: TextEditingController(text: rule.name),
             statuses: {...rule.statuses},
+            colorValue: rule.effectiveColorValue,
           ),
         )
         .toList();
@@ -1029,6 +1029,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
             (rule) => CategoryRule(
               name: rule.controller.text,
               statuses: rule.statuses,
+              colorValue: rule.colorValue,
             ),
           )
           .toList(),
@@ -1046,6 +1047,8 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
         _EditableCategoryRule(
           controller: TextEditingController(),
           statuses: {TransactionType.expense},
+          colorValue: CategoryRule
+              .colorPalette[_rules.length % CategoryRule.colorPalette.length],
         ),
       );
     });
@@ -1058,59 +1061,6 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
     });
   }
 
-  Future<void> _standardizeExistingTransactions() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Organize all categories?'),
-        content: const Text(
-          'This renames and groups existing transaction categories in clear English. Titles, amounts, dates, wallets, notes, and payment history will not change.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Organize'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    setState(() => _cleaning = true);
-    try {
-      final result = await widget.controller.standardizeTransactionCategories();
-      if (!mounted) return;
-      for (final rule in _rules) {
-        rule.controller.dispose();
-      }
-      _rules = widget.controller.categoryRules
-          .map(
-            (rule) => _EditableCategoryRule(
-              controller: TextEditingController(text: rule.name),
-              statuses: {...rule.statuses},
-            ),
-          )
-          .toList();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${result.updated} of ${result.scanned} transactions organized into ${result.categories} clear categories.',
-          ),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not organize categories: $error')),
-      );
-    } finally {
-      if (mounted) setState(() => _cleaning = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) => _PlainSettingsScaffold(
     title: 'Categories',
@@ -1120,17 +1070,6 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
         const Text(
           'Choose where every category appears. Expense categories will show only when you add an Expense, income categories only with Income, and so on.',
           style: TextStyle(color: Color(0xFF77717D)),
-        ),
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-          onPressed: _cleaning ? null : _standardizeExistingTransactions,
-          icon: _cleaning
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.auto_fix_high_rounded),
-          label: const Text('Organize existing categories'),
         ),
         const SizedBox(height: 14),
         FilledButton.icon(
@@ -1160,10 +1099,15 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
 }
 
 class _EditableCategoryRule {
-  _EditableCategoryRule({required this.controller, required this.statuses});
+  _EditableCategoryRule({
+    required this.controller,
+    required this.statuses,
+    required this.colorValue,
+  });
 
   final TextEditingController controller;
   final Set<TransactionType> statuses;
+  int colorValue;
 }
 
 class _CategoryRuleEditor extends StatelessWidget {
@@ -1181,12 +1125,13 @@ class _CategoryRuleEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final selectedColor = Color(rule.colorValue);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFFFFFFF),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6E0EC)),
+        border: Border.all(color: selectedColor.withValues(alpha: .45)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1219,6 +1164,13 @@ class _CategoryRuleEditor extends StatelessWidget {
                 FilterChip(
                   label: Text(status.label),
                   selected: rule.statuses.contains(status),
+                  selectedColor: selectedColor.withValues(alpha: .16),
+                  checkmarkColor: selectedColor,
+                  side: BorderSide(
+                    color: rule.statuses.contains(status)
+                        ? selectedColor.withValues(alpha: .6)
+                        : const Color(0xFFE6E0EC),
+                  ),
                   onSelected: (selected) {
                     if (selected) {
                       rule.statuses.add(status);
@@ -1227,6 +1179,61 @@ class _CategoryRuleEditor extends StatelessWidget {
                     }
                     onChanged();
                   },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 9,
+            runSpacing: 9,
+            children: [
+              for (final colorValue in CategoryRule.colorPalette)
+                Semantics(
+                  button: true,
+                  selected: rule.colorValue == colorValue,
+                  label: 'Category color',
+                  child: InkWell(
+                    onTap: () {
+                      rule.colorValue = colorValue;
+                      onChanged();
+                    },
+                    customBorder: const CircleBorder(),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: Color(colorValue),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: rule.colorValue == colorValue
+                              ? const Color(0xFF111827)
+                              : Colors.transparent,
+                          width: 2.5,
+                        ),
+                        boxShadow: rule.colorValue == colorValue
+                            ? [
+                                BoxShadow(
+                                  color: Color(
+                                    colorValue,
+                                  ).withValues(alpha: .28),
+                                  blurRadius: 8,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: rule.colorValue == colorValue
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            )
+                          : null,
+                    ),
+                  ),
                 ),
             ],
           ),

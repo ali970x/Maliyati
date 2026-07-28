@@ -15,6 +15,7 @@ class TransactionCard extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.trailingAction,
+    this.categoryColor,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
   });
 
@@ -24,6 +25,7 @@ class TransactionCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final Widget? trailingAction;
+  final Color? categoryColor;
   final EdgeInsetsGeometry margin;
 
   @override
@@ -43,6 +45,7 @@ class TransactionCard extends StatelessWidget {
               ? const Color(0xFFB45309)
               : const Color(0xFF168A5B))
         : typeColor;
+    final markerColor = categoryColor ?? color;
     final typeIcon = switch (transaction.type) {
       TransactionType.income => Icons.trending_up_rounded,
       TransactionType.expense => Icons.trending_down_rounded,
@@ -76,8 +79,8 @@ class TransactionCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 21,
-                  backgroundColor: color.withValues(alpha: .12),
-                  foregroundColor: color,
+                  backgroundColor: markerColor.withValues(alpha: .12),
+                  foregroundColor: markerColor,
                   child: Icon(icon, size: 21),
                 ),
                 const SizedBox(width: 12),
