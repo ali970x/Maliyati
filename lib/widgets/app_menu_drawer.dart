@@ -1107,7 +1107,7 @@ class _EditableCategoryRule {
 
   final TextEditingController controller;
   final Set<TransactionType> statuses;
-  int colorValue;
+  final int colorValue;
 }
 
 class _CategoryRuleEditor extends StatelessWidget {
@@ -1125,13 +1125,12 @@ class _CategoryRuleEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selectedColor = Color(rule.colorValue);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFFFFFFFF),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: selectedColor.withValues(alpha: .45)),
+        border: Border.all(color: const Color(0xFFE6E0EC)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1164,13 +1163,6 @@ class _CategoryRuleEditor extends StatelessWidget {
                 FilterChip(
                   label: Text(status.label),
                   selected: rule.statuses.contains(status),
-                  selectedColor: selectedColor.withValues(alpha: .16),
-                  checkmarkColor: selectedColor,
-                  side: BorderSide(
-                    color: rule.statuses.contains(status)
-                        ? selectedColor.withValues(alpha: .6)
-                        : const Color(0xFFE6E0EC),
-                  ),
                   onSelected: (selected) {
                     if (selected) {
                       rule.statuses.add(status);
@@ -1179,61 +1171,6 @@ class _CategoryRuleEditor extends StatelessWidget {
                     }
                     onChanged();
                   },
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text('Color', style: TextStyle(fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 9,
-            runSpacing: 9,
-            children: [
-              for (final colorValue in CategoryRule.colorPalette)
-                Semantics(
-                  button: true,
-                  selected: rule.colorValue == colorValue,
-                  label: 'Category color',
-                  child: InkWell(
-                    onTap: () {
-                      rule.colorValue = colorValue;
-                      onChanged();
-                    },
-                    customBorder: const CircleBorder(),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Color(colorValue),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: rule.colorValue == colorValue
-                              ? const Color(0xFF111827)
-                              : Colors.transparent,
-                          width: 2.5,
-                        ),
-                        boxShadow: rule.colorValue == colorValue
-                            ? [
-                                BoxShadow(
-                                  color: Color(
-                                    colorValue,
-                                  ).withValues(alpha: .28),
-                                  blurRadius: 8,
-                                  spreadRadius: 1,
-                                ),
-                              ]
-                            : null,
-                      ),
-                      child: rule.colorValue == colorValue
-                          ? const Icon(
-                              Icons.check_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            )
-                          : null,
-                    ),
-                  ),
                 ),
             ],
           ),
