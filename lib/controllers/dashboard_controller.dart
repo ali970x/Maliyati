@@ -1933,27 +1933,74 @@ class DashboardController extends ChangeNotifier {
   Future<void> updateWalletOpeningBalances({
     required double usd,
     required double lbp,
-  }) async {
-    _walletOpeningUsd = usd < 0 ? 0 : usd;
-    _walletOpeningLbp = lbp < 0 ? 0 : lbp;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
-    await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
-    await _saveWalletSettings();
-    notifyListeners();
-  }
+  }) => setWalletCurrentBalance(isWishMoney: false, usd: usd, lbp: lbp);
 
   Future<void> updateWishWalletOpeningBalances({
     required double usd,
     required double lbp,
+  }) => setWalletCurrentBalance(isWishMoney: true, usd: usd, lbp: lbp);
+
+  /// Sets the live balance of one wallet without deleting or editing any
+  /// transaction. Existing rows become the wallet's historical baseline and
+  /// only transactions created after this point change the entered balance.
+  Future<void> setWalletCurrentBalance({
+    required bool isWishMoney,
+    required double usd,
+    required double lbp,
   }) async {
-    _wishWalletOpeningUsd = usd < 0 ? 0 : usd;
-    _wishWalletOpeningLbp = lbp < 0 ? 0 : lbp;
+    final currentUsd = usd < 0 ? 0.0 : usd;
+    final currentLbp = lbp < 0 ? 0.0 : lbp;
+    final baselineIds = _walletBaselineIds(isWishMoney: isWishMoney);
+    if (isWishMoney) {
+      _wishWalletOpeningUsd = currentUsd;
+      _wishWalletOpeningLbp = currentLbp;
+      _wishWalletBaselineTransactionIds = baselineIds;
+    } else {
+      _walletOpeningUsd = currentUsd;
+      _walletOpeningLbp = currentLbp;
+      _cashWalletBaselineTransactionIds = baselineIds;
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
-    await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
+    await prefs.setDouble(
+      isWishMoney ? _wishWalletOpeningUsdKey : _walletOpeningUsdKey,
+      currentUsd,
+    );
+    await prefs.setDouble(
+      isWishMoney ? _wishWalletOpeningLbpKey : _walletOpeningLbpKey,
+      currentLbp,
+    );
+    await prefs.setStringList(
+      isWishMoney
+          ? _wishWalletBaselineTransactionIdsKey
+          : _cashWalletBaselineTransactionIdsKey,
+      baselineIds.toList(),
+    );
     await _saveWalletSettings();
     notifyListeners();
+  }
+
+  Set<String> _walletBaselineIds({required bool isWishMoney}) {
+    return _transactions
+        .where((transaction) {
+          if (!transaction.affectsWallet) {
+            return false;
+          }
+          final sourceMatches =
+              !LabelNormalizer.isService(transaction.walletId) &&
+              LabelNormalizer.isWishMoney(transaction.walletId) == isWishMoney;
+          final destination = transaction.destinationWalletId;
+          final destinationMatches =
+              transaction.isTransfer &&
+              destination != null &&
+              !LabelNormalizer.isService(destination) &&
+              LabelNormalizer.isWishMoney(destination) == isWishMoney;
+          return sourceMatches || destinationMatches;
+        })
+        .map((transaction) => transaction.id?.trim() ?? '')
+        .where((id) {
+          return id.isNotEmpty;
+        })
+        .toSet();
   }
 
   Future<void> updateWalletComparisonRange({
@@ -2022,50 +2069,12 @@ class DashboardController extends ChangeNotifier {
   Future<void> resetCashWalletTracking({
     required double usd,
     required double lbp,
-  }) async {
-    _walletOpeningUsd = usd < 0 ? 0 : usd;
-    _walletOpeningLbp = lbp < 0 ? 0 : lbp;
-    _cashWalletBaselineTransactionIds = _transactions
-        .where(
-          (transaction) => !LabelNormalizer.isWishMoney(transaction.walletId),
-        )
-        .map((transaction) => transaction.id?.trim() ?? '')
-        .where((id) => id.isNotEmpty)
-        .toSet();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
-    await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
-    await prefs.setStringList(
-      _cashWalletBaselineTransactionIdsKey,
-      _cashWalletBaselineTransactionIds.toList(),
-    );
-    await _saveWalletSettings();
-    notifyListeners();
-  }
+  }) => setWalletCurrentBalance(isWishMoney: false, usd: usd, lbp: lbp);
 
   Future<void> resetWishWalletTracking({
     required double usd,
     required double lbp,
-  }) async {
-    _wishWalletOpeningUsd = usd < 0 ? 0 : usd;
-    _wishWalletOpeningLbp = lbp < 0 ? 0 : lbp;
-    _wishWalletBaselineTransactionIds = _transactions
-        .where(
-          (transaction) => LabelNormalizer.isWishMoney(transaction.walletId),
-        )
-        .map((transaction) => transaction.id?.trim() ?? '')
-        .where((id) => id.isNotEmpty)
-        .toSet();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
-    await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
-    await prefs.setStringList(
-      _wishWalletBaselineTransactionIdsKey,
-      _wishWalletBaselineTransactionIds.toList(),
-    );
-    await _saveWalletSettings();
-    notifyListeners();
-  }
+  }) => setWalletCurrentBalance(isWishMoney: true, usd: usd, lbp: lbp);
 
   /// Clears a single wallet completely. Records assigned to that wallet, plus
   /// transfers targeting it, are deleted from Firebase so its history and

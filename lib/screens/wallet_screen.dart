@@ -34,20 +34,11 @@ class _WalletScreenState extends State<WalletScreen> {
   @override
   void initState() {
     super.initState();
-    _usd = TextEditingController(
-      text: _numberText(
-        _isWish
-            ? widget.controller.wishWalletOpeningUsd
-            : widget.controller.walletOpeningUsd,
-      ),
-    );
-    _lbp = TextEditingController(
-      text: _numberText(
-        _isWish
-            ? widget.controller.wishWalletOpeningLbp
-            : widget.controller.walletOpeningLbp,
-      ),
-    );
+    final currentSummary = _isWish
+        ? widget.controller.walletSummary.wish
+        : widget.controller.walletSummary.cash;
+    _usd = TextEditingController(text: _numberText(currentSummary.balanceUsd));
+    _lbp = TextEditingController(text: _numberText(currentSummary.balanceLbp));
   }
 
   String _numberText(double value) => value == 0 ? '' : value.toString();
@@ -63,22 +54,20 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _save() async {
     setState(() => _saving = true);
-    if (_isWish) {
-      await widget.controller.updateWishWalletOpeningBalances(
-        usd: _number(_usd),
-        lbp: _number(_lbp),
-      );
-    } else {
-      await widget.controller.updateWalletOpeningBalances(
-        usd: _number(_usd),
-        lbp: _number(_lbp),
-      );
-    }
+    await widget.controller.setWalletCurrentBalance(
+      isWishMoney: _isWish,
+      usd: _number(_usd),
+      lbp: _number(_lbp),
+    );
     if (!mounted) return;
     setState(() => _saving = false);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$_title balances saved.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '$_title current balance updated. Transaction history was kept.',
+        ),
+      ),
+    );
   }
 
   Future<void> _reset() async {
@@ -196,14 +185,14 @@ class _WalletScreenState extends State<WalletScreen> {
           _BalanceReadout(summary: summary, accent: _accent),
           const SizedBox(height: 22),
           Text(
-            'Set starting balance',
+            'Set current balance',
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 5),
           Text(
-            'Save sets the opening amount. Clear wallet deletes this wallet history and returns it to zero.',
+            'Enter the amount currently available in each currency. Saving keeps every old transaction and payment log unchanged.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -267,8 +256,8 @@ class _WalletScreenState extends State<WalletScreen> {
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _saving ? null : _save,
-            icon: const Icon(Icons.save_rounded),
-            label: const Text('Save changes'),
+            icon: const Icon(Icons.account_balance_wallet_rounded),
+            label: const Text('Set current balance'),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(

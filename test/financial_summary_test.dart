@@ -368,6 +368,55 @@ void main() {
     expect(wallets.cash.balanceUsd, 90);
     expect(wallets.wish.balanceUsd, 50);
   });
+
+  test(
+    'setting a current wallet balance keeps historical rows without recounting them',
+    () {
+      final oldIncome =
+          _transaction(
+            DateTime(2026, 7, 1),
+            TransactionType.income,
+            100,
+          ).copyWith(
+            id: 'old-income',
+            paymentMethod: 'My Wallet',
+            raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '1'},
+          );
+      final oldExpense =
+          _transaction(
+            DateTime(2026, 7, 2),
+            TransactionType.expense,
+            25,
+          ).copyWith(
+            id: 'old-expense',
+            paymentMethod: 'My Wallet',
+            raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '-1'},
+          );
+      final newIncome =
+          _transaction(
+            DateTime(2026, 7, 3),
+            TransactionType.income,
+            10,
+          ).copyWith(
+            id: 'new-income',
+            paymentMethod: 'My Wallet',
+            raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '1'},
+          );
+
+      final wallets = WalletSummary.fromTransactions(
+        [oldIncome, oldExpense, newIncome],
+        cashOpeningUsd: 40,
+        cashOpeningLbp: 0,
+        wishOpeningUsd: 0,
+        wishOpeningLbp: 0,
+        ignoredCashTransactionIds: const {'old-income', 'old-expense'},
+        ignoredWishTransactionIds: const {},
+      );
+
+      expect(wallets.cash.balanceUsd, 50);
+      expect([oldIncome, oldExpense, newIncome], hasLength(3));
+    },
+  );
 }
 
 FinancialTransaction _transaction(
