@@ -42,8 +42,11 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   String _numberText(double value) => value == 0 ? '' : value.toString();
-  double _number(TextEditingController controller) =>
-      double.tryParse(controller.text.trim().replaceAll(',', '')) ?? 0;
+  double? _number(TextEditingController controller) {
+    final value = controller.text.trim().replaceAll(',', '');
+    if (value.isEmpty) return 0;
+    return double.tryParse(value);
+  }
 
   @override
   void dispose() {
@@ -53,21 +56,41 @@ class _WalletScreenState extends State<WalletScreen> {
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
-    await widget.controller.setWalletCurrentBalance(
-      isWishMoney: _isWish,
-      usd: _number(_usd),
-      lbp: _number(_lbp),
-    );
-    if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$_title current balance updated. Transaction history was kept.',
+    final usd = _number(_usd);
+    final lbp = _number(_lbp);
+    if (usd == null || lbp == null || usd < 0 || lbp < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter valid positive USD and LBP balances.'),
         ),
-      ),
-    );
+      );
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    try {
+      await widget.controller.setWalletCurrentBalance(
+        isWishMoney: _isWish,
+        usd: usd,
+        lbp: lbp,
+      );
+      if (!mounted) return;
+      final summary = _isWish
+          ? widget.controller.walletSummary.wish
+          : widget.controller.walletSummary.cash;
+      _usd.text = _numberText(summary.balanceUsd);
+      _lbp.text = _numberText(summary.balanceLbp);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$_title current balance saved and verified.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save $_title balance: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _reset() async {

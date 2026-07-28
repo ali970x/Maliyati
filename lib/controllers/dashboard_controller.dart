@@ -2017,9 +2017,27 @@ class DashboardController extends ChangeNotifier {
     required double usd,
     required double lbp,
   }) async {
+    if (!_isFirebaseConfigured ||
+        _user == null ||
+        _firebase.currentUser == null) {
+      throw const FirebaseFinanceException(
+        'Sign in before changing a wallet balance.',
+      );
+    }
     final currentUsd = usd < 0 ? 0.0 : usd;
     final currentLbp = lbp < 0 ? 0.0 : lbp;
     final baselineIds = _walletBaselineIds(isWishMoney: isWishMoney);
+    final previousOpeningUsd = isWishMoney
+        ? _wishWalletOpeningUsd
+        : _walletOpeningUsd;
+    final previousOpeningLbp = isWishMoney
+        ? _wishWalletOpeningLbp
+        : _walletOpeningLbp;
+    final previousBaselineIds = {
+      ...(isWishMoney
+          ? _wishWalletBaselineTransactionIds
+          : _cashWalletBaselineTransactionIds),
+    };
     if (isWishMoney) {
       _wishWalletOpeningUsd = currentUsd;
       _wishWalletOpeningLbp = currentLbp;
@@ -2029,22 +2047,60 @@ class DashboardController extends ChangeNotifier {
       _walletOpeningLbp = currentLbp;
       _cashWalletBaselineTransactionIds = baselineIds;
     }
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(
-      isWishMoney ? _wishWalletOpeningUsdKey : _walletOpeningUsdKey,
-      currentUsd,
-    );
-    await prefs.setDouble(
-      isWishMoney ? _wishWalletOpeningLbpKey : _walletOpeningLbpKey,
-      currentLbp,
-    );
-    await prefs.setStringList(
-      isWishMoney
-          ? _wishWalletBaselineTransactionIdsKey
-          : _cashWalletBaselineTransactionIdsKey,
-      baselineIds.toList(),
-    );
-    await _saveWalletSettings();
+    notifyListeners();
+    try {
+      await _saveWalletSettings(rethrowError: true);
+      final verified = await _firebase.fetchWalletSettings();
+      final verifiedUsd = isWishMoney
+          ? verified?.wishOpeningUsd
+          : verified?.cashOpeningUsd;
+      final verifiedLbp = isWishMoney
+          ? verified?.wishOpeningLbp
+          : verified?.cashOpeningLbp;
+      final verifiedIds = {
+        ...?(isWishMoney
+            ? verified?.wishBaselineTransactionIds
+            : verified?.cashBaselineTransactionIds),
+      };
+      final valuesMatch =
+          verified != null &&
+          (verifiedUsd! - currentUsd).abs() < 0.0001 &&
+          (verifiedLbp! - currentLbp).abs() < 0.5 &&
+          verifiedIds.length == baselineIds.length &&
+          verifiedIds.containsAll(baselineIds);
+      if (!valuesMatch) {
+        throw const FirebaseFinanceException(
+          'Firebase did not confirm the new wallet balance. Try again.',
+        );
+      }
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(
+        isWishMoney ? _wishWalletOpeningUsdKey : _walletOpeningUsdKey,
+        currentUsd,
+      );
+      await prefs.setDouble(
+        isWishMoney ? _wishWalletOpeningLbpKey : _walletOpeningLbpKey,
+        currentLbp,
+      );
+      await prefs.setStringList(
+        isWishMoney
+            ? _wishWalletBaselineTransactionIdsKey
+            : _cashWalletBaselineTransactionIdsKey,
+        baselineIds.toList(),
+      );
+    } catch (_) {
+      if (isWishMoney) {
+        _wishWalletOpeningUsd = previousOpeningUsd;
+        _wishWalletOpeningLbp = previousOpeningLbp;
+        _wishWalletBaselineTransactionIds = previousBaselineIds;
+      } else {
+        _walletOpeningUsd = previousOpeningUsd;
+        _walletOpeningLbp = previousOpeningLbp;
+        _cashWalletBaselineTransactionIds = previousBaselineIds;
+      }
+      notifyListeners();
+      rethrow;
+    }
     notifyListeners();
   }
 
@@ -2402,8 +2458,13 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  Future<void> _saveWalletSettings() async {
+  Future<void> _saveWalletSettings({bool rethrowError = false}) async {
     if (!_isFirebaseConfigured || _user == null) {
+      if (rethrowError) {
+        throw const FirebaseFinanceException(
+          'Sign in before saving wallet settings.',
+        );
+      }
       return;
     }
     try {
@@ -2423,6 +2484,7 @@ class DashboardController extends ChangeNotifier {
       );
     } catch (_) {
       // Local settings remain available if Firestore is temporarily offline.
+      if (rethrowError) rethrow;
     }
   }
 
