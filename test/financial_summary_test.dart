@@ -417,6 +417,53 @@ void main() {
       expect([oldIncome, oldExpense, newIncome], hasLength(3));
     },
   );
+
+  test('a balance adjustment reaches the requested current wallet balance', () {
+    final income =
+        _transaction(
+          DateTime(2026, 7, 1),
+          TransactionType.income,
+          100,
+        ).copyWith(
+          id: 'income',
+          paymentMethod: 'My Wallet',
+          raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '1'},
+        );
+    final expense =
+        _transaction(
+          DateTime(2026, 7, 2),
+          TransactionType.expense,
+          30,
+        ).copyWith(
+          id: 'expense',
+          paymentMethod: 'My Wallet',
+          raw: const {'wallet_id': 'My Wallet', 'wallet_direction': '-1'},
+        );
+    final movement = WalletSummary.fromTransactions(
+      [income, expense],
+      cashOpeningUsd: 0,
+      cashOpeningLbp: 0,
+      wishOpeningUsd: 0,
+      wishOpeningLbp: 0,
+      ignoredCashTransactionIds: const {},
+      ignoredWishTransactionIds: const {},
+    ).cash;
+    const requestedBalance = 25.0;
+    final adjustment = requestedBalance - movement.balanceUsd;
+    final adjusted = WalletSummary.fromTransactions(
+      [income, expense],
+      cashOpeningUsd: adjustment,
+      cashOpeningLbp: 0,
+      wishOpeningUsd: 0,
+      wishOpeningLbp: 0,
+      ignoredCashTransactionIds: const {},
+      ignoredWishTransactionIds: const {},
+    );
+
+    expect(movement.balanceUsd, 70);
+    expect(adjustment, -45);
+    expect(adjusted.cash.balanceUsd, requestedBalance);
+  });
 }
 
 FinancialTransaction _transaction(

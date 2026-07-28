@@ -684,6 +684,7 @@ class DashboardController extends ChangeNotifier {
       _user = await _firebase.loadCurrentUser() ?? basicUser;
       final fetchedTransactions = await _firebase.fetchTransactions();
       _transactions = _cleanTransactionLabels(fetchedTransactions);
+      await _migrateLegacyWalletBaselinesIfNeeded();
       try {
         await _persistCategoryCleanup(fetchedTransactions);
       } catch (_) {
@@ -2009,9 +2010,9 @@ class DashboardController extends ChangeNotifier {
     required double lbp,
   }) => setWalletCurrentBalance(isWishMoney: true, usd: usd, lbp: lbp);
 
-  /// Sets the live balance of one wallet without deleting or editing any
-  /// transaction. Existing rows become the wallet's historical baseline and
-  /// only transactions created after this point change the entered balance.
+  /// Sets the live balance without deleting or editing transaction history.
+  /// The persisted opening adjustment offsets all existing wallet movement,
+  /// so later transaction ID changes cannot alter the requested balance.
   Future<void> setWalletCurrentBalance({
     required bool isWishMoney,
     required double usd,
@@ -2026,7 +2027,9 @@ class DashboardController extends ChangeNotifier {
     }
     final currentUsd = usd < 0 ? 0.0 : usd;
     final currentLbp = lbp < 0 ? 0.0 : lbp;
-    final baselineIds = _walletBaselineIds(isWishMoney: isWishMoney);
+    final movement = _walletMovement(isWishMoney: isWishMoney);
+    final balanceAdjustmentUsd = currentUsd - movement.balanceUsd;
+    final balanceAdjustmentLbp = currentLbp - movement.balanceLbp;
     final previousOpeningUsd = isWishMoney
         ? _wishWalletOpeningUsd
         : _walletOpeningUsd;
@@ -2039,13 +2042,13 @@ class DashboardController extends ChangeNotifier {
           : _cashWalletBaselineTransactionIds),
     };
     if (isWishMoney) {
-      _wishWalletOpeningUsd = currentUsd;
-      _wishWalletOpeningLbp = currentLbp;
-      _wishWalletBaselineTransactionIds = baselineIds;
+      _wishWalletOpeningUsd = balanceAdjustmentUsd;
+      _wishWalletOpeningLbp = balanceAdjustmentLbp;
+      _wishWalletBaselineTransactionIds = <String>{};
     } else {
-      _walletOpeningUsd = currentUsd;
-      _walletOpeningLbp = currentLbp;
-      _cashWalletBaselineTransactionIds = baselineIds;
+      _walletOpeningUsd = balanceAdjustmentUsd;
+      _walletOpeningLbp = balanceAdjustmentLbp;
+      _cashWalletBaselineTransactionIds = <String>{};
     }
     notifyListeners();
     try {
@@ -2064,29 +2067,37 @@ class DashboardController extends ChangeNotifier {
       };
       final valuesMatch =
           verified != null &&
-          (verifiedUsd! - currentUsd).abs() < 0.0001 &&
-          (verifiedLbp! - currentLbp).abs() < 0.5 &&
-          verifiedIds.length == baselineIds.length &&
-          verifiedIds.containsAll(baselineIds);
+          (verifiedUsd! - balanceAdjustmentUsd).abs() < 0.0001 &&
+          (verifiedLbp! - balanceAdjustmentLbp).abs() < 0.5 &&
+          verifiedIds.isEmpty;
       if (!valuesMatch) {
         throw const FirebaseFinanceException(
           'Firebase did not confirm the new wallet balance. Try again.',
         );
       }
+      final confirmedBalance = isWishMoney
+          ? walletSummary.wish
+          : walletSummary.cash;
+      if ((confirmedBalance.balanceUsd - currentUsd).abs() >= 0.0001 ||
+          (confirmedBalance.balanceLbp - currentLbp).abs() >= 0.5) {
+        throw const FirebaseFinanceException(
+          'The wallet calculation did not reach the requested balance.',
+        );
+      }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(
         isWishMoney ? _wishWalletOpeningUsdKey : _walletOpeningUsdKey,
-        currentUsd,
+        balanceAdjustmentUsd,
       );
       await prefs.setDouble(
         isWishMoney ? _wishWalletOpeningLbpKey : _walletOpeningLbpKey,
-        currentLbp,
+        balanceAdjustmentLbp,
       );
       await prefs.setStringList(
         isWishMoney
             ? _wishWalletBaselineTransactionIdsKey
             : _cashWalletBaselineTransactionIdsKey,
-        baselineIds.toList(),
+        const [],
       );
     } catch (_) {
       if (isWishMoney) {
@@ -2104,28 +2115,41 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Set<String> _walletBaselineIds({required bool isWishMoney}) {
-    return _transactions
-        .where((transaction) {
-          if (!transaction.affectsWallet) {
-            return false;
-          }
-          final sourceMatches =
-              !LabelNormalizer.isService(transaction.walletId) &&
-              LabelNormalizer.isWishMoney(transaction.walletId) == isWishMoney;
-          final destination = transaction.destinationWalletId;
-          final destinationMatches =
-              transaction.isTransfer &&
-              destination != null &&
-              !LabelNormalizer.isService(destination) &&
-              LabelNormalizer.isWishMoney(destination) == isWishMoney;
-          return sourceMatches || destinationMatches;
-        })
-        .map((transaction) => transaction.id?.trim() ?? '')
-        .where((id) {
-          return id.isNotEmpty;
-        })
-        .toSet();
+  WalletAccountSummary _walletMovement({required bool isWishMoney}) {
+    final movements = WalletSummary.fromTransactions(
+      _transactions,
+      cashOpeningUsd: 0,
+      cashOpeningLbp: 0,
+      wishOpeningUsd: 0,
+      wishOpeningLbp: 0,
+      ignoredCashTransactionIds: const {},
+      ignoredWishTransactionIds: const {},
+    );
+    return isWishMoney ? movements.wish : movements.cash;
+  }
+
+  Future<void> _migrateLegacyWalletBaselinesIfNeeded() async {
+    if (_cashWalletBaselineTransactionIds.isEmpty &&
+        _wishWalletBaselineTransactionIds.isEmpty) {
+      return;
+    }
+    final legacyCurrent = walletSummary;
+    final cashMovement = _walletMovement(isWishMoney: false);
+    final wishMovement = _walletMovement(isWishMoney: true);
+    _walletOpeningUsd = legacyCurrent.cash.balanceUsd - cashMovement.balanceUsd;
+    _walletOpeningLbp = legacyCurrent.cash.balanceLbp - cashMovement.balanceLbp;
+    _wishWalletOpeningUsd =
+        legacyCurrent.wish.balanceUsd - wishMovement.balanceUsd;
+    _wishWalletOpeningLbp =
+        legacyCurrent.wish.balanceLbp - wishMovement.balanceLbp;
+    _cashWalletBaselineTransactionIds = <String>{};
+    _wishWalletBaselineTransactionIds = <String>{};
+    try {
+      await _saveWalletSettings(rethrowError: true);
+    } catch (_) {
+      // The in-memory calculation is still correct for this session. A later
+      // refresh can retry the migration when Firebase is available.
+    }
   }
 
   Future<void> updateWalletComparisonRange({
@@ -2148,47 +2172,23 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Starts wallet tracking from the balances entered now. Existing income and
-  /// expenses remain in the app but no longer affect either wallet.
+  /// Sets both live wallet balances while preserving every historical row.
   Future<void> resetWalletTracking({
     required double cashUsd,
     required double cashLbp,
     required double wishUsd,
     required double wishLbp,
   }) async {
-    _walletOpeningUsd = cashUsd < 0 ? 0 : cashUsd;
-    _walletOpeningLbp = cashLbp < 0 ? 0 : cashLbp;
-    _wishWalletOpeningUsd = wishUsd < 0 ? 0 : wishUsd;
-    _wishWalletOpeningLbp = wishLbp < 0 ? 0 : wishLbp;
-    _cashWalletBaselineTransactionIds = _transactions
-        .where(
-          (transaction) => !LabelNormalizer.isWishMoney(transaction.walletId),
-        )
-        .map((transaction) => transaction.id?.trim() ?? '')
-        .where((id) => id.isNotEmpty)
-        .toSet();
-    _wishWalletBaselineTransactionIds = _transactions
-        .where(
-          (transaction) => LabelNormalizer.isWishMoney(transaction.walletId),
-        )
-        .map((transaction) => transaction.id?.trim() ?? '')
-        .where((id) => id.isNotEmpty)
-        .toSet();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setDouble(_walletOpeningUsdKey, _walletOpeningUsd);
-    await prefs.setDouble(_walletOpeningLbpKey, _walletOpeningLbp);
-    await prefs.setDouble(_wishWalletOpeningUsdKey, _wishWalletOpeningUsd);
-    await prefs.setDouble(_wishWalletOpeningLbpKey, _wishWalletOpeningLbp);
-    await prefs.setStringList(
-      _cashWalletBaselineTransactionIdsKey,
-      _cashWalletBaselineTransactionIds.toList(),
+    await setWalletCurrentBalance(
+      isWishMoney: false,
+      usd: cashUsd,
+      lbp: cashLbp,
     );
-    await prefs.setStringList(
-      _wishWalletBaselineTransactionIdsKey,
-      _wishWalletBaselineTransactionIds.toList(),
+    await setWalletCurrentBalance(
+      isWishMoney: true,
+      usd: wishUsd,
+      lbp: wishLbp,
     );
-    await _saveWalletSettings();
-    notifyListeners();
   }
 
   Future<void> resetCashWalletTracking({
