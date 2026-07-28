@@ -1106,9 +1106,13 @@ class DashboardController extends ChangeNotifier {
       jsonEncode(_categoryRules.map((rule) => rule.toJson()).toList()),
     );
     if (_isFirebaseConfigured && _firebase.currentUser != null) {
-      await _firebase.saveCategoryRules(
-        _categoryRules.map((rule) => rule.toJson()).toList(growable: false),
-      );
+      try {
+        await _firebase.saveCategoryRules(
+          _categoryRules.map((rule) => rule.toJson()).toList(growable: false),
+        );
+      } catch (_) {
+        // A category stays saved on this device and can sync on the next edit.
+      }
     }
     notifyListeners();
   }
@@ -1194,31 +1198,41 @@ class DashboardController extends ChangeNotifier {
 
   Future<void> registerCategoryForTransaction(
     FinancialTransaction transaction,
+  ) => _registerCategoriesForTransactions([transaction]);
+
+  Future<void> _registerCategoriesForTransactions(
+    Iterable<FinancialTransaction> transactions,
   ) async {
-    final name = transaction.category.trim();
-    final type = transaction.type;
-    if (name.isEmpty ||
-        name.toLowerCase() == 'uncategorized' ||
-        type == TransactionType.unknown) {
-      return;
-    }
-    final index = _categoryRules.indexWhere(
-      (rule) => rule.name.trim().toLowerCase() == name.toLowerCase(),
-    );
-    if (index >= 0 && _categoryRules[index].statuses.contains(type)) {
-      return;
-    }
     final updated = [..._categoryRules];
-    if (index >= 0) {
-      updated[index] = CategoryRule(
-        name: _categoryRules[index].name,
-        statuses: {..._categoryRules[index].statuses, type},
-        colorValue: _categoryRules[index].effectiveColorValue,
+    var changed = false;
+    for (final transaction in transactions) {
+      final name = transaction.category.trim();
+      final type = transaction.type;
+      if (name.isEmpty ||
+          name.toLowerCase() == 'uncategorized' ||
+          type == TransactionType.unknown) {
+        continue;
+      }
+      final index = updated.indexWhere(
+        (rule) => rule.name.trim().toLowerCase() == name.toLowerCase(),
       );
-    } else {
-      updated.add(CategoryRule(name: name, statuses: {type}));
+      if (index >= 0 && updated[index].statuses.contains(type)) {
+        continue;
+      }
+      if (index >= 0) {
+        updated[index] = CategoryRule(
+          name: updated[index].name,
+          statuses: {...updated[index].statuses, type},
+          colorValue: updated[index].effectiveColorValue,
+        );
+      } else {
+        updated.add(CategoryRule(name: name, statuses: {type}));
+      }
+      changed = true;
     }
-    await saveCategoryRules(updated);
+    if (changed) {
+      await saveCategoryRules(updated);
+    }
   }
 
   String _categoryRulesStorageKey() {
@@ -1730,6 +1744,7 @@ class DashboardController extends ChangeNotifier {
     _lastUpdated = DateTime.now();
     notifyListeners();
     await _afterTransactionMutation();
+    await _registerCategoriesForTransactions([saved]);
   }
 
   Future<void> addTransactions(List<FinancialTransaction> transactions) async {
@@ -1757,6 +1772,7 @@ class DashboardController extends ChangeNotifier {
     _lastUpdated = DateTime.now();
     notifyListeners();
     await _afterTransactionMutation();
+    await _registerCategoriesForTransactions(ready);
   }
 
   Future<void> addExpenseWithPaymentTiming(
@@ -2607,6 +2623,7 @@ class DashboardController extends ChangeNotifier {
     ];
     notifyListeners();
     await _afterTransactionMutation();
+    await _registerCategoriesForTransactions([updatedWithId]);
   }
 
   void _ensureOutgoingWalletFunds({

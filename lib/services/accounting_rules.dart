@@ -11,9 +11,13 @@ class AccountingRules {
   static FinancialTransaction normalize(FinancialTransaction transaction) {
     final raw = Map<String, String>.from(transaction.raw);
     final normalizedCategory = LabelNormalizer.category(transaction.category);
-    final category = CategoryTaxonomy.forTransaction(
-      transaction.copyWith(category: normalizedCategory),
-    );
+    final preserveCategory =
+        raw['custom_category']?.trim().toLowerCase() == 'true';
+    final category = preserveCategory && normalizedCategory.isNotEmpty
+        ? normalizedCategory
+        : CategoryTaxonomy.forTransaction(
+            transaction.copyWith(category: normalizedCategory),
+          );
     final paymentMethod = LabelNormalizer.wallet(transaction.paymentMethod);
     final walletId = LabelNormalizer.wallet(transaction.walletId);
     final destinationWalletId = LabelNormalizer.wallet(

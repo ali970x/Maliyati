@@ -864,6 +864,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
       ..['Amount (LBP)'] = lbp.toString()
       ..['Category'] =
           _fixedCategoryFor(_selectedType) ?? _categoryController.text.trim()
+      ..['custom_category'] = (!_showsSettlementStatus).toString()
       ..['wallet_id'] = _paymentMethodController.text.trim()
       ..['destination_wallet_id'] = _selectedType == TransactionType.transfer
           ? _destinationWalletController.text.trim()
@@ -2188,6 +2189,7 @@ class _OptionTextField extends StatelessWidget {
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
+        helperText: 'Choose one or type a new category',
         prefixIcon: Icon(icon),
         suffixIcon: PopupMenuButton<String>(
           tooltip: 'Choose $label',

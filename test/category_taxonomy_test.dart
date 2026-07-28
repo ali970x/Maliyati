@@ -81,6 +81,16 @@ void main() {
       'Wallet Transfers',
     );
   });
+
+  test('keeps a category typed explicitly in the manual form', () {
+    final transaction = _transaction(
+      type: TransactionType.expense,
+      category: 'صيانة شاشات',
+      title: 'Samsung screen',
+    ).copyWith(raw: const {'custom_category': 'true'});
+
+    expect(AccountingRules.normalize(transaction).category, 'صيانة شاشات');
+  });
 }
 
 FinancialTransaction _transaction({

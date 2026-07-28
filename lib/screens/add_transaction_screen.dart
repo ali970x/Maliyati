@@ -601,6 +601,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'Amount (\$)': usd.toString(),
       'Amount (LBP)': lbp.toString(),
       'Category': category,
+      'custom_category': (!_isCreditOrDebt).toString(),
       'Payment Method': _selectedWalletId,
       'Notes': _notesController.text.trim(),
       'Created At': _createdAt.toIso8601String(),
@@ -1920,6 +1921,7 @@ class _ListTextField extends StatelessWidget {
       controller: controller,
       decoration: InputDecoration(
         labelText: label,
+        helperText: 'Choose one or type a new category',
         prefixIcon: Icon(icon, color: color),
         filled: true,
         fillColor: Color.alphaBlend(
