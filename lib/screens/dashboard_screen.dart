@@ -91,6 +91,7 @@ Future<void> _openContextualAdd(
   BuildContext context,
   DashboardController controller, {
   TransactionType? type,
+  String? category,
   String? walletId,
   required String title,
 }) async {
@@ -101,6 +102,7 @@ Future<void> _openContextualAdd(
         body: AddTransactionScreen(
           controller: controller,
           initialType: type,
+          initialCategory: category,
           initialWalletId: walletId,
         ),
       ),
@@ -1835,6 +1837,7 @@ class _DashboardMetricFocusScreenState
             _DashboardMetricKind.debit => TransactionType.debt,
             _DashboardMetricKind.transfer => TransactionType.transfer,
           },
+          category: category,
           title: switch (kind) {
             _DashboardMetricKind.income => 'Add income',
             _DashboardMetricKind.expense => 'Add expense',

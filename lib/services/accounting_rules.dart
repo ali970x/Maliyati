@@ -191,6 +191,32 @@ class AccountingRules {
     return transaction.copyWith(raw: raw);
   }
 
+  static FinancialTransaction removeSettlement(
+    FinancialTransaction transaction, {
+    required double amountUsd,
+    required double amountLbp,
+  }) {
+    final settledUsd = (transaction.settledAmountUsd - amountUsd)
+        .clamp(0, double.infinity)
+        .toDouble();
+    final settledLbp = (transaction.settledAmountLbp - amountLbp)
+        .clamp(0, double.infinity)
+        .toDouble();
+    final hasPayments = settledUsd > 0.0001 || settledLbp > 0.5;
+    final isComplete =
+        transaction.amountUsd - settledUsd <= 0.0001 &&
+        transaction.amountLbp - settledLbp <= 0.5;
+    final raw = Map<String, String>.from(transaction.raw)
+      ..['settled_amount_usd'] = settledUsd.toString()
+      ..['settled_amount_lbp'] = settledLbp.toString()
+      ..['settlement_status'] = isComplete
+          ? AccountingSettlementStatus.settled.label
+          : hasPayments
+          ? AccountingSettlementStatus.partial.label
+          : AccountingSettlementStatus.open.label;
+    return transaction.copyWith(raw: raw);
+  }
+
   /// Converts one payment value into the USD/LBP portions of the original
   /// balance. The payment itself remains recorded in the currency selected by
   /// the user; this allocation is only used to reduce the outstanding debt.

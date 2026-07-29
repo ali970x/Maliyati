@@ -67,8 +67,8 @@ class FloatingInputService : Service() {
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
         val density = resources.displayMetrics.density
-        val size = (44 * density).toInt()
-        val edge = (8 * density).toInt()
+        val size = (36 * density).toInt()
+        val edge = (10 * density).toInt()
         val touchSlop = 6 * density
         val bubbleView = createBubbleView(size)
         val params = overlayParams(size, size).apply {
@@ -151,12 +151,11 @@ class FloatingInputService : Service() {
         val density = resources.displayMetrics.density
 
         return FrameLayout(this).apply {
-            alpha = 0.98f
-            elevation = 12f
+            alpha = 0.96f
+            elevation = 7f
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.WHITE)
-                setStroke((1 * density).toInt(), Color.argb(82, 11, 92, 173))
+                setColor(Color.TRANSPARENT)
             }
             outlineProvider = ViewOutlineProvider.BACKGROUND
             clipToOutline = true
@@ -165,12 +164,6 @@ class FloatingInputService : Service() {
                 ImageView(this@FloatingInputService).apply {
                     setImageResource(R.drawable.maliyati_floating_icon)
                     scaleType = ImageView.ScaleType.CENTER_CROP
-                    setPadding(
-                        (2 * density).toInt(),
-                        (2 * density).toInt(),
-                        (2 * density).toInt(),
-                        (2 * density).toInt(),
-                    )
                     contentDescription = "Open Maliyati quick input"
                 },
                 FrameLayout.LayoutParams(

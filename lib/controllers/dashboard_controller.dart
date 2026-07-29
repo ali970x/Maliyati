@@ -2680,9 +2680,22 @@ class DashboardController extends ChangeNotifier {
       throw const FirebaseFinanceException('Firebase is not configured.');
     }
     if (transaction.isSettlementEntry) {
-      throw const FirebaseFinanceException(
-        'Payments are part of the Credit or Debt history and cannot be deleted separately.',
-      );
+      final updatedParent = await _firebase.deleteSettlementEntry(id);
+      final parentId = transaction.linkedTransactionId?.trim() ?? '';
+      _transactions = [
+        for (final item in _transactions)
+          if (item.id?.trim() != id)
+            if (updatedParent != null &&
+                parentId.isNotEmpty &&
+                item.id?.trim() == parentId)
+              updatedParent
+            else
+              item,
+      ];
+      _lastUpdated = DateTime.now();
+      notifyListeners();
+      await _afterTransactionMutation();
+      return;
     }
     final linkedIds = _transactions
         .where((item) => item.linkedTransactionId == id)

@@ -464,6 +464,28 @@ void main() {
     expect(adjustment, -45);
     expect(adjusted.cash.balanceUsd, requestedBalance);
   });
+
+  test('deleting a payment restores the parent outstanding balance', () {
+    final payable =
+        _transaction(DateTime(2026, 7, 1), TransactionType.debt, 100).copyWith(
+          raw: const {
+            'amount_usd': '100',
+            'settled_amount_usd': '37.37',
+            'settled_amount_lbp': '0',
+            'settlement_status': 'partial',
+          },
+        );
+
+    final restored = AccountingRules.removeSettlement(
+      payable,
+      amountUsd: 37.37,
+      amountLbp: 0,
+    );
+
+    expect(restored.settledAmountUsd, 0);
+    expect(restored.remainingAmountUsd, 100);
+    expect(restored.settlementStatus, AccountingSettlementStatus.open);
+  });
 }
 
 FinancialTransaction _transaction(

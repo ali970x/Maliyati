@@ -438,6 +438,58 @@ class FirebaseFinanceService {
     }
   }
 
+  Future<FinancialTransaction?> deleteSettlementEntry(String paymentId) async {
+    final user = _requireUser();
+    final collection = _transactions(user.uid);
+    final paymentReference = collection.doc(paymentId);
+    return _firestore.runTransaction((databaseTransaction) async {
+      final paymentSnapshot = await databaseTransaction.get(paymentReference);
+      final paymentData = paymentSnapshot.data();
+      if (!paymentSnapshot.exists || paymentData == null) {
+        return null;
+      }
+      final payment = _fromFirestore(
+        paymentData,
+        fallbackId: paymentSnapshot.id,
+      );
+      final parentId = payment.linkedTransactionId?.trim() ?? '';
+      if (parentId.isEmpty) {
+        databaseTransaction.delete(paymentReference);
+        return null;
+      }
+      final parentReference = collection.doc(parentId);
+      final parentSnapshot = await databaseTransaction.get(parentReference);
+      final parentData = parentSnapshot.data();
+      if (!parentSnapshot.exists || parentData == null) {
+        databaseTransaction.delete(paymentReference);
+        return null;
+      }
+      final parent = _fromFirestore(parentData, fallbackId: parentSnapshot.id);
+      final allocatedUsd =
+          double.tryParse(
+            payment.raw['settlement_allocation_usd'] ??
+                payment.raw['settlement_amount_usd'] ??
+                '',
+          ) ??
+          payment.amountUsd;
+      final allocatedLbp =
+          double.tryParse(
+            payment.raw['settlement_allocation_lbp'] ??
+                payment.raw['settlement_amount_lbp'] ??
+                '',
+          ) ??
+          payment.amountLbp;
+      final updatedParent = AccountingRules.removeSettlement(
+        parent,
+        amountUsd: allocatedUsd,
+        amountLbp: allocatedLbp,
+      );
+      databaseTransaction.set(parentReference, _toFirestore(updatedParent));
+      databaseTransaction.delete(paymentReference);
+      return updatedParent;
+    });
+  }
+
   Future<SettlementWriteResult> settleTransaction({
     required String transactionId,
     required String walletId,

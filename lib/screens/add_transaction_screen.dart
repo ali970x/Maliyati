@@ -19,6 +19,7 @@ class AddTransactionScreen extends StatefulWidget {
     this.autoRunInitialScript = false,
     this.scriptOnly = false,
     this.initialType,
+    this.initialCategory,
     this.initialWalletId,
   });
 
@@ -27,6 +28,7 @@ class AddTransactionScreen extends StatefulWidget {
   final bool autoRunInitialScript;
   final bool scriptOnly;
   final TransactionType? initialType;
+  final String? initialCategory;
   final String? initialWalletId;
 
   @override
@@ -85,6 +87,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen>
                   _ManualAddForm(
                     controller: widget.controller,
                     initialType: widget.initialType,
+                    initialCategory: widget.initialCategory,
                     initialWalletId: widget.initialWalletId,
                   ),
                   _ScriptAddForm(
@@ -106,11 +109,13 @@ class _ManualAddForm extends StatefulWidget {
   const _ManualAddForm({
     required this.controller,
     this.initialType,
+    this.initialCategory,
     this.initialWalletId,
   });
 
   final DashboardController controller;
   final TransactionType? initialType;
+  final String? initialCategory;
   final String? initialWalletId;
 
   @override
@@ -156,6 +161,8 @@ class _ManualAddFormState extends State<_ManualAddForm> {
     _destinationWalletController.text = 'Whish Money';
     if (_isCreditOrDebt) {
       _categoryController.text = _fixedCategory;
+    } else if (widget.initialCategory?.trim().isNotEmpty == true) {
+      _categoryController.text = widget.initialCategory!.trim();
     }
   }
 
