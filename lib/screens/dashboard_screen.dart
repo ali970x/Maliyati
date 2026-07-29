@@ -1663,6 +1663,20 @@ class _DashboardMetricFocusScreenState
     }
   }
 
+  void _openComparison() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _MetricComparisonScreen(
+          controller: widget.controller,
+          kind: widget.kind,
+          creditMode: widget.creditMode,
+          debtMode: widget.debtMode,
+          category: widget.category,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -1704,18 +1718,11 @@ class _DashboardMetricFocusScreenState
       appBar: AppBar(
         title: Text(category ?? title),
         actions: [
-          if (kind == _DashboardMetricKind.income ||
-              kind == _DashboardMetricKind.expense)
-            IconButton(
-              tooltip: 'Compare periods',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      _IncomeExpenseComparisonScreen(controller: controller),
-                ),
-              ),
-              icon: const Icon(Icons.compare_arrows_rounded),
-            ),
+          IconButton(
+            tooltip: 'Compare periods',
+            onPressed: _openComparison,
+            icon: const Icon(Icons.compare_arrows_rounded),
+          ),
         ],
       ),
       body: Column(
@@ -1735,6 +1742,10 @@ class _DashboardMetricFocusScreenState
               }
             }),
             onSortChanged: (sort) => setState(() => _sort = sort),
+          ),
+          _MetricComparisonEntry(
+            periodLabel: periodFilterLabel(controller),
+            onTap: _openComparison,
           ),
           Expanded(
             child:
@@ -1992,6 +2003,58 @@ class _MetricFocusControls extends StatelessWidget {
   }
 }
 
+class _MetricComparisonEntry extends StatelessWidget {
+  const _MetricComparisonEntry({
+    required this.periodLabel,
+    required this.onTap,
+  });
+
+  final String periodLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      color: colors.surface,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.compare_arrows_rounded, color: colors.primary),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Compare this view',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      '$periodLabel against a previous day, week, month, or selected period',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 String _metricSortLabel(_MetricFocusSort sort) => switch (sort) {
   _MetricFocusSort.newest => 'Newest',
   _MetricFocusSort.oldest => 'Oldest',
@@ -2010,49 +2073,46 @@ IconData _metricSortIcon(_MetricFocusSort sort) => switch (sort) {
   _MetricFocusSort.categoryName => Icons.sort_by_alpha_rounded,
 };
 
-class _IncomeExpenseComparisonScreen extends StatefulWidget {
-  const _IncomeExpenseComparisonScreen({required this.controller});
+class _MetricComparisonScreen extends StatefulWidget {
+  const _MetricComparisonScreen({
+    required this.controller,
+    required this.kind,
+    required this.creditMode,
+    required this.debtMode,
+    this.category,
+  });
 
   final DashboardController controller;
+  final _DashboardMetricKind kind;
+  final _CreditListMode creditMode;
+  final _DebtListMode debtMode;
+  final String? category;
 
   @override
-  State<_IncomeExpenseComparisonScreen> createState() =>
-      _IncomeExpenseComparisonScreenState();
+  State<_MetricComparisonScreen> createState() =>
+      _MetricComparisonScreenState();
 }
 
-class _IncomeExpenseComparisonScreenState
-    extends State<_IncomeExpenseComparisonScreen> {
+class _MetricComparisonScreenState extends State<_MetricComparisonScreen> {
   _ComparisonScope _scope = _ComparisonScope.month;
 
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final windows = _comparisonWindows(controller, _scope);
-    final current = FinancialSummary.fromTransactions(
-      controller.calculationTransactions
-          .where((transaction) => windows.$1.contains(transaction.date))
-          .toList(growable: false),
-      exchangeRate: controller.exchangeRate,
-      window: windows.$1,
-    );
-    final previous = FinancialSummary.fromTransactions(
-      controller.calculationTransactions
-          .where((transaction) => windows.$2.contains(transaction.date))
-          .toList(growable: false),
-      exchangeRate: controller.exchangeRate,
-      window: windows.$2,
-    );
-    final incomeChange = _percentageChange(
-      current.totalIncome,
-      previous.totalIncome,
-    );
-    final expenseChange = _percentageChange(
-      current.totalExpense,
-      previous.totalExpense,
-    );
+    final currentTransactions = _transactionsForWindow(windows.$1);
+    final previousTransactions = _transactionsForWindow(windows.$2);
+    final current = _total(currentTransactions);
+    final previous = _total(previousTransactions);
+    final change = _percentageChange(current, previous);
+    final title = _title(controller);
+    final color = _kindColor(widget.kind);
+    final lowerIsBetter =
+        widget.kind == _DashboardMetricKind.expense ||
+        widget.kind == _DashboardMetricKind.debit;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Income & expense comparison')),
+      appBar: AppBar(title: Text('$title comparison')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
@@ -2061,6 +2121,11 @@ class _IncomeExpenseComparisonScreenState
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Choose how far back to compare. Selected period uses the date filter that was active before opening this page.',
+            style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -2079,44 +2144,42 @@ class _IncomeExpenseComparisonScreenState
           _ComparisonPeriodHeader(current: windows.$1, previous: windows.$2),
           const SizedBox(height: 12),
           _ComparisonMetricCard(
-            title: 'Income',
-            icon: Icons.south_west_rounded,
-            color: const Color(0xFF168A5B),
-            current: current.totalIncome,
-            previous: previous.totalIncome,
-            change: incomeChange,
-            lowerIsBetter: false,
-          ),
-          const SizedBox(height: 12),
-          _ComparisonMetricCard(
-            title: 'Expenses',
-            icon: Icons.north_east_rounded,
-            color: const Color(0xFFC74949),
-            current: current.totalExpense,
-            previous: previous.totalExpense,
-            change: expenseChange,
-            lowerIsBetter: true,
+            title: title,
+            icon: _kindIcon(widget.kind),
+            color: color,
+            current: current,
+            previous: previous,
+            change: change,
+            lowerIsBetter: lowerIsBetter,
           ),
           const SizedBox(height: 12),
           Card(
             elevation: 0,
-            child: ListTile(
-              leading: const Icon(Icons.balance_rounded),
-              title: const Text(
-                'Net difference',
-                style: TextStyle(fontWeight: FontWeight.w900),
-              ),
-              subtitle: Text(
-                'Previous ${FinanceFormatters.usd(previous.totalNet)}',
-              ),
-              trailing: Text(
-                FinanceFormatters.usd(current.totalNet),
-                style: TextStyle(
-                  color: current.totalNet >= 0
-                      ? const Color(0xFF168A5B)
-                      : const Color(0xFFC74949),
-                  fontWeight: FontWeight.w900,
-                ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.receipt_long_rounded, color: color),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _ComparisonCount(
+                      label: 'Current transactions',
+                      count: currentTransactions.length,
+                    ),
+                  ),
+                  Container(
+                    width: 1,
+                    height: 36,
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: _ComparisonCount(
+                      label: 'Previous transactions',
+                      count: previousTransactions.length,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -2124,6 +2187,84 @@ class _IncomeExpenseComparisonScreenState
       ),
     );
   }
+
+  List<FinancialTransaction> _transactionsForWindow(DateWindow window) {
+    final category = widget.category?.trim().toLowerCase();
+    return widget.controller.calculationTransactions
+        .where((transaction) => window.contains(transaction.date))
+        .where(_matches)
+        .where(
+          (transaction) =>
+              category == null ||
+              transaction.category.trim().toLowerCase() == category,
+        )
+        .toList(growable: false);
+  }
+
+  bool _matches(FinancialTransaction transaction) => switch (widget.kind) {
+    _DashboardMetricKind.income => transaction.affectsIncomeStats,
+    _DashboardMetricKind.expense => transaction.affectsExpenseStats,
+    _DashboardMetricKind.reserveable =>
+      transaction.isReserveable &&
+          !transaction.isSettlementEntry &&
+          (widget.creditMode == _CreditListMode.open
+              ? !transaction.isSettled
+              : transaction.isSettled),
+    _DashboardMetricKind.debit =>
+      transaction.isDebt &&
+          !transaction.isSettlementEntry &&
+          (widget.debtMode == _DebtListMode.open
+              ? !transaction.isSettled
+              : transaction.isSettled),
+    _DashboardMetricKind.transfer => transaction.isTransfer,
+  };
+
+  double _total(List<FinancialTransaction> transactions) => transactions.fold(
+    0,
+    (sum, transaction) =>
+        sum + transaction.amountInUsd(widget.controller.exchangeRate),
+  );
+
+  String _title(DashboardController controller) {
+    final category = widget.category?.trim();
+    if (category != null && category.isNotEmpty) {
+      return category;
+    }
+    return switch (widget.kind) {
+      _DashboardMetricKind.income => controller.strings.income,
+      _DashboardMetricKind.expense => controller.strings.expenses,
+      _DashboardMetricKind.reserveable =>
+        widget.creditMode == _CreditListMode.open
+            ? controller.strings.outstandingReceivables
+            : controller.strings.collectedReceivables,
+      _DashboardMetricKind.debit =>
+        widget.debtMode == _DebtListMode.open
+            ? controller.strings.outstandingPayables
+            : controller.strings.settledPayables,
+      _DashboardMetricKind.transfer => 'Transfers',
+    };
+  }
+}
+
+class _ComparisonCount extends StatelessWidget {
+  const _ComparisonCount({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        '$count',
+        style: Theme.of(
+          context,
+        ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+      ),
+      Text(label, style: Theme.of(context).textTheme.bodySmall),
+    ],
+  );
 }
 
 class _ComparisonPeriodHeader extends StatelessWidget {
@@ -2271,7 +2412,8 @@ class _ComparisonMetricCard extends StatelessWidget {
   _ComparisonScope scope,
 ) {
   final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
+  final reference = controller.referenceDate;
+  final today = DateTime(reference.year, reference.month, reference.day);
   switch (scope) {
     case _ComparisonScope.day:
       return (
@@ -2285,7 +2427,7 @@ class _ComparisonMetricCard extends StatelessWidget {
         ),
       );
     case _ComparisonScope.week:
-      final start = today.subtract(Duration(days: now.weekday % 7));
+      final start = today.subtract(Duration(days: today.weekday % 7));
       final end = today.add(const Duration(days: 1));
       final duration = end.difference(start);
       final previousStart = start.subtract(const Duration(days: 7));
@@ -2297,6 +2439,15 @@ class _ComparisonMetricCard extends StatelessWidget {
         ),
       );
     case _ComparisonScope.month:
+      final referenceMonth = controller.referenceMonth;
+      if (referenceMonth != null) {
+        return (
+          DateWindow.forMonth(referenceMonth),
+          DateWindow.forMonth(
+            DateTime(referenceMonth.year, referenceMonth.month - 1),
+          ),
+        );
+      }
       final start = DateTime(now.year, now.month);
       final end = today.add(const Duration(days: 1));
       final previousStart = DateTime(now.year, now.month - 1);

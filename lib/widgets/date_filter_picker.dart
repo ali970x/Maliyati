@@ -30,6 +30,8 @@ Future<DateTime?> showAppMonthPicker(
   BuildContext context,
   DashboardController controller, {
   DateTime? initialMonth,
+  String? title,
+  String? explanation,
 }) async {
   final now = DateTime.now();
   var visibleYear = (initialMonth ?? now).year;
@@ -40,12 +42,41 @@ Future<DateTime?> showAppMonthPicker(
       builder: (context, setState) {
         final locale = controller.language.code;
         return AlertDialog(
-          title: Text(controller.strings.chooseMonth),
+          title: Text(title ?? controller.strings.chooseMonth),
           content: SizedBox(
             width: 420,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (explanation != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.primaryContainer.withValues(alpha: .55),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline_rounded,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Text(
+                            explanation,
+                            style: const TextStyle(height: 1.35),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
                 Row(
                   children: [
                     IconButton(

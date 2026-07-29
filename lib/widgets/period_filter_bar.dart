@@ -66,6 +66,15 @@ class PeriodFilterBar extends StatelessWidget {
                   await showCustomDateRangePicker(context, controller);
                 } else {
                   controller.selectTimeFilter(filter);
+                  if (filter == TimeFilter.thisMonth && context.mounted) {
+                    final referenceMonth = controller.referenceMonth;
+                    final message = referenceMonth == null
+                        ? 'Showing the current month from day 1 through today. Long-press This month to choose another month.'
+                        : 'Showing the full reference month: ${FinanceFormatters.monthYear(referenceMonth)}. Long-press This month to view a different month without changing your reference.';
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(SnackBar(content: Text(message)));
+                  }
                 }
               },
               onLongPress: switch (filter) {
@@ -114,6 +123,9 @@ class PeriodFilterBar extends StatelessWidget {
     final month = await showAppMonthPicker(
       context,
       controller,
+      title: 'Choose a month to view',
+      explanation:
+          'This selection changes only the This month view. It is cleared when you switch to another period.',
       initialMonth:
           controller.selectedMonth ??
           DateTime(DateTime.now().year, DateTime.now().month - 1),
@@ -127,6 +139,9 @@ class PeriodFilterBar extends StatelessWidget {
     final month = await showAppMonthPicker(
       context,
       controller,
+      title: 'Choose a reference month',
+      explanation:
+          'This month becomes your time reference. Today, This week, and This month will stay inside it until you tap All time normally to clear the reference.',
       initialMonth:
           controller.referenceMonth ??
           DateTime(DateTime.now().year, DateTime.now().month - 1),

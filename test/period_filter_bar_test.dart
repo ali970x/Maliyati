@@ -34,4 +34,65 @@ void main() {
     expect(find.text('Week 1'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('this month tap explains the active date window', (tester) async {
+    tester.view.physicalSize = const Size(900, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PeriodFilterBar(controller: controller)),
+      ),
+    );
+
+    await tester.tap(find.text('This month'));
+    await tester.pump();
+
+    expect(
+      find.textContaining('Showing the current month from day 1 through today'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('month and all time long presses explain their different roles', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: PeriodFilterBar(controller: controller)),
+      ),
+    );
+
+    await tester.longPress(find.text('This month'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a month to view'), findsOneWidget);
+    expect(
+      find.textContaining('changes only the This month view'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('All time'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a reference month'), findsOneWidget);
+    expect(
+      find.textContaining('Today, This week, and This month'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
