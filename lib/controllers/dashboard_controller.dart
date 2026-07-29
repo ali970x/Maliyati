@@ -49,6 +49,7 @@ class CategoryRule {
     required this.statuses,
     this.colorValue,
     this.budgetBucket,
+    this.budgetExcluded = false,
   });
 
   static const colorPalette = <int>[
@@ -82,6 +83,7 @@ class CategoryRule {
   final Set<TransactionType> statuses;
   final int? colorValue;
   final BudgetBucket? budgetBucket;
+  final bool budgetExcluded;
 
   int get effectiveColorValue {
     if (colorValue case final value?) return value;
@@ -104,6 +106,7 @@ class CategoryRule {
     'statuses': statuses.map((status) => status.name).toList(),
     'color': effectiveColorValue,
     'budgetBucket': effectiveBudgetBucket.name,
+    'budgetExcluded': budgetExcluded,
   };
 
   static CategoryRule fromJson(Map<String, dynamic> json) {
@@ -123,6 +126,8 @@ class CategoryRule {
       budgetBucket: json['budgetBucket'] == null
           ? null
           : BudgetBucketDetails.fromName('${json['budgetBucket']}'),
+      budgetExcluded:
+          '${json['budgetExcluded'] ?? 'false'}'.trim().toLowerCase() == 'true',
     );
   }
 
@@ -249,6 +254,7 @@ class DashboardController extends ChangeNotifier {
   static const _cashWalletComparisonRangeKey = 'cash_wallet_comparison_range';
   static const _wishWalletComparisonRangeKey = 'wish_wallet_comparison_range';
   static const _categoryRulesKey = 'category_rules_v1';
+  static const _budgetPlanSettingsKey = 'budget_plan_settings_v1';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
@@ -296,6 +302,7 @@ class DashboardController extends ChangeNotifier {
   List<AdminUserSnapshot> _adminUsers = const [];
   bool _isAdminLoading = false;
   List<CategoryRule> _categoryRules = const [];
+  BudgetPlanSettings _budgetPlanSettings = BudgetPlanSettings.defaults();
 
   List<FinancialTransaction> get transactions => List.unmodifiable(
     _transactions.where(
@@ -490,10 +497,15 @@ class DashboardController extends ChangeNotifier {
 
   List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
 
-  BudgetBucket budgetBucketForCategory(String category) {
+  BudgetPlanSettings get budgetPlanSettings => _budgetPlanSettings;
+
+  BudgetBucket? budgetBucketForCategory(String category) {
     final normalized = category.trim().toLowerCase();
     for (final rule in _categoryRules) {
       if (rule.name.trim().toLowerCase() == normalized) {
+        if (rule.budgetExcluded) {
+          return null;
+        }
         return rule.effectiveBudgetBucket;
       }
     }
@@ -503,6 +515,7 @@ class DashboardController extends ChangeNotifier {
   BudgetPlanSummary get budgetPlanSummary => BudgetPlanCalculator.calculate(
     transactions: periodTransactions,
     exchangeRate: exchangeRate,
+    settings: _budgetPlanSettings,
     bucketForTransaction: (transaction) =>
         budgetBucketForCategory(transaction.category),
   );
@@ -749,6 +762,7 @@ class DashboardController extends ChangeNotifier {
       }
       _loadAutoBackupState(prefs);
       await _loadCategorySettings(prefs);
+      await _loadBudgetPlanSettings(prefs);
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
       await _runDailyAutoBackupIfDue();
@@ -1014,6 +1028,7 @@ class DashboardController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
       await _loadCategorySettings(prefs);
+      await _loadBudgetPlanSettings(prefs);
       _loadAutoBackupState(prefs);
       // Sheet settings are optional. They must not block a successful login.
       try {
@@ -1096,6 +1111,7 @@ class DashboardController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_firestoreEnabledKey, true);
       await _loadCategorySettings(prefs);
+      await _loadBudgetPlanSettings(prefs);
       _loadAutoBackupState(prefs);
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
@@ -1141,6 +1157,7 @@ class DashboardController extends ChangeNotifier {
     _useFirestore = false;
     _resetWalletState();
     _transactions = const [];
+    _budgetPlanSettings = BudgetPlanSettings.defaults();
     _adminUsers = const [];
     _errorMessage = null;
     _lastUpdated = DateTime.now();
@@ -1161,6 +1178,7 @@ class DashboardController extends ChangeNotifier {
         statuses: {...rule.statuses}..remove(TransactionType.unknown),
         colorValue: rule.effectiveColorValue,
         budgetBucket: rule.effectiveBudgetBucket,
+        budgetExcluded: rule.budgetExcluded,
       );
     }
     _categoryRules = cleaned.values.toList()
@@ -1177,6 +1195,28 @@ class DashboardController extends ChangeNotifier {
         );
       } catch (_) {
         // A category stays saved on this device and can sync on the next edit.
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveBudgetPlanSettings(BudgetPlanSettings settings) async {
+    if (settings.totalPercentage != 100) {
+      throw const FirebaseFinanceException(
+        'Budget percentages must add up to 100%.',
+      );
+    }
+    _budgetPlanSettings = settings;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _budgetPlanSettingsStorageKey(),
+      jsonEncode(settings.toJson()),
+    );
+    if (_isFirebaseConfigured && _firebase.currentUser != null) {
+      try {
+        await _firebase.saveBudgetPlanSettings(settings.toJson());
+      } catch (_) {
+        // Keep the plan available locally and sync it on the next edit.
       }
     }
     notifyListeners();
@@ -1241,6 +1281,7 @@ class DashboardController extends ChangeNotifier {
         statuses: {...?current?.statuses, type},
         colorValue: current?.effectiveColorValue,
         budgetBucket: current?.effectiveBudgetBucket,
+        budgetExcluded: current?.budgetExcluded ?? false,
       );
     }
 
@@ -1291,6 +1332,7 @@ class DashboardController extends ChangeNotifier {
           statuses: {...updated[index].statuses, type},
           colorValue: updated[index].effectiveColorValue,
           budgetBucket: updated[index].effectiveBudgetBucket,
+          budgetExcluded: updated[index].budgetExcluded,
         );
       } else {
         updated.add(CategoryRule(name: name, statuses: {type}));
@@ -1307,6 +1349,13 @@ class DashboardController extends ChangeNotifier {
     return uid.isEmpty
         ? '${_categoryRulesKey}_guest'
         : '${_categoryRulesKey}_$uid';
+  }
+
+  String _budgetPlanSettingsStorageKey() {
+    final uid = _user?.uid.trim() ?? '';
+    return uid.isEmpty
+        ? '${_budgetPlanSettingsKey}_guest'
+        : '${_budgetPlanSettingsKey}_$uid';
   }
 
   String _lastAutoBackupStorageKey() {
@@ -1375,6 +1424,42 @@ class DashboardController extends ChangeNotifier {
       );
     } catch (_) {
       // The account keeps its local category preferences while offline.
+    }
+  }
+
+  Future<void> _loadBudgetPlanSettings(SharedPreferences prefs) async {
+    final storageKey = _budgetPlanSettingsStorageKey();
+    final local = prefs.getString(storageKey);
+    if (local != null && local.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(local);
+        if (decoded is Map) {
+          _budgetPlanSettings = BudgetPlanSettings.fromJson(
+            Map<String, dynamic>.from(decoded),
+          );
+        }
+      } catch (_) {
+        _budgetPlanSettings = BudgetPlanSettings.defaults();
+      }
+    } else {
+      _budgetPlanSettings = BudgetPlanSettings.defaults();
+    }
+    if (!_isFirebaseConfigured || _firebase.currentUser == null) {
+      return;
+    }
+    try {
+      final remote = await _firebase.fetchBudgetPlanSettings();
+      if (remote == null) {
+        await _firebase.saveBudgetPlanSettings(_budgetPlanSettings.toJson());
+        return;
+      }
+      _budgetPlanSettings = BudgetPlanSettings.fromJson(remote);
+      await prefs.setString(
+        storageKey,
+        jsonEncode(_budgetPlanSettings.toJson()),
+      );
+    } catch (_) {
+      // Keep the current account's local plan while offline.
     }
   }
 

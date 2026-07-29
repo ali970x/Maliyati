@@ -810,6 +810,24 @@ class FirebaseFinanceService {
     }, SetOptions(merge: true));
   }
 
+  Future<Map<String, dynamic>?> fetchBudgetPlanSettings() async {
+    final user = _requireUser();
+    final snapshot = await _settings(user.uid).get();
+    final raw = snapshot.data()?['budgetPlan'];
+    if (raw is! Map) {
+      return null;
+    }
+    return Map<String, dynamic>.from(raw);
+  }
+
+  Future<void> saveBudgetPlanSettings(Map<String, dynamic> budgetPlan) async {
+    final user = _requireUser();
+    await _settings(user.uid).set({
+      'budgetPlan': budgetPlan,
+      'budgetPlanUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<WalletSyncSettings?> fetchWalletSettings() async {
     final user = _requireUser();
     final snapshot = await _settings(user.uid).get();

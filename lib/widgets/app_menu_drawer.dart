@@ -807,6 +807,7 @@ class _CategoryRuleCardState extends State<_CategoryRuleCard> {
         statuses: _statuses,
         colorValue: widget.rule.effectiveColorValue,
         budgetBucket: widget.rule.effectiveBudgetBucket,
+        budgetExcluded: widget.rule.budgetExcluded,
       ),
     );
   }
@@ -1022,6 +1023,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
             statuses: {...rule.statuses},
             colorValue: rule.effectiveColorValue,
             budgetBucket: rule.effectiveBudgetBucket,
+            budgetExcluded: rule.budgetExcluded,
           ),
         )
         .toList();
@@ -1044,6 +1046,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
               statuses: rule.statuses,
               colorValue: rule.colorValue,
               budgetBucket: rule.budgetBucket,
+              budgetExcluded: rule.budgetExcluded,
             ),
           )
           .toList(),
@@ -1064,6 +1067,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
           colorValue: CategoryRule
               .colorPalette[_rules.length % CategoryRule.colorPalette.length],
           budgetBucket: BudgetBucket.expenses,
+          budgetExcluded: false,
         ),
       );
     });
@@ -1127,12 +1131,14 @@ class _EditableCategoryRule {
     required this.statuses,
     required this.colorValue,
     required this.budgetBucket,
+    required this.budgetExcluded,
   });
 
   final TextEditingController controller;
   final Set<TransactionType> statuses;
   final int colorValue;
   BudgetBucket budgetBucket;
+  bool budgetExcluded;
 }
 
 class _CategoryRuleEditor extends StatelessWidget {
@@ -1248,20 +1254,33 @@ class _CategoryRuleEditor extends StatelessWidget {
                     color: Color(bucket.colorValue),
                   ),
                   label: Text('${bucket.label} ${bucket.percentage}%'),
-                  selected: rule.budgetBucket == bucket,
+                  selected: !rule.budgetExcluded && rule.budgetBucket == bucket,
                   selectedColor: Color(
                     bucket.colorValue,
                   ).withValues(alpha: .14),
                   side: BorderSide(
-                    color: rule.budgetBucket == bucket
+                    color: !rule.budgetExcluded && rule.budgetBucket == bucket
                         ? Color(bucket.colorValue)
                         : const Color(0xFFD7DCE3),
                   ),
                   onSelected: (_) {
+                    rule.budgetExcluded = false;
                     rule.budgetBucket = bucket;
                     onChanged();
                   },
                 ),
+              FilterChip(
+                avatar: const Icon(
+                  Icons.remove_circle_outline_rounded,
+                  size: 17,
+                ),
+                label: const Text('Not in plan'),
+                selected: rule.budgetExcluded,
+                onSelected: (_) {
+                  rule.budgetExcluded = true;
+                  onChanged();
+                },
+              ),
             ],
           ),
         ],

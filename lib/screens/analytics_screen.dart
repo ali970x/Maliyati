@@ -157,7 +157,7 @@ class AnalyticsScreen extends StatelessWidget {
               ),
             ),
             icon: const Icon(Icons.donut_large_rounded),
-            label: const Text('Open 33/33/34 budget plan'),
+            label: const Text('Open budget builder'),
           ),
           const SizedBox(height: 12),
           _WalletAnalyticsCard(controller: controller),
@@ -504,7 +504,7 @@ class _CategoryReportsScreen extends StatelessWidget {
               ),
             ),
             icon: const Icon(Icons.donut_large_rounded),
-            label: const Text('33/33/34 budget plan'),
+            label: const Text('Budget builder'),
           ),
           const SizedBox(height: 12),
           _CategoryRankingCard(

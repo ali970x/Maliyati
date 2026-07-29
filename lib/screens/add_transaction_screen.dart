@@ -298,6 +298,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     const SizedBox(height: 12),
                     _IncomeBudgetSplitTile(
                       value: _allocateIncomeToBudget,
+                      settings: widget.controller.budgetPlanSettings,
                       onChanged: (value) =>
                           setState(() => _allocateIncomeToBudget = value),
                     ),
@@ -933,9 +934,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
 }
 
 class _IncomeBudgetSplitTile extends StatelessWidget {
-  const _IncomeBudgetSplitTile({required this.value, required this.onChanged});
+  const _IncomeBudgetSplitTile({
+    required this.value,
+    required this.settings,
+    required this.onChanged,
+  });
 
   final bool value;
+  final BudgetPlanSettings settings;
   final ValueChanged<bool> onChanged;
 
   @override
@@ -959,7 +965,7 @@ class _IncomeBudgetSplitTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Auto split 33/33/34',
+                    'Auto budget split',
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                   Text(
@@ -997,7 +1003,7 @@ class _IncomeBudgetSplitTile extends StatelessWidget {
                     child: Column(
                       children: [
                         Text(
-                          '${BudgetBucket.values[index].percentage}%',
+                          '${settings.percentageFor(BudgetBucket.values[index])}%',
                           style: TextStyle(
                             color: Color(BudgetBucket.values[index].colorValue),
                             fontWeight: FontWeight.w900,
@@ -1006,7 +1012,7 @@ class _IncomeBudgetSplitTile extends StatelessWidget {
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            BudgetBucket.values[index].label,
+                            settings.nameFor(BudgetBucket.values[index]),
                             maxLines: 1,
                             style: const TextStyle(
                               fontSize: 11,

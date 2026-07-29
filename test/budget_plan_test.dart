@@ -30,11 +30,13 @@ void main() {
       name: 'Custom',
       statuses: {TransactionType.expense},
       budgetBucket: BudgetBucket.investment,
+      budgetExcluded: true,
     );
 
     final restored = CategoryRule.fromJson(rule.toJson());
 
     expect(restored.effectiveBudgetBucket, BudgetBucket.investment);
+    expect(restored.budgetExcluded, isTrue);
   });
 
   test('budget plan allocates income 33 33 34 and tracks actual spending', () {
@@ -48,6 +50,7 @@ void main() {
     final summary = BudgetPlanCalculator.calculate(
       transactions: transactions,
       exchangeRate: 89000,
+      settings: BudgetPlanSettings.defaults(),
       bucketForTransaction: (transaction) =>
           BudgetBucketDetails.infer(transaction.category, {transaction.type}),
     );
@@ -71,11 +74,55 @@ void main() {
     final summary = BudgetPlanCalculator.calculate(
       transactions: [excludedIncome],
       exchangeRate: 89000,
+      settings: BudgetPlanSettings.defaults(),
       bucketForTransaction: (_) => BudgetBucket.expenses,
     );
 
     expect(summary.totalAllocatedIncomeUsd, 0);
   });
+
+  test('custom group names and percentages survive serialization', () {
+    final settings = BudgetPlanSettings(
+      names: const {
+        BudgetBucket.investment: 'Growth',
+        BudgetBucket.commitments: 'Bills',
+        BudgetBucket.expenses: 'Daily life',
+      },
+      percentages: const {
+        BudgetBucket.investment: 40,
+        BudgetBucket.commitments: 35,
+        BudgetBucket.expenses: 25,
+      },
+    );
+
+    final restored = BudgetPlanSettings.fromJson(settings.toJson());
+
+    expect(restored.nameFor(BudgetBucket.investment), 'Growth');
+    expect(restored.percentageFor(BudgetBucket.commitments), 35);
+    expect(restored.totalPercentage, 100);
+  });
+
+  test(
+    'unassigned category spending stays visible outside the three groups',
+    () {
+      final expense = _transaction(
+        TransactionType.expense,
+        'Special expense',
+        75,
+      );
+
+      final summary = BudgetPlanCalculator.calculate(
+        transactions: [expense],
+        exchangeRate: 89000,
+        settings: BudgetPlanSettings.defaults(),
+        bucketForTransaction: (_) => null,
+      );
+
+      expect(summary.unassignedSpendingUsd, 75);
+      expect(summary.unassignedTransactionCount, 1);
+      expect(summary.unassignedCategorySpending['Special expense'], 75);
+    },
+  );
 }
 
 FinancialTransaction _transaction(
