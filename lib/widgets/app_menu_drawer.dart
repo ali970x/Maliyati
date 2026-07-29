@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 import '../config/app_config.dart';
 import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
+import '../models/budget_plan.dart';
 import '../models/transaction.dart';
 import '../services/app_lock_service.dart';
 import '../services/firebase_finance_service.dart';
@@ -678,7 +679,11 @@ class _LegacyCategorySettingsScreenState
     setState(() {
       _rules = [
         ..._rules,
-        CategoryRule(name: name, statuses: {..._newStatuses}),
+        CategoryRule(
+          name: name,
+          statuses: {..._newStatuses},
+          budgetBucket: BudgetBucketDetails.infer(name, _newStatuses),
+        ),
       ]..sort((a, b) => a.name.compareTo(b.name));
       _newNameController.clear();
       _newStatuses
@@ -796,7 +801,14 @@ class _CategoryRuleCardState extends State<_CategoryRuleCard> {
   void _emitChange() {
     final name = _nameController.text.trim();
     if (name.isEmpty || _statuses.isEmpty) return;
-    widget.onChanged(CategoryRule(name: name, statuses: _statuses));
+    widget.onChanged(
+      CategoryRule(
+        name: name,
+        statuses: _statuses,
+        colorValue: widget.rule.effectiveColorValue,
+        budgetBucket: widget.rule.effectiveBudgetBucket,
+      ),
+    );
   }
 }
 
@@ -1009,6 +1021,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
             controller: TextEditingController(text: rule.name),
             statuses: {...rule.statuses},
             colorValue: rule.effectiveColorValue,
+            budgetBucket: rule.effectiveBudgetBucket,
           ),
         )
         .toList();
@@ -1030,6 +1043,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
               name: rule.controller.text,
               statuses: rule.statuses,
               colorValue: rule.colorValue,
+              budgetBucket: rule.budgetBucket,
             ),
           )
           .toList(),
@@ -1049,6 +1063,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
           statuses: {TransactionType.expense},
           colorValue: CategoryRule
               .colorPalette[_rules.length % CategoryRule.colorPalette.length],
+          budgetBucket: BudgetBucket.expenses,
         ),
       );
     });
@@ -1070,9 +1085,11 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Choose where every category appears. Expense categories will show only when you add an Expense, income categories only with Income, and so on.',
+            'Choose where every category appears and which 33/33/34 budget group it belongs to.',
             style: TextStyle(color: Color(0xFF77717D)),
           ),
+          const SizedBox(height: 10),
+          const _BudgetGroupLegend(),
           const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: _addCategory,
@@ -1109,11 +1126,13 @@ class _EditableCategoryRule {
     required this.controller,
     required this.statuses,
     required this.colorValue,
+    required this.budgetBucket,
   });
 
   final TextEditingController controller;
   final Set<TransactionType> statuses;
   final int colorValue;
+  BudgetBucket budgetBucket;
 }
 
 class _CategoryRuleEditor extends StatelessWidget {
@@ -1209,11 +1228,92 @@ class _CategoryRuleEditor extends StatelessWidget {
                 ),
             ],
           ),
+          const SizedBox(height: 12),
+          Text(
+            'Budget group',
+            style: Theme.of(
+              context,
+            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final bucket in BudgetBucket.values)
+                FilterChip(
+                  avatar: Icon(
+                    _budgetBucketIcon(bucket),
+                    size: 17,
+                    color: Color(bucket.colorValue),
+                  ),
+                  label: Text('${bucket.label} ${bucket.percentage}%'),
+                  selected: rule.budgetBucket == bucket,
+                  selectedColor: Color(
+                    bucket.colorValue,
+                  ).withValues(alpha: .14),
+                  side: BorderSide(
+                    color: rule.budgetBucket == bucket
+                        ? Color(bucket.colorValue)
+                        : const Color(0xFFD7DCE3),
+                  ),
+                  onSelected: (_) {
+                    rule.budgetBucket = bucket;
+                    onChanged();
+                  },
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
+
+class _BudgetGroupLegend extends StatelessWidget {
+  const _BudgetGroupLegend();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF7F9FC),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0xFFE2E7EE)),
+    ),
+    child: Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      children: [
+        for (final bucket in BudgetBucket.values)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _budgetBucketIcon(bucket),
+                size: 18,
+                color: Color(bucket.colorValue),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                '${bucket.label} ${bucket.percentage}%',
+                style: TextStyle(
+                  color: Color(bucket.colorValue),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+      ],
+    ),
+  );
+}
+
+IconData _budgetBucketIcon(BudgetBucket bucket) => switch (bucket) {
+  BudgetBucket.investment => Icons.trending_up_rounded,
+  BudgetBucket.commitments => Icons.event_repeat_rounded,
+  BudgetBucket.expenses => Icons.shopping_bag_outlined,
+};
 
 class ExchangeRateScreen extends StatefulWidget {
   const ExchangeRateScreen({super.key, required this.controller});

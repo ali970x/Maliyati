@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../controllers/dashboard_controller.dart';
+import '../models/budget_plan.dart';
 import '../models/transaction.dart';
 import '../services/gemini_transaction_parser.dart';
 import '../services/label_normalizer.dart';
@@ -140,6 +141,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   bool _useWishMoney = false;
   TransactionSource _source = TransactionSource.application;
   FinancialTransaction? _settlementTarget;
+  bool _allocateIncomeToBudget = true;
   bool _isSaving = false;
 
   @override
@@ -291,6 +293,14 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                         onClear: () => setState(() => _settlementTarget = null),
                       ),
                     ],
+                  ],
+                  if (_type == TransactionType.income) ...[
+                    const SizedBox(height: 12),
+                    _IncomeBudgetSplitTile(
+                      value: _allocateIncomeToBudget,
+                      onChanged: (value) =>
+                          setState(() => _allocateIncomeToBudget = value),
+                    ),
                   ],
                   const SizedBox(height: 12),
                   TextFormField(
@@ -614,6 +624,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       'Created At': _createdAt.toIso8601String(),
       'Source': _source.label,
       'wallet_id': _selectedWalletId,
+      'budget_split_333334': _type == TransactionType.income
+          ? _allocateIncomeToBudget.toString()
+          : '',
       'destination_wallet_id': _destinationWalletController.text.trim(),
       'settlement_status':
           _type == TransactionType.debt || _type == TransactionType.reserveable
@@ -690,6 +703,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       _source = TransactionSource.application;
       _settlementTarget = null;
       _useWishMoney = false;
+      _allocateIncomeToBudget = true;
     });
   }
 
@@ -916,6 +930,101 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   String _amountText(double value) => value <= 0
       ? ''
       : value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+}
+
+class _IncomeBudgetSplitTile extends StatelessWidget {
+  const _IncomeBudgetSplitTile({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 10, 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFF7F9FC),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(
+        color: value ? const Color(0xFF2563EB) : const Color(0xFFD7DCE3),
+      ),
+    ),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.account_tree_outlined, color: Color(0xFF2563EB)),
+            const SizedBox(width: 9),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Auto split 33/33/34',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  Text(
+                    'Include this income in your budget plan',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF667085)),
+                  ),
+                ],
+              ),
+            ),
+            Switch(value: value, onChanged: onChanged),
+          ],
+        ),
+        if (value) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              for (
+                var index = 0;
+                index < BudgetBucket.values.length;
+                index++
+              ) ...[
+                if (index > 0) const SizedBox(width: 6),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Color(
+                        BudgetBucket.values[index].colorValue,
+                      ).withValues(alpha: .10),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          '${BudgetBucket.values[index].percentage}%',
+                          style: TextStyle(
+                            color: Color(BudgetBucket.values[index].colorValue),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            BudgetBucket.values[index].label,
+                            maxLines: 1,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 class _SettlementTargetTile extends StatelessWidget {

@@ -12,6 +12,7 @@ import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
+import 'budget_plan_screen.dart';
 import 'transaction_detail_screen.dart';
 
 class _WalletAnalyticsCard extends StatelessWidget {
@@ -148,6 +149,16 @@ class AnalyticsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           PeriodFilterBar(controller: controller),
+          const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => BudgetPlanScreen(controller: controller),
+              ),
+            ),
+            icon: const Icon(Icons.donut_large_rounded),
+            label: const Text('Open 33/33/34 budget plan'),
+          ),
           const SizedBox(height: 12),
           _WalletAnalyticsCard(controller: controller),
           const SizedBox(height: 12),
@@ -486,6 +497,16 @@ class _CategoryReportsScreen extends StatelessWidget {
           const SizedBox(height: 4),
           Text('For ${periodFilterLabel(controller)}'),
           const SizedBox(height: 16),
+          FilledButton.tonalIcon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => BudgetPlanScreen(controller: controller),
+              ),
+            ),
+            icon: const Icon(Icons.donut_large_rounded),
+            label: const Text('33/33/34 budget plan'),
+          ),
+          const SizedBox(height: 12),
           _CategoryRankingCard(
             controller: controller,
             title: strings.expenseCategoryRanking,

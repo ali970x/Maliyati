@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/app_config.dart';
 import '../l10n/app_strings.dart';
+import '../models/budget_plan.dart';
 import '../models/transaction.dart';
 import '../services/accounting_rules.dart';
 import '../services/category_taxonomy.dart';
@@ -47,6 +48,7 @@ class CategoryRule {
     required this.name,
     required this.statuses,
     this.colorValue,
+    this.budgetBucket,
   });
 
   static const colorPalette = <int>[
@@ -79,6 +81,7 @@ class CategoryRule {
   final String name;
   final Set<TransactionType> statuses;
   final int? colorValue;
+  final BudgetBucket? budgetBucket;
 
   int get effectiveColorValue {
     if (colorValue case final value?) return value;
@@ -91,12 +94,16 @@ class CategoryRule {
 
   Color get color => Color(effectiveColorValue);
 
+  BudgetBucket get effectiveBudgetBucket =>
+      budgetBucket ?? BudgetBucketDetails.infer(name, statuses);
+
   bool appliesTo(TransactionType type) => statuses.contains(type);
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'statuses': statuses.map((status) => status.name).toList(),
     'color': effectiveColorValue,
+    'budgetBucket': effectiveBudgetBucket.name,
   };
 
   static CategoryRule fromJson(Map<String, dynamic> json) {
@@ -113,6 +120,9 @@ class CategoryRule {
       colorValue: rawColor is num
           ? rawColor.toInt()
           : int.tryParse('$rawColor'),
+      budgetBucket: json['budgetBucket'] == null
+          ? null
+          : BudgetBucketDetails.fromName('${json['budgetBucket']}'),
     );
   }
 
@@ -479,6 +489,23 @@ class DashboardController extends ChangeNotifier {
   }
 
   List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
+
+  BudgetBucket budgetBucketForCategory(String category) {
+    final normalized = category.trim().toLowerCase();
+    for (final rule in _categoryRules) {
+      if (rule.name.trim().toLowerCase() == normalized) {
+        return rule.effectiveBudgetBucket;
+      }
+    }
+    return BudgetBucketDetails.infer(category, const {});
+  }
+
+  BudgetPlanSummary get budgetPlanSummary => BudgetPlanCalculator.calculate(
+    transactions: periodTransactions,
+    exchangeRate: exchangeRate,
+    bucketForTransaction: (transaction) =>
+        budgetBucketForCategory(transaction.category),
+  );
 
   Map<String, int> get categoryTransactionCounts {
     final counts = <String, int>{};
@@ -1133,6 +1160,7 @@ class DashboardController extends ChangeNotifier {
         name: name,
         statuses: {...rule.statuses}..remove(TransactionType.unknown),
         colorValue: rule.effectiveColorValue,
+        budgetBucket: rule.effectiveBudgetBucket,
       );
     }
     _categoryRules = cleaned.values.toList()
@@ -1212,6 +1240,7 @@ class DashboardController extends ChangeNotifier {
         name: name,
         statuses: {...?current?.statuses, type},
         colorValue: current?.effectiveColorValue,
+        budgetBucket: current?.effectiveBudgetBucket,
       );
     }
 
@@ -1261,6 +1290,7 @@ class DashboardController extends ChangeNotifier {
           name: updated[index].name,
           statuses: {...updated[index].statuses, type},
           colorValue: updated[index].effectiveColorValue,
+          budgetBucket: updated[index].effectiveBudgetBucket,
         );
       } else {
         updated.add(CategoryRule(name: name, statuses: {type}));
