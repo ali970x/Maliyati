@@ -480,6 +480,24 @@ class DashboardController extends ChangeNotifier {
 
   List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
 
+  Map<String, int> get categoryTransactionCounts {
+    final counts = <String, int>{};
+    for (final transaction in _transactions) {
+      if (transaction.isDeleted) {
+        continue;
+      }
+      final key = transaction.category.trim().toLowerCase();
+      if (key.isEmpty) {
+        continue;
+      }
+      counts.update(key, (value) => value + 1, ifAbsent: () => 1);
+    }
+    return Map.unmodifiable(counts);
+  }
+
+  int transactionCountForCategory(String category) =>
+      categoryTransactionCounts[category.trim().toLowerCase()] ?? 0;
+
   Color categoryColorFor(String category, {Color? fallback}) {
     final normalized = category.trim().toLowerCase();
     for (final rule in _categoryRules) {

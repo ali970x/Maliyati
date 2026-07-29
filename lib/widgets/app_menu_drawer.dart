@@ -1062,40 +1062,46 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => _PlainSettingsScaffold(
-    title: 'Categories',
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Choose where every category appears. Expense categories will show only when you add an Expense, income categories only with Income, and so on.',
-          style: TextStyle(color: Color(0xFF77717D)),
-        ),
-        const SizedBox(height: 14),
-        FilledButton.icon(
-          onPressed: _addCategory,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Add category'),
-        ),
-        const SizedBox(height: 14),
-        for (var index = 0; index < _rules.length; index += 1) ...[
-          _CategoryRuleEditor(
-            rule: _rules[index],
-            statusOptions: _statusOptions,
-            onChanged: () => setState(() {}),
-            onRemove: () => _removeCategory(index),
+  Widget build(BuildContext context) {
+    final counts = widget.controller.categoryTransactionCounts;
+    return _PlainSettingsScaffold(
+      title: 'Categories',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Choose where every category appears. Expense categories will show only when you add an Expense, income categories only with Income, and so on.',
+            style: TextStyle(color: Color(0xFF77717D)),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+          FilledButton.icon(
+            onPressed: _addCategory,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Add category'),
+          ),
+          const SizedBox(height: 14),
+          for (var index = 0; index < _rules.length; index += 1) ...[
+            _CategoryRuleEditor(
+              rule: _rules[index],
+              transactionCount:
+                  counts[_rules[index].controller.text.trim().toLowerCase()] ??
+                  0,
+              statusOptions: _statusOptions,
+              onChanged: () => setState(() {}),
+              onRemove: () => _removeCategory(index),
+            ),
+            const SizedBox(height: 12),
+          ],
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: _save,
+            icon: const Icon(Icons.save_rounded),
+            label: const Text('Save categories'),
+          ),
         ],
-        const SizedBox(height: 8),
-        FilledButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.save_rounded),
-          label: const Text('Save categories'),
-        ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _EditableCategoryRule {
@@ -1113,12 +1119,14 @@ class _EditableCategoryRule {
 class _CategoryRuleEditor extends StatelessWidget {
   const _CategoryRuleEditor({
     required this.rule,
+    required this.transactionCount,
     required this.statusOptions,
     required this.onChanged,
     required this.onRemove,
   });
 
   final _EditableCategoryRule rule;
+  final int transactionCount;
   final List<TransactionType> statusOptions;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
@@ -1140,6 +1148,7 @@ class _CategoryRuleEditor extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: rule.controller,
+                  onChanged: (_) => onChanged(),
                   decoration: const InputDecoration(
                     labelText: 'Category name',
                     prefixIcon: Icon(Icons.category_rounded),
@@ -1153,6 +1162,32 @@ class _CategoryRuleEditor extends StatelessWidget {
                 icon: const Icon(Icons.delete_outline_rounded),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F6FA),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.receipt_long_rounded,
+                  size: 18,
+                  color: Color(0xFF49657C),
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  '$transactionCount ${transactionCount == 1 ? 'transaction' : 'transactions'}',
+                  style: const TextStyle(
+                    color: Color(0xFF49657C),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           Wrap(
