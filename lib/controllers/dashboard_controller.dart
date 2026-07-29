@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/budget_plan.dart';
+import '../models/dashboard_pin.dart';
 import '../models/transaction.dart';
 import '../services/accounting_rules.dart';
 import '../services/category_taxonomy.dart';
@@ -255,6 +256,7 @@ class DashboardController extends ChangeNotifier {
   static const _wishWalletComparisonRangeKey = 'wish_wallet_comparison_range';
   static const _categoryRulesKey = 'category_rules_v1';
   static const _budgetPlanSettingsKey = 'budget_plan_settings_v1';
+  static const _dashboardPinsKey = 'dashboard_pins_v1';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
@@ -303,6 +305,7 @@ class DashboardController extends ChangeNotifier {
   bool _isAdminLoading = false;
   List<CategoryRule> _categoryRules = const [];
   BudgetPlanSettings _budgetPlanSettings = BudgetPlanSettings.defaults();
+  List<DashboardPinnedItem> _dashboardPins = const [];
 
   List<FinancialTransaction> get transactions => List.unmodifiable(
     _transactions.where(
@@ -498,6 +501,9 @@ class DashboardController extends ChangeNotifier {
   List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
 
   BudgetPlanSettings get budgetPlanSettings => _budgetPlanSettings;
+
+  List<DashboardPinnedItem> get dashboardPins =>
+      List.unmodifiable(_dashboardPins);
 
   BudgetBucket? budgetBucketForCategory(String category) {
     final normalized = category.trim().toLowerCase();
@@ -763,6 +769,7 @@ class DashboardController extends ChangeNotifier {
       _loadAutoBackupState(prefs);
       await _loadCategorySettings(prefs);
       await _loadBudgetPlanSettings(prefs);
+      await _loadDashboardPins(prefs);
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
       await _runDailyAutoBackupIfDue();
@@ -1029,6 +1036,7 @@ class DashboardController extends ChangeNotifier {
       await prefs.setBool(_firestoreEnabledKey, true);
       await _loadCategorySettings(prefs);
       await _loadBudgetPlanSettings(prefs);
+      await _loadDashboardPins(prefs);
       _loadAutoBackupState(prefs);
       // Sheet settings are optional. They must not block a successful login.
       try {
@@ -1112,6 +1120,7 @@ class DashboardController extends ChangeNotifier {
       await prefs.setBool(_firestoreEnabledKey, true);
       await _loadCategorySettings(prefs);
       await _loadBudgetPlanSettings(prefs);
+      await _loadDashboardPins(prefs);
       _loadAutoBackupState(prefs);
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
@@ -1158,6 +1167,7 @@ class DashboardController extends ChangeNotifier {
     _resetWalletState();
     _transactions = const [];
     _budgetPlanSettings = BudgetPlanSettings.defaults();
+    _dashboardPins = const [];
     _adminUsers = const [];
     _errorMessage = null;
     _lastUpdated = DateTime.now();
@@ -1220,6 +1230,58 @@ class DashboardController extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  Future<void> saveDashboardPins(List<DashboardPinnedItem> pins) async {
+    final unique = <String, DashboardPinnedItem>{};
+    for (final pin in pins) {
+      unique[pin.identity] = pin;
+    }
+    if (unique.length > 3) {
+      throw const FirebaseFinanceException(
+        'You can show up to 3 dashboard comparisons.',
+      );
+    }
+    _dashboardPins = unique.values.toList(growable: false);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _dashboardPinsStorageKey(),
+      jsonEncode(_dashboardPins.map((item) => item.toJson()).toList()),
+    );
+    if (_isFirebaseConfigured && _firebase.currentUser != null) {
+      try {
+        await _firebase.saveDashboardPins(
+          _dashboardPins.map((item) => item.toJson()).toList(growable: false),
+        );
+      } catch (_) {
+        // The account-specific layout remains available locally while offline.
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> addOrUpdateDashboardPin(DashboardPinnedItem pin) async {
+    final updated = [..._dashboardPins];
+    final index = updated.indexWhere((item) => item.identity == pin.identity);
+    if (index >= 0) {
+      updated[index] = pin;
+    } else {
+      if (updated.length >= 3) {
+        throw const FirebaseFinanceException(
+          'Your dashboard already has 3 items. Remove one before adding another.',
+        );
+      }
+      updated.add(pin);
+    }
+    await saveDashboardPins(updated);
+  }
+
+  Future<void> removeDashboardPin(DashboardPinnedItem pin) async {
+    await saveDashboardPins(
+      _dashboardPins
+          .where((item) => item.identity != pin.identity)
+          .toList(growable: false),
+    );
   }
 
   Future<CategoryCleanupResult> standardizeTransactionCategories() async {
@@ -1358,6 +1420,13 @@ class DashboardController extends ChangeNotifier {
         : '${_budgetPlanSettingsKey}_$uid';
   }
 
+  String _dashboardPinsStorageKey() {
+    final uid = _user?.uid.trim() ?? '';
+    return uid.isEmpty
+        ? '${_dashboardPinsKey}_guest'
+        : '${_dashboardPinsKey}_$uid';
+  }
+
   String _lastAutoBackupStorageKey() {
     final uid = _user?.uid.trim() ?? '';
     return uid.isEmpty
@@ -1460,6 +1529,60 @@ class DashboardController extends ChangeNotifier {
       );
     } catch (_) {
       // Keep the current account's local plan while offline.
+    }
+  }
+
+  Future<void> _loadDashboardPins(SharedPreferences prefs) async {
+    final storageKey = _dashboardPinsStorageKey();
+    _dashboardPins = _decodeDashboardPins(prefs.getString(storageKey));
+    if (!_isFirebaseConfigured || _firebase.currentUser == null) {
+      return;
+    }
+    try {
+      final remote = await _firebase.fetchDashboardPins();
+      if (remote == null) {
+        if (_dashboardPins.isNotEmpty) {
+          await _firebase.saveDashboardPins(
+            _dashboardPins.map((item) => item.toJson()).toList(growable: false),
+          );
+        }
+        return;
+      }
+      _dashboardPins = remote
+          .map(DashboardPinnedItem.fromJson)
+          .take(3)
+          .toList(growable: false);
+      await prefs.setString(
+        storageKey,
+        jsonEncode(_dashboardPins.map((item) => item.toJson()).toList()),
+      );
+    } catch (_) {
+      // Keep this account's local dashboard layout while offline.
+    }
+  }
+
+  List<DashboardPinnedItem> _decodeDashboardPins(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return const [];
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) {
+        return const [];
+      }
+      final unique = <String, DashboardPinnedItem>{};
+      for (final item in decoded.whereType<Map>()) {
+        final pin = DashboardPinnedItem.fromJson(
+          Map<String, dynamic>.from(item),
+        );
+        unique[pin.identity] = pin;
+        if (unique.length == 3) {
+          break;
+        }
+      }
+      return unique.values.toList(growable: false);
+    } catch (_) {
+      return const [];
     }
   }
 

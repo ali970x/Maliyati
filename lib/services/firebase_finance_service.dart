@@ -828,6 +828,29 @@ class FirebaseFinanceService {
     }, SetOptions(merge: true));
   }
 
+  Future<List<Map<String, dynamic>>?> fetchDashboardPins() async {
+    final user = _requireUser();
+    final snapshot = await _settings(user.uid).get();
+    final raw = snapshot.data()?['dashboardPins'];
+    if (raw is! List) {
+      return null;
+    }
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  Future<void> saveDashboardPins(
+    List<Map<String, dynamic>> dashboardPins,
+  ) async {
+    final user = _requireUser();
+    await _settings(user.uid).set({
+      'dashboardPins': dashboardPins,
+      'dashboardPinsUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<WalletSyncSettings?> fetchWalletSettings() async {
     final user = _requireUser();
     final snapshot = await _settings(user.uid).get();
