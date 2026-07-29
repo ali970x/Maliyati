@@ -419,6 +419,103 @@ class FirebaseFinanceService {
     await _transactions(user.uid).doc(id).delete();
   }
 
+  Future<void> setTransactionDeleted(
+    FinancialTransaction transaction, {
+    required bool deleted,
+  }) async {
+    final user = _requireUser();
+    final id = _requireTransactionId(transaction);
+    final collection = _transactions(user.uid);
+    final transactionReference = collection.doc(id);
+    await _firestore.runTransaction((databaseTransaction) async {
+      final snapshot = await databaseTransaction.get(transactionReference);
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null) {
+        throw const FirebaseFinanceException('Transaction no longer exists.');
+      }
+
+      final stored = _fromFirestore(data, fallbackId: snapshot.id);
+      if (stored.isDeleted == deleted) {
+        return;
+      }
+
+      DocumentReference<Map<String, dynamic>>? parentReference;
+      FinancialTransaction? updatedParent;
+      var parentAdjusted = false;
+      final parentId = stored.linkedTransactionId?.trim() ?? '';
+      if (parentId.isNotEmpty) {
+        parentReference = collection.doc(parentId);
+        final parentSnapshot = await databaseTransaction.get(parentReference);
+        final parentData = parentSnapshot.data();
+        if (parentSnapshot.exists && parentData != null) {
+          final parent = _fromFirestore(
+            parentData,
+            fallbackId: parentSnapshot.id,
+          );
+          // Old sequential IDs were occasionally reused. Only a real
+          // Credit/Payable parent is allowed to receive settlement changes.
+          if (parent.isCredit || parent.isDebt) {
+            final allocatedUsd = _settlementAmount(stored, const [
+              'settlement_allocation_usd',
+              'settlement_amount_usd',
+            ], stored.amountUsd);
+            final allocatedLbp = _settlementAmount(stored, const [
+              'settlement_allocation_lbp',
+              'settlement_amount_lbp',
+            ], stored.amountLbp);
+            if (deleted) {
+              updatedParent = AccountingRules.removeSettlement(
+                parent,
+                amountUsd: allocatedUsd,
+                amountLbp: allocatedLbp,
+              );
+              parentAdjusted = true;
+            } else if (stored.raw['recycle_parent_adjusted'] == 'true') {
+              updatedParent = AccountingRules.applySettlement(
+                parent,
+                amountUsd: allocatedUsd,
+                amountLbp: allocatedLbp,
+              );
+            }
+          }
+        }
+      }
+
+      final raw = Map<String, String>.from(stored.raw);
+      if (deleted) {
+        raw['deleted'] = 'true';
+        raw['deleted_at'] = DateTime.now().toUtc().toIso8601String();
+        if (parentAdjusted) {
+          raw['recycle_parent_adjusted'] = 'true';
+        }
+      } else {
+        raw.remove('deleted');
+        raw.remove('deleted_at');
+        raw.remove('deletedAt');
+        raw.remove('recycle_parent_adjusted');
+      }
+      final updated = stored.copyWith(raw: raw);
+      if (updatedParent != null && parentReference != null) {
+        databaseTransaction.set(parentReference, _toFirestore(updatedParent));
+      }
+      databaseTransaction.set(transactionReference, _toFirestore(updated));
+    });
+  }
+
+  double _settlementAmount(
+    FinancialTransaction transaction,
+    List<String> keys,
+    double fallback,
+  ) {
+    for (final key in keys) {
+      final parsed = double.tryParse(transaction.raw[key] ?? '');
+      if (parsed != null) {
+        return parsed;
+      }
+    }
+    return fallback;
+  }
+
   Future<void> deleteTransactionCascade(String id) async {
     final user = _requireUser();
     final collection = _transactions(user.uid);
@@ -945,6 +1042,10 @@ class FirebaseFinanceService {
       // Keep this at the document root as well as in `raw`.  A few legacy
       // import paths rebuild `raw`, while this field must survive refreshes.
       'archived': transaction.isArchived,
+      'deleted': transaction.isDeleted,
+      'deletedAt': transaction.deletedAt == null
+          ? null
+          : Timestamp.fromDate(transaction.deletedAt!),
       'createdAt': transaction.createdAt == null
           ? FieldValue.serverTimestamp()
           : Timestamp.fromDate(transaction.createdAt!),
@@ -995,6 +1096,8 @@ class FirebaseFinanceService {
       'source': '${data['source'] ?? ''}',
       'created_at': createdAt?.toIso8601String() ?? '',
       'archived': '${data['archived'] == true}',
+      'deleted': '${data['deleted'] == true}',
+      'deleted_at': _toNullableDate(data['deletedAt'])?.toIso8601String() ?? '',
     };
     final storedRaw = data['raw'];
     if (storedRaw is Map) {
@@ -1016,6 +1119,10 @@ class FirebaseFinanceService {
     final archivedValue = data['archived'];
     if (archivedValue is bool) {
       raw['archived'] = archivedValue ? 'true' : 'false';
+    }
+    final deletedValue = data['deleted'];
+    if (deletedValue is bool) {
+      raw['deleted'] = deletedValue ? 'true' : 'false';
     }
 
     return AccountingRules.normalize(

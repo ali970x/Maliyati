@@ -1239,8 +1239,10 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete transaction?'),
-        content: const Text('This removes it from the app database.'),
+        title: const Text('Move to Recycle Bin?'),
+        content: const Text(
+          'The transaction will leave your active totals, but you can restore it later.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1249,7 +1251,7 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(true),
             icon: const Icon(Icons.delete_rounded),
-            label: const Text('Delete'),
+            label: const Text('Move to Bin'),
           ),
         ],
       ),

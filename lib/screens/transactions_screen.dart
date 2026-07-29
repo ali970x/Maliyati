@@ -93,6 +93,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
               onToggleAdvancedFilters: () =>
                   setState(() => _showAdvancedFilters = !_showAdvancedFilters),
               onShowArchived: () => _showArchived(context),
+              onShowRecycled: () => _showRecycled(context),
             ),
           ),
           if (controller.isLoading && !controller.hasData)
@@ -154,10 +155,10 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               label: 'Archive',
                               alignment: Alignment.centerRight,
                             ),
-                            confirmDismiss: (direction) =>
-                                direction == DismissDirection.startToEnd
-                                ? _confirmSwipe(context, true)
-                                : Future.value(true),
+                            confirmDismiss: (direction) => _confirmSwipe(
+                              context,
+                              direction == DismissDirection.startToEnd,
+                            ),
                             onDismissed: (direction) {
                               if (direction == DismissDirection.startToEnd) {
                                 controller.deleteTransaction(transaction);
@@ -317,8 +318,12 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete transaction?'),
-        content: const Text('This transaction will be removed permanently.'),
+        title: Text(isDelete ? 'Move to Recycle Bin?' : 'Archive transaction?'),
+        content: Text(
+          isDelete
+              ? 'The transaction will leave your active totals, but you can restore it from the Recycle Bin.'
+              : 'The transaction will be hidden from the active list. You can restore it from Archived transactions.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -331,7 +336,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                   : const Color(0xFFD97706),
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(isDelete ? 'Move to Bin' : 'Archive'),
           ),
         ],
       ),
@@ -348,6 +353,14 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             _ArchivedTransactionsSheet(controller: widget.controller),
       );
 
+  Future<void> _showRecycled(BuildContext context) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (_) => _RecycleBinSheet(controller: widget.controller),
+      );
+
   Widget _transactionMenu(
     BuildContext context,
     FinancialTransaction transaction,
@@ -361,7 +374,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           _openDetail(context, transaction, startEditing: true);
           break;
         case _TransactionMenuAction.archive:
-          await widget.controller.archiveTransaction(transaction);
+          if (await _confirmSwipe(context, false)) {
+            await widget.controller.archiveTransaction(transaction);
+          }
           break;
         case _TransactionMenuAction.delete:
           if (await _confirmSwipe(context, true)) {
@@ -506,6 +521,131 @@ class _ArchivedTransactionsSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+class _RecycleBinSheet extends StatelessWidget {
+  const _RecycleBinSheet({required this.controller});
+
+  final DashboardController controller;
+
+  Future<bool> _confirmPermanentDelete(
+    BuildContext context,
+    FinancialTransaction transaction,
+  ) async =>
+      (await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Delete forever?'),
+          content: Text(
+            '"${transaction.description}" will be permanently deleted and cannot be restored.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFC74949),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              icon: const Icon(Icons.delete_forever_rounded),
+              label: const Text('Delete forever'),
+            ),
+          ],
+        ),
+      )) ??
+      false;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    builder: (context, _) {
+      final transactions = controller.recycledTransactions.toList()
+        ..sort(
+          (a, b) => (b.deletedAt ?? b.date).compareTo(a.deletedAt ?? a.date),
+        );
+      return SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .8,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 6, 12, 10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.delete_outline_rounded),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Recycle Bin',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Text('${transactions.length}'),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: transactions.isEmpty
+                    ? const Center(child: Text('The Recycle Bin is empty.'))
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        itemCount: transactions.length,
+                        itemBuilder: (context, index) {
+                          final transaction = transactions[index];
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: TransactionCard(
+                                  transaction: transaction,
+                                  exchangeRate: controller.exchangeRate,
+                                  strings: controller.strings,
+                                  categoryColor: controller.categoryColorFor(
+                                    transaction.category,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Restore',
+                                onPressed: () => controller
+                                    .restoreDeletedTransaction(transaction),
+                                icon: const Icon(Icons.restore_rounded),
+                              ),
+                              IconButton(
+                                tooltip: 'Delete forever',
+                                onPressed: () async {
+                                  if (await _confirmPermanentDelete(
+                                    context,
+                                    transaction,
+                                  )) {
+                                    await controller
+                                        .permanentlyDeleteTransaction(
+                                          transaction,
+                                        );
+                                  }
+                                },
+                                icon: const Icon(
+                                  Icons.delete_forever_rounded,
+                                  color: Color(0xFFC74949),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _ResultsSummary extends StatelessWidget {
@@ -679,6 +819,7 @@ class _Filters extends StatelessWidget {
     required this.showAdvancedFilters,
     required this.onToggleAdvancedFilters,
     required this.onShowArchived,
+    required this.onShowRecycled,
   });
 
   final DashboardController controller;
@@ -697,6 +838,7 @@ class _Filters extends StatelessWidget {
   final bool showAdvancedFilters;
   final VoidCallback onToggleAdvancedFilters;
   final VoidCallback onShowArchived;
+  final VoidCallback onShowRecycled;
 
   @override
   Widget build(BuildContext context) {
@@ -749,6 +891,15 @@ class _Filters extends StatelessWidget {
                   backgroundColor: Colors.transparent,
                 ),
                 icon: const Icon(Icons.archive_outlined),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'Recycle Bin',
+                onPressed: onShowRecycled,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                ),
+                icon: const Icon(Icons.delete_outline_rounded),
               ),
             ],
           ),

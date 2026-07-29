@@ -288,11 +288,19 @@ class DashboardController extends ChangeNotifier {
   List<CategoryRule> _categoryRules = const [];
 
   List<FinancialTransaction> get transactions => List.unmodifiable(
-    _transactions.where((transaction) => !transaction.isArchived),
+    _transactions.where(
+      (transaction) => !transaction.isArchived && !transaction.isDeleted,
+    ),
   );
 
   List<FinancialTransaction> get archivedTransactions => List.unmodifiable(
-    _transactions.where((transaction) => transaction.isArchived),
+    _transactions.where(
+      (transaction) => transaction.isArchived && !transaction.isDeleted,
+    ),
+  );
+
+  List<FinancialTransaction> get recycledTransactions => List.unmodifiable(
+    _transactions.where((transaction) => transaction.isDeleted),
   );
 
   double get walletOpeningUsd => _walletOpeningUsd;
@@ -314,7 +322,9 @@ class DashboardController extends ChangeNotifier {
 
   WalletSummary _walletSummaryFor(List<FinancialTransaction> transactions) =>
       WalletSummary.fromTransactions(
-        transactions,
+        transactions
+            .where((transaction) => !transaction.isDeleted)
+            .toList(growable: false),
         cashOpeningUsd: _walletOpeningUsd,
         cashOpeningLbp: _walletOpeningLbp,
         wishOpeningUsd: _wishWalletOpeningUsd,
@@ -349,7 +359,10 @@ class DashboardController extends ChangeNotifier {
     final cutoff = DateTime(asOf.year, asOf.month, asOf.day);
     return _walletSummaryFor(
       _transactions
-          .where((transaction) => !transaction.date.isAfter(cutoff))
+          .where(
+            (transaction) =>
+                !transaction.isDeleted && !transaction.date.isAfter(cutoff),
+          )
           .toList(),
     );
   }
@@ -428,7 +441,8 @@ class DashboardController extends ChangeNotifier {
 
   bool get isInitialized => _isInitialized;
 
-  bool get hasData => _transactions.isNotEmpty;
+  bool get hasData =>
+      _transactions.any((transaction) => !transaction.isDeleted);
 
   bool get isFirebaseConfigured => _isFirebaseConfigured;
 
@@ -458,7 +472,8 @@ class DashboardController extends ChangeNotifier {
   List<String> get categoryOptions {
     final values = {
       for (final rule in _categoryRules) rule.name.trim(),
-      for (final transaction in _transactions) transaction.category.trim(),
+      for (final transaction in _transactions)
+        if (!transaction.isDeleted) transaction.category.trim(),
     }.where((value) => value.isNotEmpty).toList()..sort();
     return values;
   }
@@ -480,7 +495,8 @@ class DashboardController extends ChangeNotifier {
       for (final rule in _categoryRules)
         if (rule.appliesTo(type)) rule.name.trim(),
       for (final transaction in _transactions)
-        if (transaction.type == type) transaction.category.trim(),
+        if (!transaction.isDeleted && transaction.type == type)
+          transaction.category.trim(),
     }.where((value) => value.isNotEmpty).toList()..sort();
     return values.isEmpty ? ['Uncategorized'] : values;
   }
@@ -490,6 +506,7 @@ class DashboardController extends ChangeNotifier {
       'My Wallet',
       'Whish Money',
       ..._transactions
+          .where((transaction) => !transaction.isDeleted)
           .map((transaction) => transaction.paymentMethod.trim())
           .where((value) => value.isNotEmpty),
     }.toList()..sort();
@@ -508,11 +525,13 @@ class DashboardController extends ChangeNotifier {
     final start = _calculationStartMonth;
     if (start == null) {
       return _transactions
-          .where((transaction) => !transaction.isArchived)
+          .where(
+            (transaction) => !transaction.isArchived && !transaction.isDeleted,
+          )
           .toList();
     }
     return _transactions.where((transaction) {
-      if (transaction.isArchived) return false;
+      if (transaction.isArchived || transaction.isDeleted) return false;
       if (!transaction.hasDate) {
         return false;
       }
@@ -2679,38 +2698,41 @@ class DashboardController extends ChangeNotifier {
     if (!_isFirebaseConfigured) {
       throw const FirebaseFinanceException('Firebase is not configured.');
     }
-    if (transaction.isSettlementEntry) {
-      final updatedParent = await _firebase.deleteSettlementEntry(id);
-      final parentId = transaction.linkedTransactionId?.trim() ?? '';
-      _transactions = [
-        for (final item in _transactions)
-          if (item.id?.trim() != id)
-            if (updatedParent != null &&
-                parentId.isNotEmpty &&
-                item.id?.trim() == parentId)
-              updatedParent
-            else
-              item,
-      ];
-      _lastUpdated = DateTime.now();
-      notifyListeners();
-      await _afterTransactionMutation();
+    await _firebase.setTransactionDeleted(transaction, deleted: true);
+    await _reloadTransactionsAfterRecycleChange();
+  }
+
+  Future<void> restoreDeletedTransaction(
+    FinancialTransaction transaction,
+  ) async {
+    if (!transaction.isDeleted) {
       return;
     }
-    final linkedIds = _transactions
-        .where((item) => item.linkedTransactionId == id)
-        .map((item) => item.id?.trim() ?? '')
-        .where((linkedId) => linkedId.isNotEmpty)
-        .toSet();
-    await _firebase.deleteTransactionCascade(id);
+    await _firebase.setTransactionDeleted(transaction, deleted: false);
+    await _reloadTransactionsAfterRecycleChange();
+  }
+
+  Future<void> permanentlyDeleteTransaction(
+    FinancialTransaction transaction,
+  ) async {
+    final id = transaction.id?.trim() ?? '';
+    if (id.isEmpty || !transaction.isDeleted) {
+      return;
+    }
+    await _firebase.deleteTransaction(id);
     _transactions = _transactions
-        .where(
-          (item) =>
-              item.id?.trim() != id &&
-              !linkedIds.contains(item.id?.trim()) &&
-              item.linkedTransactionId != id,
-        )
+        .where((item) => item.id?.trim() != id)
         .toList(growable: false);
+    _lastUpdated = DateTime.now();
+    notifyListeners();
+    await _afterTransactionMutation();
+  }
+
+  Future<void> _reloadTransactionsAfterRecycleChange() async {
+    _transactions = await _firebase.fetchTransactions();
+    _transactions.sort(
+      (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+    );
     _lastUpdated = DateTime.now();
     notifyListeners();
     await _afterTransactionMutation();
@@ -3172,6 +3194,9 @@ class WalletSummary {
     final cashTransactions = <FinancialTransaction>[];
     final wishTransactions = <FinancialTransaction>[];
     for (final transaction in transactions) {
+      if (transaction.isDeleted) {
+        continue;
+      }
       if (transaction.isTransfer && transaction.destinationWalletId != null) {
         final sourceRaw = Map<String, String>.from(transaction.raw)
           ..['wallet_direction'] = '-1';

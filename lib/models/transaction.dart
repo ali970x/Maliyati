@@ -54,6 +54,11 @@ class FinancialTransaction {
 
   bool get isArchived => raw['archived']?.toLowerCase() == 'true';
 
+  bool get isDeleted => raw['deleted']?.toLowerCase() == 'true';
+
+  DateTime? get deletedAt =>
+      DateTime.tryParse(raw['deleted_at'] ?? raw['deletedAt'] ?? '');
+
   String get walletId {
     final explicit = raw['wallet_id'] ?? raw['walletId'];
     if (explicit != null && explicit.trim().isNotEmpty) {

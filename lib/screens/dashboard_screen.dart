@@ -4256,7 +4256,7 @@ class _TransactionRow extends StatelessWidget {
     const deleteAction = _DashboardSwipeAction(
       color: Color(0xFFC74949),
       icon: Icons.delete_outline_rounded,
-      label: 'Delete',
+      label: 'Recycle',
       alignment: Alignment.centerLeft,
     );
     const archiveAction = _DashboardSwipeAction(
@@ -4269,9 +4269,10 @@ class _TransactionRow extends StatelessWidget {
       key: ValueKey('dashboard-${transaction.id ?? transaction.hashCode}'),
       background: isRtl ? archiveAction : deleteAction,
       secondaryBackground: isRtl ? deleteAction : archiveAction,
-      confirmDismiss: (direction) => direction == deleteDirection
-          ? _confirmDashboardDelete(context)
-          : Future.value(true),
+      confirmDismiss: (direction) => _confirmDashboardAction(
+        context,
+        isDelete: direction == deleteDirection,
+      ),
       onDismissed: (direction) {
         if (direction == deleteDirection) {
           controller.deleteTransaction(transaction);
@@ -4357,12 +4358,19 @@ class _TransactionRow extends StatelessWidget {
   }
 }
 
-Future<bool> _confirmDashboardDelete(BuildContext context) async =>
+Future<bool> _confirmDashboardAction(
+  BuildContext context, {
+  required bool isDelete,
+}) async =>
     (await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete transaction?'),
-        content: const Text('This action cannot be undone.'),
+        title: Text(isDelete ? 'Move to Recycle Bin?' : 'Archive transaction?'),
+        content: Text(
+          isDelete
+              ? 'You can restore this transaction later from the Recycle Bin.'
+              : 'You can restore this transaction later from Archived transactions.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -4370,7 +4378,7 @@ Future<bool> _confirmDashboardDelete(BuildContext context) async =>
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(isDelete ? 'Move to Bin' : 'Archive'),
           ),
         ],
       ),

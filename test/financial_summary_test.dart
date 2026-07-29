@@ -486,6 +486,32 @@ void main() {
     expect(restored.remainingAmountUsd, 100);
     expect(restored.settlementStatus, AccountingSettlementStatus.open);
   });
+
+  test('transactions in the recycle bin do not affect wallet balances', () {
+    final activeExpense = _transaction(
+      DateTime(2026, 7, 1),
+      TransactionType.expense,
+      10,
+    );
+    final recycledExpense = _transaction(
+      DateTime(2026, 7, 2),
+      TransactionType.expense,
+      24,
+    ).copyWith(raw: const {'deleted': 'true'});
+
+    final summary = WalletSummary.fromTransactions(
+      [activeExpense, recycledExpense],
+      cashOpeningUsd: 100,
+      cashOpeningLbp: 0,
+      wishOpeningUsd: 0,
+      wishOpeningLbp: 0,
+      ignoredCashTransactionIds: const {},
+      ignoredWishTransactionIds: const {},
+    );
+
+    expect(recycledExpense.isDeleted, isTrue);
+    expect(summary.cash.balanceUsd, 90);
+  });
 }
 
 FinancialTransaction _transaction(
