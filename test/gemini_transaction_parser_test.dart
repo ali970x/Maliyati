@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:finance_tracker/models/transaction.dart';
 import 'package:finance_tracker/services/gemini_transaction_parser.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -134,5 +136,17 @@ Here is the confirmed Maliyati action:
         ),
       ),
     );
+  });
+
+  test('parses a base64 encoded script shared by Android', () {
+    const script =
+        '{"action":"add","type":"expense","title":"Delivery madi 3","amount_usd":24,"currency":"usd","category":"Transportation & Delivery","payment_method":"Whish Money"}';
+    final encoded = 'base64:${base64Encode(utf8.encode(script))}';
+
+    final action = parser.parseActions(encoded).single;
+
+    expect(action.type, SmartTransactionActionType.add);
+    expect(action.transaction?.description, 'Delivery madi 3');
+    expect(action.transaction?.amountUsd, 24);
   });
 }

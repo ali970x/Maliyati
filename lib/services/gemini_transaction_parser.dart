@@ -47,11 +47,20 @@ class GeminiTransactionParser {
   }
 
   List<SmartTransactionAction> parseActions(String input) {
-    final trimmed = input.trim();
+    var trimmed = input.trim();
     if (trimmed.isEmpty) {
       throw const GeminiTransactionParseException(
         'Paste a Maliyati JSON script first.',
       );
+    }
+    if (trimmed.toLowerCase().startsWith('base64:')) {
+      try {
+        trimmed = utf8.decode(base64Decode(trimmed.substring(7).trim())).trim();
+      } on FormatException {
+        throw const GeminiTransactionParseException(
+          'The base64 Maliyati script is invalid.',
+        );
+      }
     }
 
     late final Object? decoded;
