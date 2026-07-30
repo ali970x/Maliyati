@@ -76,9 +76,9 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Compare with'));
+    await tester.tap(find.text('Compare all sections'));
     await tester.pumpAndSettle();
-    expect(find.text('Compare dashboard with'), findsOneWidget);
+    expect(find.text('Compare all sections with'), findsOneWidget);
     await tester.tap(find.text('Yesterday').last);
     await tester.pumpAndSettle();
 
@@ -121,15 +121,20 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Compare with'), findsOneWidget);
+    expect(find.text('Compare all sections'), findsOneWidget);
     expect(find.text('Previous month'), findsOneWidget);
-    expect(find.textContaining('vs Previous month'), findsWidgets);
+    expect(find.text('+100.0%'), findsWidgets);
     await tester.tap(find.text('Expenses').first);
     await tester.pumpAndSettle();
 
+    expect(find.byTooltip('Choose comparison period'), findsOneWidget);
+    expect(find.text('Comparison period'), findsNothing);
     expect(find.text('Transportation & Delivery'), findsOneWidget);
-    expect(find.textContaining('Previous month: \$50.00'), findsOneWidget);
-    expect(find.textContaining('+100'), findsOneWidget);
+    expect(find.textContaining('Previous month:'), findsNothing);
+    expect(find.text('+100.0%'), findsOneWidget);
+    await tester.tap(find.byTooltip('Choose comparison period'));
+    await tester.pumpAndSettle();
+    expect(find.text('Compare all sections with'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

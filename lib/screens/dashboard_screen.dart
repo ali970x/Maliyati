@@ -72,7 +72,7 @@ Future<void> _showDashboardComparisonPicker(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Compare dashboard with',
+            'Compare all sections with',
             style: Theme.of(
               sheetContext,
             ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
@@ -174,18 +174,21 @@ class _DashboardComparisonControl extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(width: 9),
-            const Text(
-              'Compare with',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                controller.dashboardComparisonLabel,
-                textAlign: TextAlign.end,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Compare all sections',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    controller.dashboardComparisonLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 4),
@@ -863,8 +866,6 @@ class _LightDashboard extends StatelessWidget {
                               summary.totalIncome,
                               controller.previousSummary.totalIncome,
                             ),
-                            comparisonLabel:
-                                controller.dashboardComparisonLabel,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -893,8 +894,6 @@ class _LightDashboard extends StatelessWidget {
                               summary.totalExpense,
                               controller.previousSummary.totalExpense,
                             ),
-                            comparisonLabel:
-                                controller.dashboardComparisonLabel,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -925,8 +924,6 @@ class _LightDashboard extends StatelessWidget {
                               summary.totalReserveable,
                               controller.previousSummary.totalReserveable,
                             ),
-                            comparisonLabel:
-                                controller.dashboardComparisonLabel,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -957,8 +954,6 @@ class _LightDashboard extends StatelessWidget {
                               summary.totalDebt,
                               controller.previousSummary.totalDebt,
                             ),
-                            comparisonLabel:
-                                controller.dashboardComparisonLabel,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -1000,8 +995,6 @@ class _LightDashboard extends StatelessWidget {
                                 controller.exchangeRate,
                               ),
                             ),
-                            comparisonLabel:
-                                controller.dashboardComparisonLabel,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -1031,7 +1024,6 @@ class _LightDashboard extends StatelessWidget {
                     summary.totalNet,
                     controller.previousSummary.totalNet,
                   ),
-                  comparisonLabel: controller.dashboardComparisonLabel,
                   onLongPress: onToggleNetCashFlowCurrency,
                 ),
                 const SizedBox(height: 8),
@@ -1611,7 +1603,6 @@ class _LightMetric extends StatelessWidget {
     required this.icon,
     required this.color,
     this.change,
-    this.comparisonLabel,
     this.onTap,
     this.onLongPress,
   });
@@ -1621,7 +1612,6 @@ class _LightMetric extends StatelessWidget {
   final IconData icon;
   final Color color;
   final double? change;
-  final String? comparisonLabel;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -1675,9 +1665,9 @@ class _LightMetric extends StatelessWidget {
                     fontSize: 10,
                   ),
                 ),
-                if (change != null && comparisonLabel != null)
+                if (change != null)
                   Text(
-                    '${_signedPercent(change!)} vs $comparisonLabel',
+                    _signedPercent(change!),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -2304,10 +2294,13 @@ class _DashboardMetricFocusScreenState
             creditMode: creditMode,
             debtMode: debtMode,
           ),
-          IconButton(
-            tooltip: 'Compare periods',
-            onPressed: _openComparison,
-            icon: const Icon(Icons.compare_arrows_rounded),
+          GestureDetector(
+            onLongPress: _openComparison,
+            child: IconButton(
+              tooltip: 'Choose comparison period',
+              onPressed: _selectComparisonPeriod,
+              icon: const Icon(Icons.compare_arrows_rounded),
+            ),
           ),
         ],
       ),
@@ -2328,11 +2321,6 @@ class _DashboardMetricFocusScreenState
               }
             }),
             onSortChanged: (sort) => setState(() => _sort = sort),
-          ),
-          _MetricComparisonEntry(
-            periodLabel: periodFilterLabel(controller),
-            comparisonLabel: controller.dashboardComparisonLabel,
-            onTap: _selectComparisonPeriod,
           ),
           Expanded(
             child:
@@ -2583,60 +2571,6 @@ class _MetricFocusControls extends StatelessWidget {
                   label: Text(_metricSortLabel(sort)),
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricComparisonEntry extends StatelessWidget {
-  const _MetricComparisonEntry({
-    required this.periodLabel,
-    required this.comparisonLabel,
-    required this.onTap,
-  });
-
-  final String periodLabel;
-  final String comparisonLabel;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Material(
-      color: colors.surface,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: colors.outlineVariant)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.compare_arrows_rounded, color: colors.primary),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Comparison period',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    Text(
-                      '$periodLabel vs $comparisonLabel',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right_rounded),
             ],
           ),
         ),
@@ -3567,7 +3501,6 @@ class _CategoryFocusList extends StatelessWidget {
               (sum, item) => sum + item.amountInUsd(controller.exchangeRate),
             ),
             count: rows.length,
-            previousCount: previousRows.length,
             oldest: dates.first,
             newest: dates.last,
           );
@@ -3617,19 +3550,34 @@ class _CategoryFocusList extends StatelessWidget {
                       ? 'No transactions in the current period'
                       : '${entry.count} transactions | latest ${FinanceFormatters.shortDate(entry.newest)}',
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '${controller.dashboardComparisonLabel}: '
-                  '${FinanceFormatters.usd(entry.previousTotal)} '
-                  '| ${entry.previousCount} tx '
-                  '(${_signedPercent(_percentageChange(entry.total, entry.previousTotal))})',
-                  style: TextStyle(
-                    color: _comparisonChangeColor(
-                      kind,
-                      _percentageChange(entry.total, entry.previousTotal),
+                const SizedBox(height: 5),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
                     ),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    decoration: BoxDecoration(
+                      color: _comparisonChangeColor(
+                        kind,
+                        _percentageChange(entry.total, entry.previousTotal),
+                      ).withValues(alpha: .11),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      _signedPercent(
+                        _percentageChange(entry.total, entry.previousTotal),
+                      ),
+                      style: TextStyle(
+                        color: _comparisonChangeColor(
+                          kind,
+                          _percentageChange(entry.total, entry.previousTotal),
+                        ),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -3701,7 +3649,6 @@ class _CategoryFocusStat {
     required this.total,
     required this.previousTotal,
     required this.count,
-    required this.previousCount,
     required this.oldest,
     required this.newest,
   });
@@ -3710,7 +3657,6 @@ class _CategoryFocusStat {
   final double total;
   final double previousTotal;
   final int count;
-  final int previousCount;
   final DateTime oldest;
   final DateTime newest;
 }
