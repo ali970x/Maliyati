@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../controllers/dashboard_controller.dart';
 import '../l10n/app_strings.dart';
+import '../models/budget_plan.dart';
 import '../models/dashboard_pin.dart';
 import '../models/transaction.dart';
 import '../services/label_normalizer.dart';
@@ -12,6 +13,7 @@ import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
 import 'add_transaction_screen.dart';
+import 'budget_plan_screen.dart';
 import 'transaction_detail_screen.dart';
 import 'wallet_screen.dart';
 
@@ -845,6 +847,8 @@ class _LightDashboard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 _PinnedDashboardSection(controller: controller, light: true),
+                const SizedBox(height: 8),
+                _IncomeAllocationPanel(controller: controller, light: true),
                 const SizedBox(height: 8),
                 _LightExpenseFocus(controller: controller),
                 const SizedBox(height: 8),
@@ -3956,7 +3960,7 @@ class _DashboardContent extends StatelessWidget {
         _ResponsivePair(
           wide: wide,
           first: _CategoryPanel(controller: controller),
-          second: _BudgetPanel(controller: controller),
+          second: _IncomeAllocationPanel(controller: controller),
         ),
         const SizedBox(height: 12),
         _RecentTransactions(
@@ -4922,117 +4926,214 @@ class _CategoryRow extends StatelessWidget {
   );
 }
 
-class _BudgetPanel extends StatelessWidget {
-  const _BudgetPanel({required this.controller});
+class _IncomeAllocationPanel extends StatelessWidget {
+  const _IncomeAllocationPanel({required this.controller, this.light = false});
+
   final DashboardController controller;
+  final bool light;
+
   @override
   Widget build(BuildContext context) {
-    final summary = controller.summary;
-    final available = math.max(0.0, summary.totalIncome - summary.totalExpense);
-    final rate = summary.totalIncome <= 0
-        ? 0.0
-        : math.min(1.0, math.max(0.0, available / summary.totalIncome));
-    return _GlassPanel(
-      accent: const Color(0xFF9358FF),
-      padding: const EdgeInsets.all(16),
+    final summary = controller.budgetPlanSummary;
+    final titleColor = light ? const Color(0xFF171A1F) : Colors.white;
+    final secondaryColor = light
+        ? const Color(0xFF667085)
+        : const Color(0xFF90A9BF);
+    final content = InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BudgetPlanScreen(controller: controller),
+        ),
+      ),
+      borderRadius: BorderRadius.circular(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            controller.language == AppLanguage.arabic
-                ? 'حالة الميزانية'
-                : 'Budget status',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 14),
           Row(
             children: [
-              SizedBox(
-                width: 112,
-                height: 112,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      value: rate,
-                      strokeWidth: 11,
-                      color: const Color(0xFF12D9F4),
-                      backgroundColor: const Color(0xFF12304A),
-                    ),
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          FinanceFormatters.percent(rate),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 22,
-                          ),
-                        ),
-                        const Text(
-                          'available',
-                          style: TextStyle(
-                            color: Color(0xFF8EAABE),
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: .11),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: Color(0xFF2563EB),
+                  size: 21,
                 ),
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Available to keep',
-                      style: TextStyle(color: Color(0xFF90A9BF), fontSize: 12),
-                    ),
-                    const SizedBox(height: 4),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        FinanceFormatters.usd(available),
-                        style: const TextStyle(
-                          color: Color(0xFF12D9F4),
-                          fontWeight: FontWeight.w900,
-                          fontSize: 22,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(999),
-                      child: LinearProgressIndicator(
-                        value: rate,
-                        minHeight: 8,
-                        color: const Color(0xFF12D9F4),
-                        backgroundColor: const Color(0xFF132C43),
-                      ),
-                    ),
-                    const SizedBox(height: 7),
                     Text(
-                      '${FinanceFormatters.usd(summary.totalExpense)} spent this period',
-                      style: const TextStyle(
-                        color: Color(0xFF8EAABE),
-                        fontSize: 11,
+                      'Income allocation',
+                      style: TextStyle(
+                        color: titleColor,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
                       ),
+                    ),
+                    Text(
+                      '${FinanceFormatters.usd(summary.totalAllocatedIncomeUsd)} planned this period',
+                      style: TextStyle(color: secondaryColor, fontSize: 11),
                     ),
                   ],
                 ),
               ),
+              Icon(Icons.chevron_right_rounded, color: secondaryColor),
             ],
           ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: SizedBox(
+              height: 8,
+              child: Row(
+                children: [
+                  for (final bucket in BudgetBucket.values)
+                    Expanded(
+                      flex: math.max(1, summary.settings.percentageFor(bucket)),
+                      child: ColoredBox(color: Color(bucket.colorValue)),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (var index = 0; index < BudgetBucket.values.length; index++) ...[
+            _BudgetDashboardRow(
+              summary: summary.forBucket(BudgetBucket.values[index]),
+              light: light,
+            ),
+            if (index != BudgetBucket.values.length - 1)
+              Divider(
+                height: 18,
+                color: light
+                    ? const Color(0xFFE4E7EC)
+                    : Colors.white.withValues(alpha: .08),
+              ),
+          ],
         ],
       ),
     );
+    return light
+        ? _LightCard(child: content)
+        : _GlassPanel(
+            accent: const Color(0xFF2563EB),
+            padding: const EdgeInsets.all(16),
+            child: content,
+          );
   }
 }
+
+class _BudgetDashboardRow extends StatelessWidget {
+  const _BudgetDashboardRow({required this.summary, required this.light});
+
+  final BudgetBucketSummary summary;
+  final bool light;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Color(summary.bucket.colorValue);
+    final isInvestment = summary.bucket == BudgetBucket.investment;
+    final isOver = summary.isOverBudget && !isInvestment;
+    final primaryText = light ? const Color(0xFF20242A) : Colors.white;
+    final secondaryText = light
+        ? const Color(0xFF667085)
+        : const Color(0xFF90A9BF);
+    final statusColor = isOver ? const Color(0xFFDC2626) : color;
+    final status = isInvestment
+        ? '${FinanceFormatters.percent(summary.coverageRatio)} funded | '
+              '${FinanceFormatters.usd(summary.remainingRequiredUsd)} required'
+        : isOver
+        ? '${FinanceFormatters.percent(summary.coverageRatio)} covered | '
+              '${FinanceFormatters.usd(summary.overUsd)} over'
+        : '${FinanceFormatters.percent(summary.coverageRatio)} covered | '
+              '${FinanceFormatters.usd(summary.remainingRequiredUsd)} left';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: .11),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            _budgetDashboardIcon(summary.bucket),
+            color: color,
+            size: 19,
+          ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      summary.displayName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${summary.percentage}% | ${FinanceFormatters.usd(summary.targetUsd)}',
+                    style: TextStyle(
+                      color: primaryText,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 5),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: summary.progress,
+                  minHeight: 6,
+                  color: statusColor,
+                  backgroundColor: color.withValues(alpha: .12),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isOver ? statusColor : secondaryText,
+                  fontWeight: isOver ? FontWeight.w800 : FontWeight.w600,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+IconData _budgetDashboardIcon(BudgetBucket bucket) => switch (bucket) {
+  BudgetBucket.investment => Icons.trending_up_rounded,
+  BudgetBucket.commitments => Icons.event_repeat_rounded,
+  BudgetBucket.expenses => Icons.shopping_bag_outlined,
+};
 
 class _RecentTransactions extends StatelessWidget {
   const _RecentTransactions({

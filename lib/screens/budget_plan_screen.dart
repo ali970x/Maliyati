@@ -204,7 +204,18 @@ class _BudgetBucketPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final bucket = summary.bucket;
     final color = Color(bucket.colorValue);
-    final remaining = summary.remainingUsd;
+    final isInvestment = bucket == BudgetBucket.investment;
+    final statusColor = summary.isOverBudget && !isInvestment
+        ? const Color(0xFFDC2626)
+        : color;
+    final coverageLabel =
+        '${FinanceFormatters.percent(summary.coverageRatio)} '
+        '${isInvestment ? 'funded' : 'covered'}';
+    final statusLabel = isInvestment
+        ? '${FinanceFormatters.usd(summary.remainingRequiredUsd)} still required'
+        : summary.isOverBudget
+        ? '${FinanceFormatters.usd(summary.overUsd)} over target'
+        : '${FinanceFormatters.usd(summary.remainingRequiredUsd)} remaining';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -267,25 +278,33 @@ class _BudgetBucketPanel extends StatelessWidget {
             children: [
               Expanded(
                 child: _BudgetValue(
-                  label: 'Allocated',
-                  value: summary.allocatedUsd,
+                  label: isInvestment ? 'Required target' : 'Target',
+                  value: summary.targetUsd,
                   color: color,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _BudgetValue(
-                  label: 'Used',
-                  value: summary.spentUsd,
-                  color: const Color(0xFF475467),
+                  label: isInvestment ? 'Funded' : 'Covered',
+                  value: summary.coveredUsd,
+                  color: isInvestment ? color : const Color(0xFF475467),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _BudgetValue(
-                  label: summary.isOverBudget ? 'Over' : 'Remaining',
-                  value: remaining.abs(),
-                  color: summary.isOverBudget
+                  label: isInvestment
+                      ? 'Still required'
+                      : summary.isOverBudget
+                      ? 'Over'
+                      : 'Remaining',
+                  value: isInvestment
+                      ? summary.remainingRequiredUsd
+                      : summary.isOverBudget
+                      ? summary.overUsd
+                      : summary.remainingRequiredUsd,
+                  color: summary.isOverBudget && !isInvestment
                       ? const Color(0xFFDC2626)
                       : const Color(0xFF168A5B),
                 ),
@@ -298,13 +317,41 @@ class _BudgetBucketPanel extends StatelessWidget {
             child: LinearProgressIndicator(
               value: summary.progress,
               minHeight: 9,
-              color: summary.isOverBudget ? const Color(0xFFDC2626) : color,
+              color: statusColor,
               backgroundColor: color.withValues(alpha: .12),
             ),
           ),
           const SizedBox(height: 7),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  coverageLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  statusLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           Text(
-            '${summary.transactionCount} expense ${summary.transactionCount == 1 ? 'transaction' : 'transactions'} in this period',
+            _transactionSummary(summary),
             style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
           ),
           if (expanded) ...[
@@ -364,6 +411,21 @@ class _BudgetBucketPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+String _transactionSummary(BudgetBucketSummary summary) {
+  final count = summary.transactionCount;
+  final noun = switch (summary.bucket) {
+    BudgetBucket.investment => 'funding',
+    BudgetBucket.commitments => 'commitment',
+    BudgetBucket.expenses => 'expense',
+  };
+  if (count == 0) {
+    return summary.bucket == BudgetBucket.investment
+        ? 'No investment funding recorded in this period.'
+        : 'No $noun transactions recorded in this period.';
+  }
+  return '$count $noun ${count == 1 ? 'transaction' : 'transactions'} in this period';
 }
 
 class _UnassignedPanel extends StatelessWidget {

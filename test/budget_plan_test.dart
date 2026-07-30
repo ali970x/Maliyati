@@ -64,6 +64,43 @@ void main() {
     expect(summary.forBucket(BudgetBucket.expenses).spentUsd, 50);
   });
 
+  test('investment target remains fully required when nothing is funded', () {
+    final summary = BudgetPlanCalculator.calculate(
+      transactions: [
+        _transaction(TransactionType.income, 'Salary & Other Income', 300),
+      ],
+      exchangeRate: 89000,
+      settings: BudgetPlanSettings.defaults(),
+      bucketForTransaction: (transaction) =>
+          BudgetBucketDetails.infer(transaction.category, {transaction.type}),
+    );
+
+    final investment = summary.forBucket(BudgetBucket.investment);
+    expect(investment.targetUsd, 99);
+    expect(investment.coveredUsd, 0);
+    expect(investment.remainingRequiredUsd, 99);
+    expect(investment.coverageRatio, 0);
+  });
+
+  test('coverage keeps the real percentage and amount over target', () {
+    final summary = BudgetPlanCalculator.calculate(
+      transactions: [
+        _transaction(TransactionType.income, 'Salary & Other Income', 300),
+        _transaction(TransactionType.expense, 'Utilities & Bills', 140),
+      ],
+      exchangeRate: 89000,
+      settings: BudgetPlanSettings.defaults(),
+      bucketForTransaction: (transaction) =>
+          BudgetBucketDetails.infer(transaction.category, {transaction.type}),
+    );
+
+    final commitments = summary.forBucket(BudgetBucket.commitments);
+    expect(commitments.targetUsd, 99);
+    expect(commitments.coverageRatio, closeTo(140 / 99, 0.0001));
+    expect(commitments.overUsd, 41);
+    expect(commitments.progress, 1);
+  });
+
   test('income can be excluded from automatic budget allocation', () {
     final excludedIncome = _transaction(
       TransactionType.income,

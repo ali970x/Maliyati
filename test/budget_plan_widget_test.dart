@@ -18,6 +18,13 @@ void main() {
     );
 
     expect(find.text('Budget Builder'), findsOneWidget);
+    expect(find.text('Required target'), findsOneWidget);
+    expect(find.text('Funded'), findsOneWidget);
+    expect(find.text('Still required'), findsOneWidget);
+    expect(
+      find.text('No investment funding recorded in this period.'),
+      findsOneWidget,
+    );
     await tester.tap(find.byTooltip('Customize plan'));
     await tester.pumpAndSettle();
 

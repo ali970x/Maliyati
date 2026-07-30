@@ -161,10 +161,25 @@ class BudgetBucketSummary {
   final int transactionCount;
   final Map<String, double> categorySpending;
 
+  double get targetUsd => allocatedUsd;
+
+  double get coveredUsd => spentUsd;
+
   double get remainingUsd => allocatedUsd - spentUsd;
 
-  double get progress =>
-      allocatedUsd <= 0 ? 0 : (spentUsd / allocatedUsd).clamp(0, 1);
+  double get remainingRequiredUsd =>
+      allocatedUsd > spentUsd ? allocatedUsd - spentUsd : 0;
+
+  double get overUsd => spentUsd > allocatedUsd ? spentUsd - allocatedUsd : 0;
+
+  double get coverageRatio {
+    if (allocatedUsd <= 0) {
+      return spentUsd > 0 ? 1 : 0;
+    }
+    return spentUsd / allocatedUsd;
+  }
+
+  double get progress => coverageRatio.clamp(0, 1).toDouble();
 
   bool get isOverBudget => spentUsd > allocatedUsd;
 }
