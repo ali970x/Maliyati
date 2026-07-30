@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../l10n/app_strings.dart';
 import '../models/budget_plan.dart';
+import '../models/dashboard_comparison.dart';
 import '../models/dashboard_pin.dart';
 import '../models/transaction.dart';
 import '../services/accounting_rules.dart';
@@ -257,6 +258,7 @@ class DashboardController extends ChangeNotifier {
   static const _categoryRulesKey = 'category_rules_v1';
   static const _budgetPlanSettingsKey = 'budget_plan_settings_v1';
   static const _dashboardPinsKey = 'dashboard_pins_v1';
+  static const _dashboardComparisonKey = 'dashboard_comparison_v1';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
@@ -306,6 +308,8 @@ class DashboardController extends ChangeNotifier {
   List<CategoryRule> _categoryRules = const [];
   BudgetPlanSettings _budgetPlanSettings = BudgetPlanSettings.defaults();
   List<DashboardPinnedItem> _dashboardPins = const [];
+  DashboardComparisonSettings _dashboardComparison =
+      const DashboardComparisonSettings();
 
   List<FinancialTransaction> get transactions => List.unmodifiable(
     _transactions.where(
@@ -505,6 +509,8 @@ class DashboardController extends ChangeNotifier {
   List<DashboardPinnedItem> get dashboardPins =>
       List.unmodifiable(_dashboardPins);
 
+  DashboardComparisonSettings get dashboardComparison => _dashboardComparison;
+
   BudgetBucket? budgetBucketForCategory(String category) {
     final normalized = category.trim().toLowerCase();
     for (final rule in _categoryRules) {
@@ -681,7 +687,62 @@ class DashboardController extends ChangeNotifier {
     return window;
   }
 
-  DateWindow? get previousWindow => currentWindow.previous;
+  DateWindow? get previousWindow {
+    final reference = referenceDate;
+    final today = DateTime(reference.year, reference.month, reference.day);
+    switch (_dashboardComparison.preset) {
+      case DashboardComparisonPreset.previousPeriod:
+        return currentWindow.previous;
+      case DashboardComparisonPreset.yesterday:
+        return DateWindow(
+          start: today.subtract(const Duration(days: 1)),
+          endExclusive: today,
+        );
+      case DashboardComparisonPreset.previousWeek:
+        final thisWeekStart = today.subtract(Duration(days: today.weekday % 7));
+        return DateWindow(
+          start: thisWeekStart.subtract(const Duration(days: 7)),
+          endExclusive: thisWeekStart,
+        );
+      case DashboardComparisonPreset.previousMonth:
+        final month = _referenceMonth ?? _selectedMonth ?? reference;
+        return DateWindow.forMonth(DateTime(month.year, month.month - 1));
+      case DashboardComparisonPreset.custom:
+        final start = _dashboardComparison.customStart;
+        final end = _dashboardComparison.customEnd;
+        if (start == null || end == null) {
+          return currentWindow.previous;
+        }
+        final first = DateTime(start.year, start.month, start.day);
+        final last = DateTime(end.year, end.month, end.day);
+        return DateWindow(
+          start: first.isBefore(last) ? first : last,
+          endExclusive: (first.isBefore(last) ? last : first).add(
+            const Duration(days: 1),
+          ),
+        );
+    }
+  }
+
+  String get dashboardComparisonLabel {
+    switch (_dashboardComparison.preset) {
+      case DashboardComparisonPreset.previousPeriod:
+        return 'Previous selected period';
+      case DashboardComparisonPreset.yesterday:
+        return 'Yesterday';
+      case DashboardComparisonPreset.previousWeek:
+        return 'Previous week';
+      case DashboardComparisonPreset.previousMonth:
+        return 'Previous month';
+      case DashboardComparisonPreset.custom:
+        final window = previousWindow;
+        if (window?.start == null || window?.endExclusive == null) {
+          return 'Custom period';
+        }
+        final end = window!.endExclusive!.subtract(const Duration(days: 1));
+        return '${_shortDate(window.start!)} - ${_shortDate(end)}';
+    }
+  }
 
   FinancialSummary get summary => FinancialSummary.fromTransactions(
     periodTransactions,
@@ -770,6 +831,7 @@ class DashboardController extends ChangeNotifier {
       await _loadCategorySettings(prefs);
       await _loadBudgetPlanSettings(prefs);
       await _loadDashboardPins(prefs);
+      await _loadDashboardComparison(prefs);
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
       await _runDailyAutoBackupIfDue();
@@ -1037,6 +1099,7 @@ class DashboardController extends ChangeNotifier {
       await _loadCategorySettings(prefs);
       await _loadBudgetPlanSettings(prefs);
       await _loadDashboardPins(prefs);
+      await _loadDashboardComparison(prefs);
       _loadAutoBackupState(prefs);
       // Sheet settings are optional. They must not block a successful login.
       try {
@@ -1121,6 +1184,7 @@ class DashboardController extends ChangeNotifier {
       await _loadCategorySettings(prefs);
       await _loadBudgetPlanSettings(prefs);
       await _loadDashboardPins(prefs);
+      await _loadDashboardComparison(prefs);
       _loadAutoBackupState(prefs);
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
@@ -1168,6 +1232,7 @@ class DashboardController extends ChangeNotifier {
     _transactions = const [];
     _budgetPlanSettings = BudgetPlanSettings.defaults();
     _dashboardPins = const [];
+    _dashboardComparison = const DashboardComparisonSettings();
     _adminUsers = const [];
     _errorMessage = null;
     _lastUpdated = DateTime.now();
@@ -1282,6 +1347,31 @@ class DashboardController extends ChangeNotifier {
           .where((item) => item.identity != pin.identity)
           .toList(growable: false),
     );
+  }
+
+  Future<void> saveDashboardComparison(
+    DashboardComparisonSettings settings,
+  ) async {
+    if (settings.preset == DashboardComparisonPreset.custom &&
+        !settings.hasCustomRange) {
+      throw const FirebaseFinanceException(
+        'Choose both dates for the custom comparison.',
+      );
+    }
+    _dashboardComparison = settings;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _dashboardComparisonStorageKey(),
+      jsonEncode(settings.toJson()),
+    );
+    if (_isFirebaseConfigured && _firebase.currentUser != null) {
+      try {
+        await _firebase.saveDashboardComparison(settings.toJson());
+      } catch (_) {
+        // Keep the comparison available locally and sync it on the next edit.
+      }
+    }
+    notifyListeners();
   }
 
   Future<CategoryCleanupResult> standardizeTransactionCategories() async {
@@ -1427,6 +1517,13 @@ class DashboardController extends ChangeNotifier {
         : '${_dashboardPinsKey}_$uid';
   }
 
+  String _dashboardComparisonStorageKey() {
+    final uid = _user?.uid.trim() ?? '';
+    return uid.isEmpty
+        ? '${_dashboardComparisonKey}_guest'
+        : '${_dashboardComparisonKey}_$uid';
+  }
+
   String _lastAutoBackupStorageKey() {
     final uid = _user?.uid.trim() ?? '';
     return uid.isEmpty
@@ -1558,6 +1655,42 @@ class DashboardController extends ChangeNotifier {
       );
     } catch (_) {
       // Keep this account's local dashboard layout while offline.
+    }
+  }
+
+  Future<void> _loadDashboardComparison(SharedPreferences prefs) async {
+    final storageKey = _dashboardComparisonStorageKey();
+    final local = prefs.getString(storageKey);
+    if (local != null && local.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(local);
+        if (decoded is Map) {
+          _dashboardComparison = DashboardComparisonSettings.fromJson(
+            Map<String, dynamic>.from(decoded),
+          );
+        }
+      } catch (_) {
+        _dashboardComparison = const DashboardComparisonSettings();
+      }
+    } else {
+      _dashboardComparison = const DashboardComparisonSettings();
+    }
+    if (!_isFirebaseConfigured || _firebase.currentUser == null) {
+      return;
+    }
+    try {
+      final remote = await _firebase.fetchDashboardComparison();
+      if (remote == null) {
+        await _firebase.saveDashboardComparison(_dashboardComparison.toJson());
+        return;
+      }
+      _dashboardComparison = DashboardComparisonSettings.fromJson(remote);
+      await prefs.setString(
+        storageKey,
+        jsonEncode(_dashboardComparison.toJson()),
+      );
+    } catch (_) {
+      // Keep this account's comparison period available while offline.
     }
   }
 
@@ -3035,6 +3168,9 @@ class DashboardController extends ChangeNotifier {
         .toList();
   }
 }
+
+String _shortDate(DateTime date) =>
+    '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
 class DateWindow {
   const DateWindow({this.start, this.endExclusive});

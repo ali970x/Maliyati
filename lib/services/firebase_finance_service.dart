@@ -851,6 +851,26 @@ class FirebaseFinanceService {
     }, SetOptions(merge: true));
   }
 
+  Future<Map<String, dynamic>?> fetchDashboardComparison() async {
+    final user = _requireUser();
+    final snapshot = await _settings(user.uid).get();
+    final raw = snapshot.data()?['dashboardComparison'];
+    if (raw is! Map) {
+      return null;
+    }
+    return Map<String, dynamic>.from(raw);
+  }
+
+  Future<void> saveDashboardComparison(
+    Map<String, dynamic> dashboardComparison,
+  ) async {
+    final user = _requireUser();
+    await _settings(user.uid).set({
+      'dashboardComparison': dashboardComparison,
+      'dashboardComparisonUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
   Future<WalletSyncSettings?> fetchWalletSettings() async {
     final user = _requireUser();
     final snapshot = await _settings(user.uid).get();
