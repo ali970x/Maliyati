@@ -17,8 +17,6 @@ class BudgetPlanScreen extends StatefulWidget {
 }
 
 class _BudgetPlanScreenState extends State<BudgetPlanScreen> {
-  final Set<BudgetBucket> _expanded = {BudgetBucket.investment};
-
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -27,7 +25,7 @@ class _BudgetPlanScreenState extends State<BudgetPlanScreen> {
         IconButton(
           tooltip: 'Customize plan',
           onPressed: _openEditor,
-          icon: const Icon(Icons.tune_rounded),
+          icon: const Icon(Icons.edit_outlined),
         ),
       ],
     ),
@@ -46,32 +44,21 @@ class _BudgetPlanScreenState extends State<BudgetPlanScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Build your own income plan. Tap a section to explore it, or use Customize to rename groups and move categories.',
+              'Plan the selected income across investment, commitments, and expenses.',
               style: TextStyle(color: Color(0xFF667085)),
             ),
             const SizedBox(height: 14),
             PeriodFilterBar(controller: widget.controller),
             const SizedBox(height: 14),
-            _AllocationOverview(summary: summary, onCustomize: _openEditor),
+            _AllocationOverview(
+              summary: summary,
+              onEditIncome: _openIncomeSource,
+            ),
             const SizedBox(height: 14),
             for (final bucket in BudgetBucket.values) ...[
               _BudgetBucketPanel(
                 summary: summary.forBucket(bucket),
-                categoryNames: widget.controller.categoryRules
-                    .where(
-                      (rule) =>
-                          !rule.budgetExcluded &&
-                          rule.effectiveBudgetBucket == bucket,
-                    )
-                    .map((rule) => rule.name)
-                    .toList(growable: false),
-                expanded: _expanded.contains(bucket),
-                onToggle: () => setState(() {
-                  if (!_expanded.add(bucket)) {
-                    _expanded.remove(bucket);
-                  }
-                }),
-                onManage: _openEditor,
+                onManage: () => _openEditor(bucket),
               ),
               const SizedBox(height: 12),
             ],
@@ -83,10 +70,24 @@ class _BudgetPlanScreenState extends State<BudgetPlanScreen> {
     ),
   );
 
-  Future<void> _openEditor() async {
+  Future<void> _openIncomeSource() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => BudgetPlanEditorScreen(controller: widget.controller),
+        builder: (_) => BudgetIncomeSourceScreen(controller: widget.controller),
+      ),
+    );
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _openEditor([BudgetBucket? focusBucket]) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BudgetPlanEditorScreen(
+          controller: widget.controller,
+          focusBucket: focusBucket,
+        ),
       ),
     );
     if (mounted) {
@@ -96,10 +97,13 @@ class _BudgetPlanScreenState extends State<BudgetPlanScreen> {
 }
 
 class _AllocationOverview extends StatelessWidget {
-  const _AllocationOverview({required this.summary, required this.onCustomize});
+  const _AllocationOverview({
+    required this.summary,
+    required this.onEditIncome,
+  });
 
   final BudgetPlanSummary summary;
-  final VoidCallback onCustomize;
+  final VoidCallback onEditIncome;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -112,22 +116,36 @@ class _AllocationOverview extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            const Icon(Icons.donut_large_rounded, color: Color(0xFF2563EB)),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'Income available to plan',
-                style: TextStyle(fontWeight: FontWeight.w900),
+        InkWell(
+          onTap: onEditIncome,
+          borderRadius: BorderRadius.circular(10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Income available to plan',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      summary.settings.usesManualIncomeTarget
+                          ? 'Manual planning amount'
+                          : summary.settings.includedIncomeCategories.isEmpty
+                          ? 'Calculated from all income categories'
+                          : 'Calculated from ${summary.settings.includedIncomeCategories.length} selected income categories',
+                      style: const TextStyle(
+                        color: Color(0xFF667085),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: 'Customize',
-              onPressed: onCustomize,
-              icon: const Icon(Icons.edit_outlined),
-            ),
-          ],
+              const Icon(Icons.edit_outlined, color: Color(0xFF2563EB)),
+            ],
+          ),
         ),
         const SizedBox(height: 8),
         Text(
@@ -136,68 +154,22 @@ class _AllocationOverview extends StatelessWidget {
             context,
           ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
         ),
-        const SizedBox(height: 14),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            height: 16,
-            child: Row(
-              children: [
-                for (final bucket in BudgetBucket.values)
-                  Expanded(
-                    flex: summary.settings.percentageFor(bucket) == 0
-                        ? 1
-                        : summary.settings.percentageFor(bucket),
-                    child: ColoredBox(color: Color(bucket.colorValue)),
-                  ),
-              ],
-            ),
+        if (summary.settings.usesManualIncomeTarget) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Current filtered income: ${FinanceFormatters.usd(summary.calculatedIncomeUsd)}',
+            style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
           ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          children: [
-            for (final bucket in BudgetBucket.values)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: Color(bucket.colorValue),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    '${summary.settings.nameFor(bucket)} ${summary.settings.percentageFor(bucket)}%',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ],
-              ),
-          ],
-        ),
+        ],
       ],
     ),
   );
 }
 
 class _BudgetBucketPanel extends StatelessWidget {
-  const _BudgetBucketPanel({
-    required this.summary,
-    required this.categoryNames,
-    required this.expanded,
-    required this.onToggle,
-    required this.onManage,
-  });
+  const _BudgetBucketPanel({required this.summary, required this.onManage});
 
   final BudgetBucketSummary summary;
-  final List<String> categoryNames;
-  final bool expanded;
-  final VoidCallback onToggle;
   final VoidCallback onManage;
 
   @override
@@ -205,17 +177,22 @@ class _BudgetBucketPanel extends StatelessWidget {
     final bucket = summary.bucket;
     final color = Color(bucket.colorValue);
     final isInvestment = bucket == BudgetBucket.investment;
-    final statusColor = summary.isOverBudget && !isInvestment
+    final isOver = summary.isOverBudget;
+    final statusColor = isOver && !isInvestment
         ? const Color(0xFFDC2626)
         : color;
     final coverageLabel =
         '${FinanceFormatters.percent(summary.coverageRatio)} '
         '${isInvestment ? 'funded' : 'covered'}';
-    final statusLabel = isInvestment
-        ? '${FinanceFormatters.usd(summary.remainingRequiredUsd)} still required'
-        : summary.isOverBudget
-        ? '${FinanceFormatters.usd(summary.overUsd)} over target'
-        : '${FinanceFormatters.usd(summary.remainingRequiredUsd)} remaining';
+    final statusLabel = isOver
+        ? '${FinanceFormatters.percent(summary.overRatio)} '
+              '${isInvestment ? 'above target' : 'over'} · '
+              '${FinanceFormatters.usd(summary.overUsd)}'
+        : isInvestment
+        ? '${FinanceFormatters.percent(summary.remainingRatio)} short · '
+              '${FinanceFormatters.usd(summary.remainingRequiredUsd)} required'
+        : '${FinanceFormatters.percent(summary.remainingRatio)} available · '
+              '${FinanceFormatters.usd(summary.remainingRequiredUsd)}';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -227,7 +204,7 @@ class _BudgetBucketPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            onTap: onToggle,
+            onLongPress: onManage,
             borderRadius: BorderRadius.circular(10),
             child: Row(
               children: [
@@ -254,21 +231,18 @@ class _BudgetBucketPanel extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '${summary.percentage}% of included income',
-                        style: const TextStyle(color: Color(0xFF667085)),
+                        _transactionSummary(summary),
+                        style: const TextStyle(
+                          color: Color(0xFF667085),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 Text(
-                  FinanceFormatters.usd(summary.allocatedUsd),
+                  'Target ${FinanceFormatters.usd(summary.targetUsd)}',
                   style: TextStyle(color: color, fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(width: 4),
-                AnimatedRotation(
-                  duration: const Duration(milliseconds: 220),
-                  turns: expanded ? .5 : 0,
-                  child: const Icon(Icons.keyboard_arrow_down_rounded),
                 ),
               ],
             ),
@@ -295,16 +269,20 @@ class _BudgetBucketPanel extends StatelessWidget {
               Expanded(
                 child: _BudgetValue(
                   label: isInvestment
-                      ? 'Still required'
+                      ? isOver
+                            ? 'Extra'
+                            : 'Still required'
                       : summary.isOverBudget
                       ? 'Over'
                       : 'Remaining',
                   value: isInvestment
-                      ? summary.remainingRequiredUsd
+                      ? isOver
+                            ? summary.overUsd
+                            : summary.remainingRequiredUsd
                       : summary.isOverBudget
                       ? summary.overUsd
                       : summary.remainingRequiredUsd,
-                  color: summary.isOverBudget && !isInvestment
+                  color: summary.isOverBudget
                       ? const Color(0xFFDC2626)
                       : const Color(0xFF168A5B),
                 ),
@@ -317,7 +295,7 @@ class _BudgetBucketPanel extends StatelessWidget {
             child: LinearProgressIndicator(
               value: summary.progress,
               minHeight: 9,
-              color: statusColor,
+              color: color,
               backgroundColor: color.withValues(alpha: .12),
             ),
           ),
@@ -349,64 +327,6 @@ class _BudgetBucketPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            _transactionSummary(summary),
-            style: const TextStyle(color: Color(0xFF667085), fontSize: 12),
-          ),
-          if (expanded) ...[
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Categories in this group',
-                    style: TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: onManage,
-                  icon: const Icon(Icons.tune_rounded, size: 18),
-                  label: const Text('Manage'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            if (categoryNames.isEmpty)
-              const Text(
-                'No categories assigned yet.',
-                style: TextStyle(color: Color(0xFF667085)),
-              )
-            else
-              Wrap(
-                spacing: 7,
-                runSpacing: 7,
-                children: [
-                  for (final category in categoryNames)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: .09),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: color.withValues(alpha: .20)),
-                      ),
-                      child: Text(
-                        summary.categorySpending.containsKey(category)
-                            ? '$category · ${FinanceFormatters.usd(summary.categorySpending[category]!)}'
-                            : category,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-          ],
         ],
       ),
     );
@@ -537,10 +457,234 @@ class _BudgetValue extends StatelessWidget {
   );
 }
 
-class BudgetPlanEditorScreen extends StatefulWidget {
-  const BudgetPlanEditorScreen({super.key, required this.controller});
+class BudgetIncomeSourceScreen extends StatefulWidget {
+  const BudgetIncomeSourceScreen({super.key, required this.controller});
 
   final DashboardController controller;
+
+  @override
+  State<BudgetIncomeSourceScreen> createState() =>
+      _BudgetIncomeSourceScreenState();
+}
+
+class _BudgetIncomeSourceScreenState extends State<BudgetIncomeSourceScreen> {
+  late bool _manual;
+  late bool _allCategories;
+  late Set<String> _selectedCategories;
+  late final TextEditingController _amountController;
+  bool _saving = false;
+
+  List<String> get _incomeCategories {
+    final categories =
+        <String>{
+            for (final rule in widget.controller.categoryRules)
+              if (rule.appliesTo(TransactionType.income)) rule.name.trim(),
+            for (final transaction in widget.controller.periodTransactions)
+              if (transaction.affectsIncomeStats) transaction.category.trim(),
+          }.where((category) => category.isNotEmpty).toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return categories;
+  }
+
+  double get _filteredIncome {
+    final selected = _selectedCategories
+        .map((category) => category.toLowerCase())
+        .toSet();
+    return widget.controller.periodTransactions
+        .where(
+          (transaction) =>
+              transaction.affectsIncomeStats &&
+              transaction.raw['budget_split_333334']?.trim().toLowerCase() !=
+                  'false' &&
+              (_allCategories ||
+                  selected.contains(transaction.category.trim().toLowerCase())),
+        )
+        .fold<double>(
+          0,
+          (total, transaction) =>
+              total + transaction.amountInUsd(widget.controller.exchangeRate),
+        );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = widget.controller.budgetPlanSettings;
+    _manual = settings.usesManualIncomeTarget;
+    _allCategories = settings.includedIncomeCategories.isEmpty;
+    _selectedCategories = {...settings.includedIncomeCategories};
+    _amountController = TextEditingController(
+      text: settings.incomeTargetOverrideUsd?.toStringAsFixed(2) ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final categories = _incomeCategories;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Plan income'),
+        actions: [
+          IconButton(
+            tooltip: 'Save',
+            onPressed: _saving ? null : _save,
+            icon: _saving
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.check_rounded),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: AppResponsive.pagePadding(context),
+        children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.auto_awesome_outlined),
+                label: Text('From income'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.edit_outlined),
+                label: Text('Manual amount'),
+              ),
+            ],
+            selected: {_manual},
+            onSelectionChanged: (selection) =>
+                setState(() => _manual = selection.first),
+          ),
+          const SizedBox(height: 16),
+          if (_manual)
+            TextField(
+              controller: _amountController,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Income available to plan',
+                prefixText: r'$ ',
+                helperText: 'This amount becomes the base for the plan.',
+              ),
+            )
+          else ...[
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB).withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: Color(0xFF2563EB),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      FinanceFormatters.usd(_filteredIncome),
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  const Text('selected income'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('All income categories'),
+              value: _allCategories,
+              onChanged: (value) => setState(() => _allCategories = value),
+            ),
+            if (!_allCategories)
+              for (final category in categories)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(category),
+                  value: _selectedCategories.contains(category),
+                  onChanged: (selected) => setState(() {
+                    if (selected ?? false) {
+                      _selectedCategories.add(category);
+                    } else {
+                      _selectedCategories.remove(category);
+                    }
+                  }),
+                ),
+          ],
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: _saving ? null : _save,
+            icon: const Icon(Icons.save_outlined),
+            label: const Text('Save planning income'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    double? manualAmount;
+    if (_manual) {
+      manualAmount = double.tryParse(
+        _amountController.text.replaceAll(',', '').replaceAll(r'$', '').trim(),
+      );
+      if (manualAmount == null || manualAmount < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid planning amount.')),
+        );
+        return;
+      }
+    }
+    final current = widget.controller.budgetPlanSettings;
+    final settings = BudgetPlanSettings(
+      names: current.names,
+      percentages: current.percentages,
+      incomeTargetOverrideUsd: manualAmount,
+      includedIncomeCategories: _allCategories ? const {} : _selectedCategories,
+    );
+    setState(() => _saving = true);
+    try {
+      await widget.controller.saveBudgetPlanSettings(settings);
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+}
+
+class BudgetPlanEditorScreen extends StatefulWidget {
+  const BudgetPlanEditorScreen({
+    super.key,
+    required this.controller,
+    this.focusBucket,
+  });
+
+  final DashboardController controller;
+  final BudgetBucket? focusBucket;
 
   @override
   State<BudgetPlanEditorScreen> createState() => _BudgetPlanEditorScreenState();
@@ -593,7 +737,11 @@ class _BudgetPlanEditorScreenState extends State<BudgetPlanEditorScreen> {
     final total = percentages.values.fold<int>(0, (sum, value) => sum + value);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Customize budget'),
+        title: Text(
+          widget.focusBucket == null
+              ? 'Customize budget'
+              : 'Manage ${widget.controller.budgetPlanSettings.nameFor(widget.focusBucket!)}',
+        ),
         actions: [
           IconButton(
             tooltip: 'Save',
@@ -613,11 +761,14 @@ class _BudgetPlanEditorScreenState extends State<BudgetPlanEditorScreen> {
         children: [
           _EditorTotalBar(total: total, percentages: percentages),
           const SizedBox(height: 14),
-          for (final bucket in BudgetBucket.values) ...[
+          for (final bucket
+              in widget.focusBucket == null
+                  ? BudgetBucket.values
+                  : [widget.focusBucket!]) ...[
             _buildGroupEditor(bucket),
             const SizedBox(height: 12),
           ],
-          _buildUnassigned(),
+          if (widget.focusBucket == null) _buildUnassigned(),
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: _saving ? null : _save,
@@ -864,7 +1015,13 @@ class _BudgetPlanEditorScreenState extends State<BudgetPlanEditorScreen> {
       names[bucket] = name;
       percentages[bucket] = _percentageFor(bucket);
     }
-    final settings = BudgetPlanSettings(names: names, percentages: percentages);
+    final currentSettings = widget.controller.budgetPlanSettings;
+    final settings = BudgetPlanSettings(
+      names: names,
+      percentages: percentages,
+      incomeTargetOverrideUsd: currentSettings.incomeTargetOverrideUsd,
+      includedIncomeCategories: currentSettings.includedIncomeCategories,
+    );
     if (settings.totalPercentage != 100) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -971,7 +1128,7 @@ class _EditorTotalBar extends StatelessWidget {
 }
 
 IconData _bucketIcon(BudgetBucket bucket) => switch (bucket) {
-  BudgetBucket.investment => Icons.trending_up_rounded,
-  BudgetBucket.commitments => Icons.event_repeat_rounded,
-  BudgetBucket.expenses => Icons.shopping_bag_outlined,
+  BudgetBucket.investment => Icons.savings_outlined,
+  BudgetBucket.commitments => Icons.event_note_rounded,
+  BudgetBucket.expenses => Icons.payments_outlined,
 };

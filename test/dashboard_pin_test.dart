@@ -82,6 +82,32 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('dashboard hides pinned comparisons when none are configured', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = DashboardController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.light(useMaterial3: true),
+        home: Scaffold(body: DashboardScreen(controller: controller)),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Pinned comparisons'), findsNothing);
+    expect(
+      find.textContaining('Open a financial section or category'),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a financial section can be pinned from its focus page', (
     tester,
   ) async {

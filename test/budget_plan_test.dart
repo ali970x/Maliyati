@@ -130,6 +130,8 @@ void main() {
         BudgetBucket.commitments: 35,
         BudgetBucket.expenses: 25,
       },
+      incomeTargetOverrideUsd: 450,
+      includedIncomeCategories: const {'Sales', 'Services'},
     );
 
     final restored = BudgetPlanSettings.fromJson(settings.toJson());
@@ -137,6 +139,49 @@ void main() {
     expect(restored.nameFor(BudgetBucket.investment), 'Growth');
     expect(restored.percentageFor(BudgetBucket.commitments), 35);
     expect(restored.totalPercentage, 100);
+    expect(restored.incomeTargetOverrideUsd, 450);
+    expect(restored.includedIncomeCategories, {'Sales', 'Services'});
+  });
+
+  test('budget can use selected income categories only', () {
+    final defaults = BudgetPlanSettings.defaults();
+    final settings = BudgetPlanSettings(
+      names: defaults.names,
+      percentages: defaults.percentages,
+      includedIncomeCategories: const {'Services'},
+    );
+    final summary = BudgetPlanCalculator.calculate(
+      transactions: [
+        _transaction(TransactionType.income, 'Services', 120),
+        _transaction(TransactionType.income, 'Sales', 80),
+      ],
+      exchangeRate: 89000,
+      settings: settings,
+      bucketForTransaction: (_) => BudgetBucket.expenses,
+    );
+
+    expect(summary.calculatedIncomeUsd, 120);
+    expect(summary.totalAllocatedIncomeUsd, 120);
+    expect(summary.forBucket(BudgetBucket.investment).targetUsd, 39.6);
+  });
+
+  test('manual planning income overrides calculated income', () {
+    final defaults = BudgetPlanSettings.defaults();
+    final settings = BudgetPlanSettings(
+      names: defaults.names,
+      percentages: defaults.percentages,
+      incomeTargetOverrideUsd: 300,
+    );
+    final summary = BudgetPlanCalculator.calculate(
+      transactions: [_transaction(TransactionType.income, 'Services', 120)],
+      exchangeRate: 89000,
+      settings: settings,
+      bucketForTransaction: (_) => BudgetBucket.expenses,
+    );
+
+    expect(summary.calculatedIncomeUsd, 120);
+    expect(summary.totalAllocatedIncomeUsd, 300);
+    expect(summary.forBucket(BudgetBucket.investment).targetUsd, 99);
   });
 
   test(

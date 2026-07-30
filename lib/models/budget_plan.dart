@@ -16,9 +16,9 @@ extension BudgetBucketDetails on BudgetBucket {
   };
 
   int get colorValue => switch (this) {
-    BudgetBucket.investment => 0xFF2563EB,
-    BudgetBucket.commitments => 0xFFDC2626,
-    BudgetBucket.expenses => 0xFF16A34A,
+    BudgetBucket.investment => 0xFF168A5B,
+    BudgetBucket.commitments => 0xFF2563EB,
+    BudgetBucket.expenses => 0xFFC74949,
   };
 
   static BudgetBucket fromName(String value) {
@@ -78,7 +78,12 @@ extension BudgetBucketDetails on BudgetBucket {
 }
 
 class BudgetPlanSettings {
-  const BudgetPlanSettings({required this.names, required this.percentages});
+  const BudgetPlanSettings({
+    required this.names,
+    required this.percentages,
+    this.incomeTargetOverrideUsd,
+    this.includedIncomeCategories = const {},
+  });
 
   factory BudgetPlanSettings.defaults() => const BudgetPlanSettings(
     names: {
@@ -95,6 +100,10 @@ class BudgetPlanSettings {
 
   final Map<BudgetBucket, String> names;
   final Map<BudgetBucket, int> percentages;
+  final double? incomeTargetOverrideUsd;
+  final Set<String> includedIncomeCategories;
+
+  bool get usesManualIncomeTarget => incomeTargetOverrideUsd != null;
 
   String nameFor(BudgetBucket bucket) {
     final value = names[bucket]?.trim() ?? '';
@@ -117,12 +126,16 @@ class BudgetPlanSettings {
       for (final bucket in BudgetBucket.values)
         bucket.name: percentageFor(bucket),
     },
+    'incomeTargetOverrideUsd': incomeTargetOverrideUsd,
+    'includedIncomeCategories': includedIncomeCategories.toList()..sort(),
   };
 
   factory BudgetPlanSettings.fromJson(Map<String, dynamic> json) {
     final defaults = BudgetPlanSettings.defaults();
     final rawNames = json['names'];
     final rawPercentages = json['percentages'];
+    final rawIncomeTarget = json['incomeTargetOverrideUsd'];
+    final rawIncludedCategories = json['includedIncomeCategories'];
     final names = <BudgetBucket, String>{};
     final percentages = <BudgetBucket, int>{};
     for (final bucket in BudgetBucket.values) {
@@ -137,7 +150,19 @@ class BudgetPlanSettings {
           ? rawPercentage.toInt()
           : int.tryParse('$rawPercentage') ?? defaults.percentageFor(bucket);
     }
-    final settings = BudgetPlanSettings(names: names, percentages: percentages);
+    final settings = BudgetPlanSettings(
+      names: names,
+      percentages: percentages,
+      incomeTargetOverrideUsd: rawIncomeTarget is num
+          ? rawIncomeTarget.toDouble().clamp(0, double.infinity)
+          : double.tryParse('$rawIncomeTarget')?.clamp(0, double.infinity),
+      includedIncomeCategories: rawIncludedCategories is List
+          ? rawIncludedCategories
+                .map((value) => '$value'.trim())
+                .where((value) => value.isNotEmpty)
+                .toSet()
+          : const {},
+    );
     return settings.totalPercentage == 100 ? settings : defaults;
   }
 }
@@ -172,6 +197,11 @@ class BudgetBucketSummary {
 
   double get overUsd => spentUsd > allocatedUsd ? spentUsd - allocatedUsd : 0;
 
+  double get remainingRatio =>
+      allocatedUsd <= 0 ? 0 : remainingRequiredUsd / allocatedUsd;
+
+  double get overRatio => allocatedUsd <= 0 ? 0 : overUsd / allocatedUsd;
+
   double get coverageRatio {
     if (allocatedUsd <= 0) {
       return spentUsd > 0 ? 1 : 0;
@@ -188,6 +218,7 @@ class BudgetPlanSummary {
   const BudgetPlanSummary({
     required this.settings,
     required this.totalAllocatedIncomeUsd,
+    required this.calculatedIncomeUsd,
     required this.buckets,
     required this.unassignedSpendingUsd,
     required this.unassignedTransactionCount,
@@ -196,6 +227,7 @@ class BudgetPlanSummary {
 
   final BudgetPlanSettings settings;
   final double totalAllocatedIncomeUsd;
+  final double calculatedIncomeUsd;
   final Map<BudgetBucket, BudgetBucketSummary> buckets;
   final double unassignedSpendingUsd;
   final int unassignedTransactionCount;
@@ -215,6 +247,10 @@ class BudgetPlanCalculator {
     bucketForTransaction,
   }) {
     var incomeUsd = 0.0;
+    final includedIncomeCategories = settings.includedIncomeCategories
+        .map((category) => category.trim().toLowerCase())
+        .where((category) => category.isNotEmpty)
+        .toSet();
     final spending = {for (final bucket in BudgetBucket.values) bucket: 0.0};
     final counts = {for (final bucket in BudgetBucket.values) bucket: 0};
     final categorySpending = {
@@ -232,7 +268,14 @@ class BudgetPlanCalculator {
       final allocationEnabled =
           transaction.raw['budget_split_333334']?.trim().toLowerCase() !=
           'false';
-      if (transaction.affectsIncomeStats && allocationEnabled) {
+      final incomeCategoryIncluded =
+          includedIncomeCategories.isEmpty ||
+          includedIncomeCategories.contains(
+            transaction.category.trim().toLowerCase(),
+          );
+      if (transaction.affectsIncomeStats &&
+          allocationEnabled &&
+          incomeCategoryIncluded) {
         incomeUsd += valueUsd;
       }
       if (!transaction.affectsExpenseStats) {
@@ -261,6 +304,7 @@ class BudgetPlanCalculator {
       );
     }
 
+    final plannedIncomeUsd = settings.incomeTargetOverrideUsd ?? incomeUsd;
     final summaries = <BudgetBucket, BudgetBucketSummary>{};
     for (final bucket in BudgetBucket.values) {
       final sortedCategories = categorySpending[bucket]!.entries.toList()
@@ -269,7 +313,7 @@ class BudgetPlanCalculator {
         bucket: bucket,
         displayName: settings.nameFor(bucket),
         percentage: settings.percentageFor(bucket),
-        allocatedUsd: incomeUsd * settings.percentageFor(bucket) / 100,
+        allocatedUsd: plannedIncomeUsd * settings.percentageFor(bucket) / 100,
         spentUsd: spending[bucket]!,
         transactionCount: counts[bucket]!,
         categorySpending: Map.fromEntries(sortedCategories),
@@ -279,7 +323,8 @@ class BudgetPlanCalculator {
       ..sort((a, b) => b.value.compareTo(a.value));
     return BudgetPlanSummary(
       settings: settings,
-      totalAllocatedIncomeUsd: incomeUsd,
+      totalAllocatedIncomeUsd: plannedIncomeUsd,
+      calculatedIncomeUsd: incomeUsd,
       buckets: summaries,
       unassignedSpendingUsd: unassignedSpendingUsd,
       unassignedTransactionCount: unassignedTransactionCount,

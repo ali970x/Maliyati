@@ -3476,6 +3476,9 @@ class _PinnedDashboardSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pins = controller.dashboardPins;
+    if (pins.isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -3492,9 +3495,7 @@ class _PinnedDashboardSection extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    pins.isEmpty
-                        ? 'Keep up to 3 important sections or categories here'
-                        : '${pins.length} of 3 dashboard items',
+                    '${pins.length} of 3 dashboard items',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
@@ -3508,60 +3509,27 @@ class _PinnedDashboardSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (pins.isEmpty)
-          InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: () => _showDashboardPinManager(context, controller),
-            child: Container(
-              padding: const EdgeInsets.all(15),
-              decoration: BoxDecoration(
-                color: light
-                    ? const Color(0xFFF4F7F8)
-                    : const Color(0xFF0A1D2D).withValues(alpha: .82),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: light
-                      ? const Color(0xFFD4DDE0)
-                      : const Color(0xFF29485E),
-                ),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.push_pin_outlined),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Open a financial section or category and tap the pin button to show it here.',
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 760 ? 3 : 1;
+            final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final pin in pins)
+                  SizedBox(
+                    width: width,
+                    child: _PinnedComparisonCard(
+                      controller: controller,
+                      pin: pin,
+                      light: light,
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded),
-                ],
-              ),
-            ),
-          )
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 760 ? 3 : 1;
-              final width =
-                  (constraints.maxWidth - (columns - 1) * 10) / columns;
-              return Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  for (final pin in pins)
-                    SizedBox(
-                      width: width,
-                      child: _PinnedComparisonCard(
-                        controller: controller,
-                        pin: pin,
-                        light: light,
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }
@@ -4945,6 +4913,11 @@ class _IncomeAllocationPanel extends StatelessWidget {
           builder: (_) => BudgetPlanScreen(controller: controller),
         ),
       ),
+      onLongPress: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => BudgetPlanScreen(controller: controller),
+        ),
+      ),
       borderRadius: BorderRadius.circular(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -5040,20 +5013,25 @@ class _BudgetDashboardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = Color(summary.bucket.colorValue);
     final isInvestment = summary.bucket == BudgetBucket.investment;
-    final isOver = summary.isOverBudget && !isInvestment;
+    final exceedsTarget = summary.isOverBudget;
+    final isOverLimit = exceedsTarget && !isInvestment;
     final primaryText = light ? const Color(0xFF20242A) : Colors.white;
     final secondaryText = light
         ? const Color(0xFF667085)
         : const Color(0xFF90A9BF);
-    final statusColor = isOver ? const Color(0xFFDC2626) : color;
-    final status = isInvestment
-        ? '${FinanceFormatters.percent(summary.coverageRatio)} funded | '
+    final statusColor = isOverLimit ? const Color(0xFFDC2626) : color;
+    final progressLabel =
+        '${FinanceFormatters.percent(summary.coverageRatio)} '
+        '${isInvestment ? 'funded' : 'covered'}';
+    final varianceLabel = exceedsTarget
+        ? '${FinanceFormatters.percent(summary.overRatio)} '
+              '${isInvestment ? 'above' : 'over'} | '
+              '${FinanceFormatters.usd(summary.overUsd)}'
+        : isInvestment
+        ? '${FinanceFormatters.percent(summary.remainingRatio)} short | '
               '${FinanceFormatters.usd(summary.remainingRequiredUsd)} required'
-        : isOver
-        ? '${FinanceFormatters.percent(summary.coverageRatio)} covered | '
-              '${FinanceFormatters.usd(summary.overUsd)} over'
-        : '${FinanceFormatters.percent(summary.coverageRatio)} covered | '
-              '${FinanceFormatters.usd(summary.remainingRequiredUsd)} left';
+        : '${FinanceFormatters.percent(summary.remainingRatio)} available | '
+              '${FinanceFormatters.usd(summary.remainingRequiredUsd)}';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -5091,7 +5069,7 @@ class _BudgetDashboardRow extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${summary.percentage}% | ${FinanceFormatters.usd(summary.targetUsd)}',
+                    'Target ${FinanceFormatters.usd(summary.targetUsd)}',
                     style: TextStyle(
                       color: primaryText,
                       fontWeight: FontWeight.w800,
@@ -5106,20 +5084,39 @@ class _BudgetDashboardRow extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: summary.progress,
                   minHeight: 6,
-                  color: statusColor,
+                  color: color,
                   backgroundColor: color.withValues(alpha: .12),
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                status,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: isOver ? statusColor : secondaryText,
-                  fontWeight: isOver ? FontWeight.w800 : FontWeight.w600,
-                  fontSize: 10,
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      progressLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: secondaryText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      varianceLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -5130,9 +5127,9 @@ class _BudgetDashboardRow extends StatelessWidget {
 }
 
 IconData _budgetDashboardIcon(BudgetBucket bucket) => switch (bucket) {
-  BudgetBucket.investment => Icons.trending_up_rounded,
-  BudgetBucket.commitments => Icons.event_repeat_rounded,
-  BudgetBucket.expenses => Icons.shopping_bag_outlined,
+  BudgetBucket.investment => Icons.savings_outlined,
+  BudgetBucket.commitments => Icons.event_note_rounded,
+  BudgetBucket.expenses => Icons.payments_outlined,
 };
 
 class _RecentTransactions extends StatelessWidget {

@@ -125,27 +125,11 @@ class AnalyticsScreen extends StatelessWidget {
       child: ListView(
         padding: AppResponsive.pagePadding(context),
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  strings.analytics,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        _CategoryReportsScreen(controller: controller),
-                  ),
-                ),
-                icon: const Icon(Icons.summarize_rounded),
-                label: const Text('More reports'),
-              ),
-            ],
+          Text(
+            strings.analytics,
+            style: Theme.of(
+              context,
+            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 12),
           PeriodFilterBar(controller: controller),
@@ -474,88 +458,6 @@ class AnalyticsScreen extends StatelessWidget {
   };
 }
 
-class _CategoryReportsScreen extends StatelessWidget {
-  const _CategoryReportsScreen({required this.controller});
-
-  final DashboardController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final summary = controller.summary;
-    final strings = controller.strings;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Category reports')),
-      body: ListView(
-        padding: AppResponsive.pagePadding(context),
-        children: [
-          Text(
-            'Reports by category',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 4),
-          Text('For ${periodFilterLabel(controller)}'),
-          const SizedBox(height: 16),
-          FilledButton.tonalIcon(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => BudgetPlanScreen(controller: controller),
-              ),
-            ),
-            icon: const Icon(Icons.donut_large_rounded),
-            label: const Text('Budget builder'),
-          ),
-          const SizedBox(height: 12),
-          _CategoryRankingCard(
-            controller: controller,
-            title: strings.expenseCategoryRanking,
-            emptyLabel: strings.noCategoryData,
-            data: summary.categoryExpenseTotals,
-            color: const Color(0xFFC74949),
-            icon: Icons.payments_rounded,
-            transactionsForKey: (category) =>
-                AnalyticsScreen._transactionsForCategory(
-                  controller,
-                  category,
-                  type: TransactionType.expense,
-                ),
-          ),
-          const SizedBox(height: 12),
-          _CategoryRankingCard(
-            controller: controller,
-            title: strings.incomeCategoryRanking,
-            emptyLabel: strings.noCategoryData,
-            data: summary.categoryIncomeTotals,
-            color: const Color(0xFF168A5B),
-            icon: Icons.savings_rounded,
-            transactionsForKey: (category) =>
-                AnalyticsScreen._transactionsForCategory(
-                  controller,
-                  category,
-                  type: TransactionType.income,
-                ),
-          ),
-          const SizedBox(height: 12),
-          _CategoryChart(
-            title: strings.expensesByCategory,
-            noDataLabel: strings.noData,
-            data: summary.categoryExpenseTotals,
-            palette: AnalyticsScreen._expensePalette,
-          ),
-          const SizedBox(height: 12),
-          _CategoryChart(
-            title: strings.incomeByCategory,
-            noDataLabel: strings.noData,
-            data: summary.categoryIncomeTotals,
-            palette: AnalyticsScreen._incomePalette,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _KeyInsightsCard extends StatelessWidget {
   const _KeyInsightsCard({
     required this.transactions,
@@ -709,7 +611,7 @@ class _CategoryRankingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final entries = data.entries.take(7).toList();
+    final entries = data.entries.toList();
     final maxValue = entries.isEmpty ? 1.0 : entries.first.value;
 
     return _ChartPanel(
