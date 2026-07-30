@@ -177,6 +177,28 @@ class _PinEditorResult {
   final bool remove;
 }
 
+DashboardPinnedItem? _matchingDashboardPin(
+  DashboardController controller, {
+  required _DashboardMetricKind kind,
+  String? category,
+  _CreditListMode creditMode = _CreditListMode.open,
+  _DebtListMode debtMode = _DebtListMode.open,
+}) {
+  final draft = _dashboardPinFor(
+    kind: kind,
+    comparison: DashboardPinComparison.month,
+    category: category,
+    creditMode: creditMode,
+    debtMode: debtMode,
+  );
+  for (final item in controller.dashboardPins) {
+    if (item.identity == draft.identity) {
+      return item;
+    }
+  }
+  return null;
+}
+
 Future<void> _showDashboardPinEditor(
   BuildContext context,
   DashboardController controller, {
@@ -192,13 +214,13 @@ Future<void> _showDashboardPinEditor(
     creditMode: creditMode,
     debtMode: debtMode,
   );
-  DashboardPinnedItem? existing;
-  for (final item in controller.dashboardPins) {
-    if (item.identity == draft.identity) {
-      existing = item;
-      break;
-    }
-  }
+  final existing = _matchingDashboardPin(
+    controller,
+    kind: kind,
+    category: category,
+    creditMode: creditMode,
+    debtMode: debtMode,
+  );
   var selected = existing?.comparison ?? DashboardPinComparison.month;
   final result = await showModalBottomSheet<_PinEditorResult>(
     context: context,
@@ -342,95 +364,57 @@ Future<void> _showDashboardPinEditor(
   }
 }
 
-Future<void> _showDashboardPinManager(
-  BuildContext context,
-  DashboardController controller,
-) async {
-  final parentContext = context;
-  await showModalBottomSheet<void>(
-    context: context,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (sheetContext) => AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final pins = controller.dashboardPins;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Dashboard comparisons',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'You can keep up to 3 sections or categories on the dashboard.',
-              ),
-              const SizedBox(height: 12),
-              if (pins.isEmpty)
-                const ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.push_pin_outlined),
-                  title: Text('Nothing is pinned yet'),
-                  subtitle: Text(
-                    'Open Income, Expenses, Receivables, Payables, or Transfers and tap the pin button.',
-                  ),
-                )
-              else
-                for (final pin in pins)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: _kindColor(
-                        _kindForPin(pin),
-                      ).withValues(alpha: .13),
-                      foregroundColor: _kindColor(_kindForPin(pin)),
-                      child: Icon(_kindIcon(_kindForPin(pin))),
-                    ),
-                    title: Text(
-                      _dashboardPinTitle(controller, pin),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    subtitle: Text(
-                      _dashboardPinComparisonLabel(pin.comparison),
-                    ),
-                    trailing: IconButton(
-                      tooltip: 'Remove',
-                      onPressed: () async {
-                        await controller.removeDashboardPin(pin);
-                      },
-                      icon: const Icon(Icons.close_rounded),
-                    ),
-                    onTap: () async {
-                      Navigator.pop(sheetContext);
-                      await Future<void>.delayed(Duration.zero);
-                      if (!parentContext.mounted) {
-                        return;
-                      }
-                      await _showDashboardPinEditor(
-                        parentContext,
-                        controller,
-                        kind: _kindForPin(pin),
-                        category: pin.category,
-                        creditMode: pin.mode == _CreditListMode.completed.name
-                            ? _CreditListMode.completed
-                            : _CreditListMode.open,
-                        debtMode: pin.mode == _DebtListMode.paid.name
-                            ? _DebtListMode.paid
-                            : _DebtListMode.open,
-                      );
-                    },
-                  ),
-            ],
-          ),
-        );
-      },
-    ),
+class _DashboardPinButton extends StatelessWidget {
+  const _DashboardPinButton({
+    required this.controller,
+    required this.kind,
+    this.category,
+    this.creditMode = _CreditListMode.open,
+    this.debtMode = _DebtListMode.open,
+    this.iconSize,
+    this.compact = false,
+  });
+
+  final DashboardController controller;
+  final _DashboardMetricKind kind;
+  final String? category;
+  final _CreditListMode creditMode;
+  final _DebtListMode debtMode;
+  final double? iconSize;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: controller,
+    builder: (context, _) {
+      final pinned =
+          _matchingDashboardPin(
+            controller,
+            kind: kind,
+            category: category,
+            creditMode: creditMode,
+            debtMode: debtMode,
+          ) !=
+          null;
+      return IconButton(
+        tooltip: pinned ? 'Pinned on dashboard' : 'Show on dashboard',
+        padding: compact ? EdgeInsets.zero : null,
+        visualDensity: compact ? VisualDensity.compact : null,
+        onPressed: () => _showDashboardPinEditor(
+          context,
+          controller,
+          kind: kind,
+          category: category,
+          creditMode: creditMode,
+          debtMode: debtMode,
+        ),
+        icon: Icon(
+          pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+          size: iconSize,
+          color: pinned ? _kindColor(kind) : null,
+        ),
+      );
+    },
   );
 }
 
@@ -846,10 +830,11 @@ class _LightDashboard extends StatelessWidget {
                   onLongPress: onToggleNetCashFlowCurrency,
                 ),
                 const SizedBox(height: 8),
-                _PinnedDashboardSection(controller: controller, light: true),
-                const SizedBox(height: 8),
                 _IncomeAllocationPanel(controller: controller, light: true),
                 const SizedBox(height: 8),
+                _PinnedDashboardSection(controller: controller, light: true),
+                if (controller.dashboardPins.isNotEmpty)
+                  const SizedBox(height: 8),
                 _LightExpenseFocus(controller: controller),
                 const SizedBox(height: 8),
                 _LightQuickStats(controller: controller),
@@ -2069,17 +2054,12 @@ class _DashboardMetricFocusScreenState
       appBar: AppBar(
         title: Text(category ?? title),
         actions: [
-          IconButton(
-            tooltip: 'Show on dashboard',
-            onPressed: () => _showDashboardPinEditor(
-              context,
-              controller,
-              kind: kind,
-              category: category,
-              creditMode: creditMode,
-              debtMode: debtMode,
-            ),
-            icon: const Icon(Icons.push_pin_outlined),
+          _DashboardPinButton(
+            controller: controller,
+            kind: kind,
+            category: category,
+            creditMode: creditMode,
+            debtMode: debtMode,
           ),
           IconButton(
             tooltip: 'Compare periods',
@@ -3399,17 +3379,12 @@ class _CategoryFocusList extends StatelessWidget {
                   SizedBox(
                     width: 34,
                     height: 34,
-                    child: IconButton(
-                      tooltip: 'Show on dashboard',
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => _showDashboardPinEditor(
-                        context,
-                        controller,
-                        kind: kind,
-                        category: entry.name,
-                      ),
-                      icon: const Icon(Icons.push_pin_outlined, size: 19),
+                    child: _DashboardPinButton(
+                      controller: controller,
+                      kind: kind,
+                      category: entry.name,
+                      iconSize: 19,
+                      compact: true,
                     ),
                   ),
                 ],
@@ -3479,58 +3454,26 @@ class _PinnedDashboardSection extends StatelessWidget {
     if (pins.isEmpty) {
       return const SizedBox.shrink();
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 760 ? 3 : 1;
+        final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pinned comparisons',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Text(
-                    '${pins.length} of 3 dashboard items',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+            for (final pin in pins)
+              SizedBox(
+                width: width,
+                child: _PinnedComparisonCard(
+                  controller: controller,
+                  pin: pin,
+                  light: light,
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: 'Manage dashboard comparisons',
-              onPressed: () => _showDashboardPinManager(context, controller),
-              icon: const Icon(Icons.tune_rounded),
-            ),
           ],
-        ),
-        const SizedBox(height: 8),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 760 ? 3 : 1;
-            final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
-            return Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final pin in pins)
-                  SizedBox(
-                    width: width,
-                    child: _PinnedComparisonCard(
-                      controller: controller,
-                      pin: pin,
-                      light: light,
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -3607,92 +3550,96 @@ class _PinnedComparisonCard extends StatelessWidget {
               : _DebtListMode.open,
         ),
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: .13),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(_kindIcon(kind), color: color, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .13),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(_kindIcon(kind), color: color, size: 19),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
                       title,
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
-                  ),
-                  IconButton(
-                    tooltip: 'Edit comparison',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => _showDashboardPinEditor(
-                      context,
-                      controller,
-                      kind: kind,
-                      category: pin.category,
-                      creditMode: pin.mode == _CreditListMode.completed.name
-                          ? _CreditListMode.completed
-                          : _CreditListMode.open,
-                      debtMode: pin.mode == _DebtListMode.paid.name
-                          ? _DebtListMode.paid
-                          : _DebtListMode.open,
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_dashboardPinComparisonLabel(pin.comparison)} ${FinanceFormatters.usd(previous)} | ${currentTransactions.length} tx',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
-                    icon: const Icon(Icons.more_horiz_rounded),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                FinanceFormatters.usd(current),
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w900,
+                  ],
                 ),
               ),
-              const SizedBox(height: 3),
-              Row(
+              const SizedBox(width: 8),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Icon(
-                    change >= 0
-                        ? Icons.trending_up_rounded
-                        : Icons.trending_down_rounded,
-                    color: change >= 0
-                        ? const Color(0xFF168A5B)
-                        : const Color(0xFFC74949),
-                    size: 18,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        FinanceFormatters.usd(current),
+                        style: TextStyle(
+                          color: color,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: IconButton(
+                          tooltip: 'Pinned on dashboard',
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _showDashboardPinEditor(
+                            context,
+                            controller,
+                            kind: kind,
+                            category: pin.category,
+                            creditMode:
+                                pin.mode == _CreditListMode.completed.name
+                                ? _CreditListMode.completed
+                                : _CreditListMode.open,
+                            debtMode: pin.mode == _DebtListMode.paid.name
+                                ? _DebtListMode.paid
+                                : _DebtListMode.open,
+                          ),
+                          icon: Icon(
+                            Icons.push_pin_rounded,
+                            color: color,
+                            size: 17,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
                   Text(
                     '${change >= 0 ? '+' : ''}${FinanceFormatters.percent(change)}',
                     style: TextStyle(
                       color: change >= 0
                           ? const Color(0xFF168A5B)
                           : const Color(0xFFC74949),
+                      fontSize: 11,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                  const Spacer(),
-                  Text(
-                    '${currentTransactions.length} tx',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
                 ],
-              ),
-              const SizedBox(height: 7),
-              Text(
-                '${_dashboardPinComparisonLabel(pin.comparison)}: ${FinanceFormatters.usd(previous)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
           ),
@@ -3921,15 +3868,13 @@ class _DashboardContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        _PinnedDashboardSection(controller: controller, light: false),
+        _IncomeAllocationPanel(controller: controller),
         const SizedBox(height: 12),
+        _PinnedDashboardSection(controller: controller, light: false),
+        if (controller.dashboardPins.isNotEmpty) const SizedBox(height: 12),
         _CashFlowPanel(controller: controller),
         const SizedBox(height: 12),
-        _ResponsivePair(
-          wide: wide,
-          first: _CategoryPanel(controller: controller),
-          second: _IncomeAllocationPanel(controller: controller),
-        ),
+        _CategoryPanel(controller: controller),
         const SizedBox(height: 12),
         _RecentTransactions(
           controller: controller,

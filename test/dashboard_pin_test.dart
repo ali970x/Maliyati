@@ -76,9 +76,14 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Pinned comparisons'), findsOneWidget);
+    expect(find.text('Pinned comparisons'), findsNothing);
     expect(find.text('Transportation'), findsOneWidget);
-    expect(find.textContaining('Previous month:'), findsOneWidget);
+    expect(find.textContaining('Previous month'), findsOneWidget);
+    expect(find.byTooltip('Pinned on dashboard'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Income allocation')).dy,
+      lessThan(tester.getTopLeft(find.text('Transportation')).dy),
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -136,6 +141,7 @@ void main() {
 
     expect(controller.dashboardPins, hasLength(1));
     expect(controller.dashboardPins.single.metric, DashboardPinMetric.income);
+    expect(find.byTooltip('Pinned on dashboard'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
