@@ -76,7 +76,10 @@ void main() {
     );
     await tester.pump();
 
-    await tester.tap(find.text('Compare all sections'));
+    expect(find.text('Compare all sections'), findsNothing);
+    await tester.tap(
+      find.byTooltip('Compare all sections: Previous selected period'),
+    );
     await tester.pumpAndSettle();
     expect(find.text('Compare all sections with'), findsOneWidget);
     await tester.tap(find.text('Yesterday').last);
@@ -86,7 +89,7 @@ void main() {
       controller.dashboardComparison.preset,
       DashboardComparisonPreset.yesterday,
     );
-    expect(find.text('Yesterday'), findsOneWidget);
+    expect(find.byTooltip('Compare all sections: Yesterday'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -121,8 +124,11 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Compare all sections'), findsOneWidget);
-    expect(find.text('Previous month'), findsOneWidget);
+    expect(find.text('Compare all sections'), findsNothing);
+    expect(
+      find.byTooltip('Compare all sections: Previous month'),
+      findsOneWidget,
+    );
     expect(find.text('+100.0%'), findsWidgets);
     await tester.tap(find.text('Expenses').first);
     await tester.pumpAndSettle();

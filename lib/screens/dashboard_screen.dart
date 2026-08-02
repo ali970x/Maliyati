@@ -703,6 +703,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       controller: controller,
       balanceVisible: _balanceVisible,
       onToggleBalance: () => setState(() => _balanceVisible = !_balanceVisible),
+      onOpenMenu: widget.onOpenMenu,
     );
     return _CyberBackground(
       child: RefreshIndicator(
@@ -805,6 +806,25 @@ class _LightDashboard extends StatelessWidget {
                       ),
                     ),
                     IconButton(
+                      tooltip:
+                          'Compare all sections: ${controller.dashboardComparisonLabel}',
+                      onPressed: () =>
+                          _showDashboardComparisonPicker(context, controller),
+                      visualDensity: VisualDensity.compact,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 38,
+                        height: 38,
+                      ),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(
+                          0xFF0B5CAD,
+                        ).withValues(alpha: .08),
+                        foregroundColor: const Color(0xFF0B5CAD),
+                      ),
+                      icon: const Icon(Icons.compare_arrows_rounded, size: 20),
+                    ),
+                    const SizedBox(width: 3),
+                    IconButton(
                       tooltip: 'Settings',
                       onPressed: onOpenMenu,
                       style: IconButton.styleFrom(
@@ -822,11 +842,6 @@ class _LightDashboard extends StatelessWidget {
                     vertical: 7,
                   ),
                   child: PeriodFilterBar(controller: controller),
-                ),
-                const SizedBox(height: 8),
-                _DashboardComparisonControl(
-                  controller: controller,
-                  light: true,
                 ),
                 const SizedBox(height: 12),
                 _LightBalanceCard(
@@ -1288,7 +1303,7 @@ class _LightAccountsState extends State<_LightAccounts> {
   void _open(
     BuildContext context, {
     required bool isWishMoney,
-    _WalletTimeScope scope = _WalletTimeScope.today,
+    _WalletTimeScope scope = _WalletTimeScope.thisWeek,
   }) => Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => _WalletActivityScreen(
@@ -1315,7 +1330,7 @@ class _LightAccountsState extends State<_LightAccounts> {
                 'Set time',
                 style: TextStyle(fontWeight: FontWeight.w900),
               ),
-              subtitle: Text('Today is the default for each wallet.'),
+              subtitle: Text('This week is the default for each wallet.'),
             ),
             for (final scope in _WalletTimeScope.values)
               ListTile(
@@ -2237,7 +2252,13 @@ class _DashboardMetricFocusScreenState
     final category = widget.category;
     final creditMode = widget.creditMode;
     final debtMode = widget.debtMode;
-    final matchedTransactions = controller.periodTransactions
+    final usesAllTimeByDefault =
+        kind == _DashboardMetricKind.reserveable ||
+        kind == _DashboardMetricKind.debit;
+    final sourceTransactions = usesAllTimeByDefault
+        ? controller.calculationTransactions
+        : controller.periodTransactions;
+    final matchedTransactions = sourceTransactions
         .where(_matches)
         .where(
           (transaction) => category == null || transaction.category == category,
@@ -2347,7 +2368,7 @@ class _DashboardMetricFocusScreenState
                 : transactions.isEmpty
                 ? Center(
                     child: Text(
-                      'No $title transactions for ${periodFilterLabel(controller)}.',
+                      'No $title transactions for ${usesAllTimeByDefault ? 'all time' : periodFilterLabel(controller)}.',
                     ),
                   )
                 : ListView.separated(
@@ -3950,11 +3971,13 @@ class _DashboardContent extends StatelessWidget {
     required this.controller,
     required this.balanceVisible,
     required this.onToggleBalance,
+    this.onOpenMenu,
   });
 
   final DashboardController controller;
   final bool balanceVisible;
   final VoidCallback onToggleBalance;
+  final VoidCallback? onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -3968,7 +3991,7 @@ class _DashboardContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _DashboardHeader(controller: controller),
+        _DashboardHeader(controller: controller, onOpenMenu: onOpenMenu),
         const SizedBox(height: 14),
         // One persistent control rail: period controls plus the selected
         // business context remain at the top on every dashboard state.
@@ -3976,8 +3999,6 @@ class _DashboardContent extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: PeriodFilterBar(controller: controller),
         ),
-        const SizedBox(height: 8),
-        _DashboardComparisonControl(controller: controller),
         const SizedBox(height: 16),
         _BalanceHero(
           title: controller.strings.netCashFlow,
@@ -3991,7 +4012,7 @@ class _DashboardContent extends StatelessWidget {
               builder: (_) => _WalletActivityScreen(
                 controller: controller,
                 isWishMoney: false,
-                initialScope: _WalletTimeScope.today,
+                initialScope: _WalletTimeScope.thisWeek,
               ),
             ),
           ),
@@ -4000,7 +4021,7 @@ class _DashboardContent extends StatelessWidget {
               builder: (_) => _WalletActivityScreen(
                 controller: controller,
                 isWishMoney: true,
-                initialScope: _WalletTimeScope.today,
+                initialScope: _WalletTimeScope.thisWeek,
               ),
             ),
           ),
@@ -4156,9 +4177,10 @@ class _DashboardContent extends StatelessWidget {
 }
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.controller});
+  const _DashboardHeader({required this.controller, this.onOpenMenu});
 
   final DashboardController controller;
+  final VoidCallback? onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -4195,6 +4217,28 @@ class _DashboardHeader extends StatelessWidget {
               ),
             ],
           ),
+        ),
+        IconButton(
+          tooltip:
+              'Compare all sections: ${controller.dashboardComparisonLabel}',
+          onPressed: () => _showDashboardComparisonPicker(context, controller),
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFF0C2031),
+            foregroundColor: const Color(0xFFC5EAF3),
+          ),
+          icon: const Icon(Icons.compare_arrows_rounded, size: 20),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          tooltip: 'Settings',
+          onPressed: onOpenMenu,
+          visualDensity: VisualDensity.compact,
+          style: IconButton.styleFrom(
+            backgroundColor: const Color(0xFF0C2031),
+            foregroundColor: const Color(0xFFC5EAF3),
+          ),
+          icon: const Icon(Icons.settings_outlined, size: 20),
         ),
       ],
     );
@@ -4300,7 +4344,7 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
       final isService = LabelNormalizer.isService(transaction.walletId);
       return (isWish ? usesWish : !usesWish && !isService) &&
           _matchesScope(transaction);
-    }).toList()..sort((a, b) => b.date.compareTo(a.date));
+    }).toList()..sort(_newestTransactionFirst);
 
     return Scaffold(
       appBar: AppBar(
@@ -4440,13 +4484,21 @@ class _WalletActivityScreenState extends State<_WalletActivityScreen> {
     return switch (_scope) {
       _WalletTimeScope.today => date == today,
       _WalletTimeScope.thisWeek =>
-        !date.isBefore(today.subtract(Duration(days: today.weekday - 1))) &&
+        !date.isBefore(today.subtract(Duration(days: today.weekday % 7))) &&
             !date.isAfter(today),
       _WalletTimeScope.thisMonth =>
         date.year == today.year && date.month == today.month,
       _WalletTimeScope.allTime => true,
     };
   }
+}
+
+int _newestTransactionFirst(FinancialTransaction a, FinancialTransaction b) {
+  final byDate = b.date.compareTo(a.date);
+  if (byDate != 0) return byDate;
+  final byCreated = (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date);
+  if (byCreated != 0) return byCreated;
+  return (b.id ?? '').compareTo(a.id ?? '');
 }
 
 class _WalletHistoryHeader extends StatelessWidget {
