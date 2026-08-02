@@ -118,12 +118,37 @@ void main() {
     expect(find.text(r'$10.00'), findsNWidgets(2));
 
     await tester.tap(find.text('Receivables').first);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('Receivables').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Receivables dashboard total'), findsOneWidget);
+    await tester.tap(find.text('Normal (selected dashboard time)'));
+    await tester.pumpAndSettle();
+    expect(find.text(r'$10.00'), findsOneWidget);
+
+    await tester.tap(find.text('Receivables').first);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('Receivables').first);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('All time'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(r'$10.00'), findsNWidgets(2));
+
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('Receivables').first);
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('Old receivable remains visible'), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Payables').first);
+    await tester.pump(const Duration(milliseconds: 400));
     await tester.pumpAndSettle();
     expect(find.text('Old payable remains visible'), findsOneWidget);
     expect(tester.takeException(), isNull);

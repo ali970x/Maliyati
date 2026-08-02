@@ -39,6 +39,63 @@ enum _WalletTimeScope { today, thisWeek, thisMonth, allTime }
 
 enum _WalletDisplayMode { split, totalUsd, totalLbp }
 
+enum _OutstandingDashboardScope { allTime, selectedPeriod }
+
+extension on _OutstandingDashboardScope {
+  String get label => switch (this) {
+    _OutstandingDashboardScope.allTime => 'All time',
+    _OutstandingDashboardScope.selectedPeriod =>
+      'Normal (selected dashboard time)',
+  };
+}
+
+Future<_OutstandingDashboardScope?> _showOutstandingScopePicker(
+  BuildContext context, {
+  required String title,
+  required _OutstandingDashboardScope selected,
+}) {
+  return showModalBottomSheet<_OutstandingDashboardScope>(
+    context: context,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (sheetContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$title dashboard total',
+            style: Theme.of(
+              sheetContext,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 4),
+          const Text('Choose how this card calculates its total.'),
+          const SizedBox(height: 10),
+          for (final scope in _OutstandingDashboardScope.values)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                scope == _OutstandingDashboardScope.allTime
+                    ? Icons.all_inclusive_rounded
+                    : Icons.filter_alt_outlined,
+              ),
+              title: Text(scope.label),
+              trailing: selected == scope
+                  ? Icon(
+                      Icons.check_circle_rounded,
+                      color: Theme.of(sheetContext).colorScheme.primary,
+                    )
+                  : null,
+              onTap: () => Navigator.pop(sheetContext, scope),
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
 String _dashboardComparisonPresetLabel(DashboardComparisonPreset preset) =>
     switch (preset) {
       DashboardComparisonPreset.previousPeriod => 'Previous selected period',
@@ -671,6 +728,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _balanceVisible = true;
   bool _showRealBalance = true;
   bool _netCashFlowInLbp = false;
+  _OutstandingDashboardScope _receivablesScope =
+      _OutstandingDashboardScope.allTime;
+  _OutstandingDashboardScope _payablesScope =
+      _OutstandingDashboardScope.allTime;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -696,6 +757,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         netCashFlowInLbp: _netCashFlowInLbp,
         onToggleNetCashFlowCurrency: () =>
             setState(() => _netCashFlowInLbp = !_netCashFlowInLbp),
+        receivablesScope: _receivablesScope,
+        payablesScope: _payablesScope,
+        onChooseReceivablesScope: () => _chooseOutstandingScope(
+          title: controller.strings.reserveables,
+          current: _receivablesScope,
+          onSelected: (scope) => _receivablesScope = scope,
+        ),
+        onChoosePayablesScope: () => _chooseOutstandingScope(
+          title: controller.strings.debts,
+          current: _payablesScope,
+          onSelected: (scope) => _payablesScope = scope,
+        ),
       );
     }
 
@@ -704,6 +777,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       balanceVisible: _balanceVisible,
       onToggleBalance: () => setState(() => _balanceVisible = !_balanceVisible),
       onOpenMenu: widget.onOpenMenu,
+      receivablesScope: _receivablesScope,
+      payablesScope: _payablesScope,
+      onChooseReceivablesScope: () => _chooseOutstandingScope(
+        title: controller.strings.reserveables,
+        current: _receivablesScope,
+        onSelected: (scope) => _receivablesScope = scope,
+      ),
+      onChoosePayablesScope: () => _chooseOutstandingScope(
+        title: controller.strings.debts,
+        current: _payablesScope,
+        onSelected: (scope) => _payablesScope = scope,
+      ),
     );
     return _CyberBackground(
       child: RefreshIndicator(
@@ -728,6 +813,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  Future<void> _chooseOutstandingScope({
+    required String title,
+    required _OutstandingDashboardScope current,
+    required ValueChanged<_OutstandingDashboardScope> onSelected,
+  }) async {
+    final selected = await _showOutstandingScopePicker(
+      context,
+      title: title,
+      selected: current,
+    );
+    if (selected == null || !mounted) return;
+    setState(() => onSelected(selected));
+  }
 }
 
 /// The light presentation follows the compact reference layout: information is
@@ -742,6 +841,10 @@ class _LightDashboard extends StatelessWidget {
     required this.onToggleRealBalance,
     required this.netCashFlowInLbp,
     required this.onToggleNetCashFlowCurrency,
+    required this.receivablesScope,
+    required this.payablesScope,
+    required this.onChooseReceivablesScope,
+    required this.onChoosePayablesScope,
     this.onOpenMenu,
   });
 
@@ -753,11 +856,22 @@ class _LightDashboard extends StatelessWidget {
   final VoidCallback onToggleRealBalance;
   final bool netCashFlowInLbp;
   final VoidCallback onToggleNetCashFlowCurrency;
+  final _OutstandingDashboardScope receivablesScope;
+  final _OutstandingDashboardScope payablesScope;
+  final VoidCallback onChooseReceivablesScope;
+  final VoidCallback onChoosePayablesScope;
 
   @override
   Widget build(BuildContext context) {
     final summary = controller.summary;
     final allTimeSummary = controller.allTimeSummary;
+    final receivablesSummary =
+        receivablesScope == _OutstandingDashboardScope.allTime
+        ? allTimeSummary
+        : summary;
+    final payablesSummary = payablesScope == _OutstandingDashboardScope.allTime
+        ? allTimeSummary
+        : summary;
     final comparison = controller.comparison;
     final wallets = controller.walletSummary;
     final walletUsd = wallets.cash.balanceUsd + wallets.wish.balanceUsd;
@@ -929,14 +1043,22 @@ class _LightDashboard extends StatelessWidget {
                           child: _LightMetric(
                             title: controller.strings.reserveables,
                             value: FinanceFormatters.usd(
-                              allTimeSummary.totalReserveable,
+                              receivablesSummary.totalReserveable,
                             ),
                             subtitle: FinanceFormatters.lbp(
-                              allTimeSummary.totalReserveableLbp,
+                              receivablesSummary.totalReserveableLbp,
                             ),
                             icon: Icons.account_balance_outlined,
                             color: const Color(0xFFD97706),
-                            footerLabel: 'All time',
+                            change:
+                                receivablesScope ==
+                                    _OutstandingDashboardScope.selectedPeriod
+                                ? _percentageChange(
+                                    summary.totalReserveable,
+                                    controller.previousSummary.totalReserveable,
+                                  )
+                                : null,
+                            onDoubleTap: onChooseReceivablesScope,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -958,14 +1080,22 @@ class _LightDashboard extends StatelessWidget {
                           child: _LightMetric(
                             title: controller.strings.debts,
                             value: FinanceFormatters.usd(
-                              allTimeSummary.totalDebt,
+                              payablesSummary.totalDebt,
                             ),
                             subtitle: FinanceFormatters.lbp(
-                              allTimeSummary.totalDebtLbp,
+                              payablesSummary.totalDebtLbp,
                             ),
                             icon: Icons.account_balance_rounded,
                             color: const Color(0xFF2563EB),
-                            footerLabel: 'All time',
+                            change:
+                                payablesScope ==
+                                    _OutstandingDashboardScope.selectedPeriod
+                                ? _percentageChange(
+                                    summary.totalDebt,
+                                    controller.previousSummary.totalDebt,
+                                  )
+                                : null,
+                            onDoubleTap: onChoosePayablesScope,
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -1615,9 +1745,9 @@ class _LightMetric extends StatelessWidget {
     required this.icon,
     required this.color,
     this.change,
-    this.footerLabel,
     this.onTap,
     this.onLongPress,
+    this.onDoubleTap,
   });
   final String title;
   final String value;
@@ -1625,14 +1755,15 @@ class _LightMetric extends StatelessWidget {
   final IconData icon;
   final Color color;
   final double? change;
-  final String? footerLabel;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
     onLongPress: onLongPress,
+    onDoubleTap: onDoubleTap,
     child: _LightCard(
       padding: const EdgeInsets.all(11),
       child: Row(
@@ -1686,15 +1817,6 @@ class _LightMetric extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: change == 0 ? const Color(0xFF77717D) : color,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  )
-                else if (footerLabel != null)
-                  Text(
-                    footerLabel!,
-                    style: TextStyle(
-                      color: color,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                     ),
@@ -3986,18 +4108,33 @@ class _DashboardContent extends StatelessWidget {
     required this.controller,
     required this.balanceVisible,
     required this.onToggleBalance,
+    required this.receivablesScope,
+    required this.payablesScope,
+    required this.onChooseReceivablesScope,
+    required this.onChoosePayablesScope,
     this.onOpenMenu,
   });
 
   final DashboardController controller;
   final bool balanceVisible;
   final VoidCallback onToggleBalance;
+  final _OutstandingDashboardScope receivablesScope;
+  final _OutstandingDashboardScope payablesScope;
+  final VoidCallback onChooseReceivablesScope;
+  final VoidCallback onChoosePayablesScope;
   final VoidCallback? onOpenMenu;
 
   @override
   Widget build(BuildContext context) {
     final summary = controller.summary;
     final allTimeSummary = controller.allTimeSummary;
+    final receivablesSummary =
+        receivablesScope == _OutstandingDashboardScope.allTime
+        ? allTimeSummary
+        : summary;
+    final payablesSummary = payablesScope == _OutstandingDashboardScope.allTime
+        ? allTimeSummary
+        : summary;
     final comparison = controller.comparison;
     final wide = AppResponsive.isWideWeb(context);
     final change = comparison?.netChange ?? 0;
@@ -4089,10 +4226,17 @@ class _DashboardContent extends StatelessWidget {
           wide: wide,
           first: _MetricPanel(
             title: controller.strings.reserveables,
-            value: FinanceFormatters.usd(allTimeSummary.totalReserveable),
-            change: null,
+            value: FinanceFormatters.usd(receivablesSummary.totalReserveable),
+            change:
+                receivablesScope == _OutstandingDashboardScope.selectedPeriod
+                ? _percentageChange(
+                    summary.totalReserveable,
+                    controller.previousSummary.totalReserveable,
+                  )
+                : null,
             positive: true,
             icon: Icons.request_quote_rounded,
+            onDoubleTap: onChooseReceivablesScope,
             onTap: () => _openMetricFocus(
               context,
               controller,
@@ -4110,10 +4254,16 @@ class _DashboardContent extends StatelessWidget {
           ),
           second: _MetricPanel(
             title: controller.strings.debts,
-            value: FinanceFormatters.usd(allTimeSummary.totalDebt),
-            change: null,
+            value: FinanceFormatters.usd(payablesSummary.totalDebt),
+            change: payablesScope == _OutstandingDashboardScope.selectedPeriod
+                ? _percentageChange(
+                    summary.totalDebt,
+                    controller.previousSummary.totalDebt,
+                  )
+                : null,
             positive: false,
             icon: Icons.account_balance_rounded,
+            onDoubleTap: onChoosePayablesScope,
             onTap: () => _openMetricFocus(
               context,
               controller,
@@ -4867,6 +5017,7 @@ class _MetricPanel extends StatelessWidget {
     required this.icon,
     this.onTap,
     this.onLongPress,
+    this.onDoubleTap,
   });
 
   final String title;
@@ -4876,6 +5027,7 @@ class _MetricPanel extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onDoubleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -4887,6 +5039,7 @@ class _MetricPanel extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
+      onDoubleTap: onDoubleTap,
       child: _GlassPanel(
         accent: color,
         padding: const EdgeInsets.all(16),
