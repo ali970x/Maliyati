@@ -3502,29 +3502,37 @@ class _CategoryFocusList extends StatelessWidget {
       comparisonGrouped.putIfAbsent(label, () => []).add(transaction);
     }
     final categoryNames = {...grouped.keys, ...comparisonGrouped.keys};
+    final allEntries = categoryNames.map((name) {
+      final rows = grouped[name] ?? const <FinancialTransaction>[];
+      final previousRows =
+          comparisonGrouped[name] ?? const <FinancialTransaction>[];
+      final datedRows = rows.isEmpty ? previousRows : rows;
+      final dates =
+          datedRows.map((item) => item.createdAt ?? item.date).toList()..sort();
+      return _CategoryFocusStat(
+        name: name,
+        total: rows.fold<double>(
+          0,
+          (sum, item) => sum + item.amountInUsd(controller.exchangeRate),
+        ),
+        previousTotal: previousRows.fold<double>(
+          0,
+          (sum, item) => sum + item.amountInUsd(controller.exchangeRate),
+        ),
+        count: rows.length,
+        oldest: dates.first,
+        newest: dates.last,
+      );
+    }).toList();
+    final total = allEntries.fold<double>(0, (sum, item) => sum + item.total);
+    final hidesZeroShareCategories =
+        kind == _DashboardMetricKind.income ||
+        kind == _DashboardMetricKind.expense;
     final entries =
-        categoryNames.map((name) {
-          final rows = grouped[name] ?? const <FinancialTransaction>[];
-          final previousRows =
-              comparisonGrouped[name] ?? const <FinancialTransaction>[];
-          final datedRows = rows.isEmpty ? previousRows : rows;
-          final dates =
-              datedRows.map((item) => item.createdAt ?? item.date).toList()
-                ..sort();
-          return _CategoryFocusStat(
-            name: name,
-            total: rows.fold<double>(
-              0,
-              (sum, item) => sum + item.amountInUsd(controller.exchangeRate),
-            ),
-            previousTotal: previousRows.fold<double>(
-              0,
-              (sum, item) => sum + item.amountInUsd(controller.exchangeRate),
-            ),
-            count: rows.length,
-            oldest: dates.first,
-            newest: dates.last,
-          );
+        allEntries.where((entry) {
+          if (!hidesZeroShareCategories) return true;
+          if (entry.total <= 0 || total <= 0) return false;
+          return (entry.total / total * 100).round() > 0;
         }).toList()..sort((a, b) {
           return switch (sort) {
             _MetricFocusSort.newest => b.newest.compareTo(a.newest),
@@ -3537,7 +3545,6 @@ class _CategoryFocusList extends StatelessWidget {
             ),
           };
         });
-    final total = entries.fold<double>(0, (sum, item) => sum + item.total);
     if (entries.isEmpty) {
       return Center(child: Text('No $title categories for this period.'));
     }

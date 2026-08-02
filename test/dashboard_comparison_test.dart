@@ -143,6 +143,48 @@ void main() {
     expect(find.text('Compare all sections with'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('income and expense category views hide zero-percent rows', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = DashboardController(
+      service: _ComparisonSheetService([
+        _expense(DateTime(2026, 7, 10), 100),
+        _expense(DateTime(2026, 7, 11), .1, category: 'Rounds to zero'),
+        _expense(DateTime(2026, 6, 10), 50, category: 'Previous period only'),
+      ]),
+    );
+    addTearDown(controller.dispose);
+    await controller.refresh();
+    controller.selectMonth(DateTime(2026, 7));
+    await controller.saveDashboardComparison(
+      const DashboardComparisonSettings(
+        preset: DashboardComparisonPreset.previousMonth,
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.light(useMaterial3: true),
+        home: Scaffold(body: DashboardScreen(controller: controller)),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('Expenses').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Transportation & Delivery'), findsOneWidget);
+    expect(find.text('Rounds to zero'), findsNothing);
+    expect(find.text('Previous period only'), findsNothing);
+    expect(find.text('0% of Expenses'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 class _ComparisonSheetService extends GoogleSheetService {
@@ -156,12 +198,16 @@ class _ComparisonSheetService extends GoogleSheetService {
   }
 }
 
-FinancialTransaction _expense(DateTime date, double amount) {
+FinancialTransaction _expense(
+  DateTime date,
+  double amount, {
+  String category = 'Transportation',
+}) {
   return FinancialTransaction(
     date: date,
     hasDate: true,
     type: TransactionType.expense,
-    category: 'Transportation',
+    category: category,
     description: 'Taxi',
     currency: CurrencyCode.usd,
     amount: amount,
