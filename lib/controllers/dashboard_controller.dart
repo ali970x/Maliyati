@@ -750,6 +750,11 @@ class DashboardController extends ChangeNotifier {
     window: currentWindow,
   );
 
+  FinancialSummary get allTimeSummary => FinancialSummary.fromTransactions(
+    calculationTransactions,
+    exchangeRate: _exchangeRate,
+  );
+
   FinancialSummary get previousSummary => FinancialSummary.fromTransactions(
     previousPeriodTransactions,
     exchangeRate: _exchangeRate,

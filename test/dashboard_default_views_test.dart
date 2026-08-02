@@ -115,6 +115,8 @@ void main() {
     );
     await tester.pump();
 
+    expect(find.text(r'$10.00'), findsNWidgets(2));
+
     await tester.tap(find.text('Receivables').first);
     await tester.pumpAndSettle();
     expect(find.text('Old receivable remains visible'), findsOneWidget);

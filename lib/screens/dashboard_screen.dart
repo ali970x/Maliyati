@@ -757,6 +757,7 @@ class _LightDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = controller.summary;
+    final allTimeSummary = controller.allTimeSummary;
     final comparison = controller.comparison;
     final wallets = controller.walletSummary;
     final walletUsd = wallets.cash.balanceUsd + wallets.wish.balanceUsd;
@@ -928,17 +929,14 @@ class _LightDashboard extends StatelessWidget {
                           child: _LightMetric(
                             title: controller.strings.reserveables,
                             value: FinanceFormatters.usd(
-                              summary.totalReserveable,
+                              allTimeSummary.totalReserveable,
                             ),
                             subtitle: FinanceFormatters.lbp(
-                              summary.totalReserveableLbp,
+                              allTimeSummary.totalReserveableLbp,
                             ),
                             icon: Icons.account_balance_outlined,
                             color: const Color(0xFFD97706),
-                            change: _percentageChange(
-                              summary.totalReserveable,
-                              controller.previousSummary.totalReserveable,
-                            ),
+                            footerLabel: 'All time',
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -959,16 +957,15 @@ class _LightDashboard extends StatelessWidget {
                           width: itemWidth,
                           child: _LightMetric(
                             title: controller.strings.debts,
-                            value: FinanceFormatters.usd(summary.totalDebt),
+                            value: FinanceFormatters.usd(
+                              allTimeSummary.totalDebt,
+                            ),
                             subtitle: FinanceFormatters.lbp(
-                              summary.totalDebtLbp,
+                              allTimeSummary.totalDebtLbp,
                             ),
                             icon: Icons.account_balance_rounded,
                             color: const Color(0xFF2563EB),
-                            change: _percentageChange(
-                              summary.totalDebt,
-                              controller.previousSummary.totalDebt,
-                            ),
+                            footerLabel: 'All time',
                             onTap: () => _openMetricFocus(
                               context,
                               controller,
@@ -1618,6 +1615,7 @@ class _LightMetric extends StatelessWidget {
     required this.icon,
     required this.color,
     this.change,
+    this.footerLabel,
     this.onTap,
     this.onLongPress,
   });
@@ -1627,6 +1625,7 @@ class _LightMetric extends StatelessWidget {
   final IconData icon;
   final Color color;
   final double? change;
+  final String? footerLabel;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -1687,6 +1686,15 @@ class _LightMetric extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: change == 0 ? const Color(0xFF77717D) : color,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  )
+                else if (footerLabel != null)
+                  Text(
+                    footerLabel!,
+                    style: TextStyle(
+                      color: color,
                       fontSize: 9,
                       fontWeight: FontWeight.w800,
                     ),
@@ -3989,6 +3997,7 @@ class _DashboardContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final summary = controller.summary;
+    final allTimeSummary = controller.allTimeSummary;
     final comparison = controller.comparison;
     final wide = AppResponsive.isWideWeb(context);
     final change = comparison?.netChange ?? 0;
@@ -4080,11 +4089,8 @@ class _DashboardContent extends StatelessWidget {
           wide: wide,
           first: _MetricPanel(
             title: controller.strings.reserveables,
-            value: FinanceFormatters.usd(summary.totalReserveable),
-            change: _percentageChange(
-              summary.totalReserveable,
-              controller.previousSummary.totalReserveable,
-            ),
+            value: FinanceFormatters.usd(allTimeSummary.totalReserveable),
+            change: null,
             positive: true,
             icon: Icons.request_quote_rounded,
             onTap: () => _openMetricFocus(
@@ -4104,11 +4110,8 @@ class _DashboardContent extends StatelessWidget {
           ),
           second: _MetricPanel(
             title: controller.strings.debts,
-            value: FinanceFormatters.usd(summary.totalDebt),
-            change: _percentageChange(
-              summary.totalDebt,
-              controller.previousSummary.totalDebt,
-            ),
+            value: FinanceFormatters.usd(allTimeSummary.totalDebt),
+            change: null,
             positive: false,
             icon: Icons.account_balance_rounded,
             onTap: () => _openMetricFocus(
@@ -4868,7 +4871,7 @@ class _MetricPanel extends StatelessWidget {
 
   final String title;
   final String value;
-  final double change;
+  final double? change;
   final bool positive;
   final IconData icon;
   final VoidCallback? onTap;
@@ -4877,7 +4880,7 @@ class _MetricPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = positive ? const Color(0xFF12D9F4) : const Color(0xFF9358FF);
-    final favourable = positive ? change >= 0 : change <= 0;
+    final favourable = positive ? (change ?? 0) >= 0 : (change ?? 0) <= 0;
     final changeColor = favourable
         ? const Color(0xFF13E0A0)
         : const Color(0xFFFF6A84);
@@ -4922,26 +4925,38 @@ class _MetricPanel extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(child: _SparkLine(color: color)),
-                const SizedBox(width: 10),
-                Text(
-                  '${change >= 0 ? '+' : ''}${FinanceFormatters.percent(change)}',
-                  style: TextStyle(
-                    color: changeColor,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
+            if (change != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _SparkLine(color: color)),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${change! >= 0 ? '+' : ''}${FinanceFormatters.percent(change!)}',
+                    style: TextStyle(
+                      color: changeColor,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              const Text(
+                'from last period',
+                style: TextStyle(color: Color(0xFF7091A9), fontSize: 11),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              const Text(
+                'All time outstanding',
+                style: TextStyle(
+                  color: Color(0xFF7091A9),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
-            ),
-            const SizedBox(height: 3),
-            Text(
-              'from last period',
-              style: const TextStyle(color: Color(0xFF7091A9), fontSize: 11),
-            ),
+              ),
+            ],
           ],
         ),
       ),
