@@ -12,6 +12,7 @@ import '../widgets/finance_formatters.dart';
 import '../widgets/period_filter_bar.dart';
 import '../widgets/responsive_layout.dart';
 import '../widgets/transaction_card.dart';
+import '../widgets/app_menu_drawer.dart';
 import 'budget_plan_screen.dart';
 import 'transaction_detail_screen.dart';
 
@@ -105,8 +106,617 @@ class _WalletAnalyticValue extends StatelessWidget {
   );
 }
 
-class AnalyticsScreen extends StatelessWidget {
+enum _AnalyticsView { categories, reports }
+
+class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key, required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  State<AnalyticsScreen> createState() => _AnalyticsScreenState();
+}
+
+class _AnalyticsScreenState extends State<AnalyticsScreen> {
+  _AnalyticsView _view = _AnalyticsView.categories;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: AppResponsive.pagePadding(
+            context,
+          ).copyWith(top: 8, bottom: 6),
+          child: SegmentedButton<_AnalyticsView>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                value: _AnalyticsView.categories,
+                icon: Icon(Icons.donut_large_rounded),
+                label: Text('Categories'),
+              ),
+              ButtonSegment(
+                value: _AnalyticsView.reports,
+                icon: Icon(Icons.query_stats_rounded),
+                label: Text('Reports'),
+              ),
+            ],
+            selected: {_view},
+            onSelectionChanged: (selection) {
+              setState(() => _view = selection.first);
+            },
+          ),
+        ),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 240),
+            child: _view == _AnalyticsView.categories
+                ? _AnalyticsCategoryLanding(
+                    key: const ValueKey('categories'),
+                    controller: widget.controller,
+                  )
+                : _AnalyticsReportsScreen(
+                    key: const ValueKey('reports'),
+                    controller: widget.controller,
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AnalyticsCategoryLanding extends StatefulWidget {
+  const _AnalyticsCategoryLanding({super.key, required this.controller});
+
+  final DashboardController controller;
+
+  @override
+  State<_AnalyticsCategoryLanding> createState() =>
+      _AnalyticsCategoryLandingState();
+}
+
+class _AnalyticsCategoryLandingState extends State<_AnalyticsCategoryLanding> {
+  late DateTime _month;
+  String? _account;
+  TransactionType _type = TransactionType.expense;
+
+  DashboardController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _month = DateTime(now.year, now.month);
+  }
+
+  List<FinancialTransaction> get _transactions {
+    return controller.transactions.where((transaction) {
+      final matchesType = _type == TransactionType.expense
+          ? transaction.affectsExpenseStats
+          : transaction.affectsIncomeStats;
+      final matchesAccount =
+          _account == null ||
+          transaction.walletId.trim().toLowerCase() ==
+              _account!.trim().toLowerCase();
+      return matchesType &&
+          matchesAccount &&
+          transaction.date.year == _month.year &&
+          transaction.date.month == _month.month;
+    }).toList()..sort(
+      (a, b) => (b.createdAt ?? b.date).compareTo(a.createdAt ?? a.date),
+    );
+  }
+
+  Map<String, double> get _categoryTotals {
+    final totals = <String, double>{
+      for (final category in controller.categoryOptionsFor(_type)) category: 0,
+    };
+    for (final transaction in _transactions) {
+      totals.update(
+        transaction.category,
+        (value) => value + transaction.amountInUsd(controller.exchangeRate),
+        ifAbsent: () => transaction.amountInUsd(controller.exchangeRate),
+      );
+    }
+    final entries = totals.entries.toList()
+      ..sort((a, b) {
+        final amount = b.value.compareTo(a.value);
+        return amount == 0 ? a.key.compareTo(b.key) : amount;
+      });
+    return Map.fromEntries(entries.take(8));
+  }
+
+  double get _accountBalanceUsd {
+    if (_account case final account?) {
+      final summary = controller.accountSummary(account);
+      return summary.balanceUsd + summary.balanceLbp / controller.exchangeRate;
+    }
+    return controller.financeAccounts.fold<double>(0, (total, account) {
+      final summary = controller.accountSummary(account.name);
+      return total +
+          summary.balanceUsd +
+          summary.balanceLbp / controller.exchangeRate;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.isLoading && !controller.hasData) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final theme = Theme.of(context);
+    final totals = _categoryTotals;
+    final total = totals.values.fold<double>(0, (sum, value) => sum + value);
+    return RefreshIndicator(
+      onRefresh: controller.refresh,
+      child: ListView(
+        padding: AppResponsive.pagePadding(
+          context,
+        ).copyWith(top: 4, bottom: 28),
+        children: [
+          Row(
+            children: [
+              IconButton.outlined(
+                onPressed: _selectAccount,
+                tooltip: 'Choose account',
+                icon: const Icon(Icons.account_circle_outlined),
+              ),
+              Expanded(
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _selectAccount,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Column(
+                      children: [
+                        Text(
+                          _account ?? 'All accounts',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          FinanceFormatters.usd(_accountBalanceUsd),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              IconButton.outlined(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        CategorySettingsScreen(controller: controller),
+                  ),
+                ),
+                tooltip: 'Manage categories',
+                icon: const Icon(Icons.tune_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              IconButton(
+                onPressed: () => _moveMonth(-1),
+                tooltip: 'Previous month',
+                icon: const Icon(Icons.keyboard_double_arrow_left_rounded),
+              ),
+              Expanded(
+                child: Center(
+                  child: FilledButton.tonalIcon(
+                    onPressed: _pickMonth,
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    label: Text(
+                      DateFormat('MMMM yyyy').format(_month).toUpperCase(),
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => _moveMonth(1),
+                tooltip: 'Next month',
+                icon: const Icon(Icons.keyboard_double_arrow_right_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: SegmentedButton<TransactionType>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: TransactionType.expense,
+                  icon: Icon(Icons.north_east_rounded),
+                  label: Text('Expenses'),
+                ),
+                ButtonSegment(
+                  value: TransactionType.income,
+                  icon: Icon(Icons.south_west_rounded),
+                  label: Text('Income'),
+                ),
+              ],
+              selected: {_type},
+              onSelectionChanged: (selection) {
+                setState(() => _type = selection.first);
+              },
+            ),
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = math.min(constraints.maxWidth, 660.0);
+              return Center(
+                child: _RadialCategoryBoard(
+                  width: width,
+                  entries: totals.entries.toList(),
+                  total: total,
+                  type: _type,
+                  controller: controller,
+                  onCategoryTap: _showCategory,
+                  onAddCategory: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CategorySettingsScreen(controller: controller),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _moveMonth(int offset) {
+    setState(() => _month = DateTime(_month.year, _month.month + offset));
+  }
+
+  Future<void> _pickMonth() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _month,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: 'Choose any day in the month',
+    );
+    if (picked != null) {
+      setState(() => _month = DateTime(picked.year, picked.month));
+    }
+  }
+
+  Future<void> _selectAccount() async {
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.all_inclusive_rounded),
+              title: const Text('All accounts'),
+              trailing: _account == null
+                  ? const Icon(Icons.check_rounded)
+                  : null,
+              onTap: () => Navigator.pop(context, ''),
+            ),
+            for (final account in controller.financeAccounts)
+              ListTile(
+                leading: const Icon(Icons.account_balance_wallet_outlined),
+                title: Text(account.name),
+                trailing: _account == account.name
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.pop(context, account.name),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() => _account = selected.isEmpty ? null : selected);
+  }
+
+  void _showCategory(String category) {
+    final items = _transactions
+        .where((transaction) => transaction.category == category)
+        .toList();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .82,
+        child: Column(
+          children: [
+            ListTile(
+              leading: Text(
+                controller.categoryIconFor(category),
+                style: const TextStyle(fontSize: 28),
+              ),
+              title: Text(
+                category,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              subtitle: Text('${items.length} transactions'),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: items.isEmpty
+                  ? const Center(child: Text('No transactions this month.'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final transaction = items[index];
+                        return TransactionCard(
+                          transaction: transaction,
+                          exchangeRate: controller.exchangeRate,
+                          strings: controller.strings,
+                          categoryColor: controller.categoryColorFor(category),
+                          categoryIcon: controller.categoryIconFor(category),
+                          onTap: () {
+                            Navigator.pop(sheetContext);
+                            Navigator.of(this.context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    transaction.isCredit || transaction.isDebt
+                                    ? SettlementWorkspaceScreen(
+                                        controller: controller,
+                                        transaction: transaction,
+                                      )
+                                    : TransactionDetailScreen(
+                                        controller: controller,
+                                        transaction: transaction,
+                                      ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RadialCategoryBoard extends StatelessWidget {
+  const _RadialCategoryBoard({
+    required this.width,
+    required this.entries,
+    required this.total,
+    required this.type,
+    required this.controller,
+    required this.onCategoryTap,
+    required this.onAddCategory,
+  });
+
+  final double width;
+  final List<MapEntry<String, double>> entries;
+  final double total;
+  final TransactionType type;
+  final DashboardController controller;
+  final ValueChanged<String> onCategoryTap;
+  final VoidCallback onAddCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    const height = 570.0;
+    final nodeWidth = math.min(94.0, width / 4);
+    final ringSize = math.min(220.0, width * .54);
+    final ringLeft = (width - ringSize) / 2;
+    final sideRight = width - nodeWidth;
+    final positions = <Offset>[
+      Offset(0, 0),
+      Offset((width - nodeWidth) / 3, 0),
+      Offset((width - nodeWidth) * 2 / 3, 0),
+      Offset(sideRight, 0),
+      const Offset(0, 196),
+      Offset(sideRight, 196),
+      const Offset(12, 390),
+      Offset(sideRight - 12, 390),
+    ];
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (var index = 0; index < entries.length; index++)
+            Positioned(
+              left: positions[index].dx,
+              top: positions[index].dy,
+              width: nodeWidth,
+              child: _CategoryOrbitNode(
+                entry: entries[index],
+                total: total,
+                controller: controller,
+                onTap: () => onCategoryTap(entries[index].key),
+              ),
+            ),
+          Positioned(
+            left: ringLeft,
+            top: 168,
+            width: ringSize,
+            height: ringSize,
+            child: _AnalyticsDonut(
+              entries: entries,
+              total: total,
+              type: type,
+              controller: controller,
+            ),
+          ),
+          Positioned(
+            left: 8,
+            bottom: 2,
+            child: IconButton.outlined(
+              onPressed: onAddCategory,
+              tooltip: 'Manage categories',
+              icon: const Icon(Icons.add_rounded),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryOrbitNode extends StatelessWidget {
+  const _CategoryOrbitNode({
+    required this.entry,
+    required this.total,
+    required this.controller,
+    required this.onTap,
+  });
+
+  final MapEntry<String, double> entry;
+  final double total;
+  final DashboardController controller;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = controller.categoryColorFor(entry.key);
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+        child: Column(
+          children: [
+            SizedBox(
+              height: 22,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  entry.key,
+                  maxLines: 1,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            Text(
+              FinanceFormatters.usd(entry.value),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Container(
+              width: 58,
+              height: 58,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .13),
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                controller.categoryIconFor(entry.key),
+                style: const TextStyle(fontSize: 27),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              total <= 0
+                  ? '0%'
+                  : '${(entry.value / total * 100).toStringAsFixed(1)}%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalyticsDonut extends StatelessWidget {
+  const _AnalyticsDonut({
+    required this.entries,
+    required this.total,
+    required this.type,
+    required this.controller,
+  });
+
+  final List<MapEntry<String, double>> entries;
+  final double total;
+  final TransactionType type;
+  final DashboardController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        PieChart(
+          PieChartData(
+            centerSpaceRadius: 72,
+            sectionsSpace: 2,
+            startDegreeOffset: -90,
+            sections: total <= 0
+                ? [
+                    PieChartSectionData(
+                      value: 1,
+                      color: theme.colorScheme.outlineVariant,
+                      radius: 22,
+                      showTitle: false,
+                    ),
+                  ]
+                : entries
+                      .where((entry) => entry.value > 0)
+                      .map(
+                        (entry) => PieChartSectionData(
+                          value: entry.value,
+                          color: controller.categoryColorFor(entry.key),
+                          radius: 22,
+                          showTitle: false,
+                        ),
+                      )
+                      .toList(),
+          ),
+        ),
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              type == TransactionType.expense ? 'Expenses' : 'Income',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              FinanceFormatters.usd(total),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: type == TransactionType.expense
+                    ? const Color(0xFFC74949)
+                    : const Color(0xFF168A5B),
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            Text('${entries.where((entry) => entry.value > 0).length} active'),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AnalyticsReportsScreen extends StatelessWidget {
+  const _AnalyticsReportsScreen({super.key, required this.controller});
 
   final DashboardController controller;
 
