@@ -9,6 +9,7 @@ import '../l10n/app_strings.dart';
 import '../models/budget_plan.dart';
 import '../models/dashboard_comparison.dart';
 import '../models/dashboard_pin.dart';
+import '../models/finance_account.dart';
 import '../models/transaction.dart';
 import '../services/accounting_rules.dart';
 import '../services/category_taxonomy.dart';
@@ -266,6 +267,7 @@ class DashboardController extends ChangeNotifier {
   static const _budgetPlanSettingsKey = 'budget_plan_settings_v1';
   static const _dashboardPinsKey = 'dashboard_pins_v1';
   static const _dashboardComparisonKey = 'dashboard_comparison_v1';
+  static const _financeAccountsKey = 'finance_accounts_v1';
 
   final GoogleSheetService _service;
   final bool _usesInjectedSheetService;
@@ -317,6 +319,7 @@ class DashboardController extends ChangeNotifier {
   List<DashboardPinnedItem> _dashboardPins = const [];
   DashboardComparisonSettings _dashboardComparison =
       const DashboardComparisonSettings();
+  List<FinanceAccount> _financeAccounts = FinanceAccount.defaults;
 
   List<FinancialTransaction> get transactions => List.unmodifiable(
     _transactions.where(
@@ -511,6 +514,24 @@ class DashboardController extends ChangeNotifier {
 
   List<CategoryRule> get categoryRules => List.unmodifiable(_categoryRules);
 
+  List<FinanceAccount> get financeAccounts => List.unmodifiable(
+    _financeAccounts.map((account) {
+      if (account.id == 'my_wallet') {
+        return account.copyWith(
+          openingUsd: _walletOpeningUsd,
+          openingLbp: _walletOpeningLbp,
+        );
+      }
+      if (account.id == 'wish_money') {
+        return account.copyWith(
+          openingUsd: _wishWalletOpeningUsd,
+          openingLbp: _wishWalletOpeningLbp,
+        );
+      }
+      return account;
+    }),
+  );
+
   BudgetPlanSettings get budgetPlanSettings => _budgetPlanSettings;
 
   List<DashboardPinnedItem> get dashboardPins =>
@@ -590,14 +611,74 @@ class DashboardController extends ChangeNotifier {
 
   List<String> get paymentMethodOptions {
     final values = <String>{
-      'My Wallet',
-      'Whish Money',
+      ...financeAccounts.map((account) => account.name),
       ..._transactions
           .where((transaction) => !transaction.isDeleted)
           .map((transaction) => transaction.paymentMethod.trim())
           .where((value) => value.isNotEmpty),
     }.toList()..sort();
     return values;
+  }
+
+  WalletAccountSummary accountSummary(String accountName) {
+    if (LabelNormalizer.isWishMoney(accountName)) {
+      return walletSummary.wish;
+    }
+    if (accountName.trim().toLowerCase() == 'my wallet') {
+      return walletSummary.cash;
+    }
+    return _accountSummaryForTransactions(accountName, _transactions);
+  }
+
+  WalletAccountSummary _accountSummaryForTransactions(
+    String accountName,
+    List<FinancialTransaction> source,
+  ) {
+    final normalized = accountName.trim().toLowerCase();
+    final account = financeAccounts.firstWhere(
+      (item) => item.name.trim().toLowerCase() == normalized,
+      orElse: () => FinanceAccount(
+        id: normalized.replaceAll(' ', '_'),
+        name: accountName,
+        kind: FinanceAccountKind.wallet,
+        scope: FinanceAccountScope.personal,
+        colorValue: 0xFF1478C9,
+      ),
+    );
+    final movements = <FinancialTransaction>[];
+    for (final transaction in source.where((item) => !item.isDeleted)) {
+      if (transaction.isTransfer) {
+        if (transaction.walletId.trim().toLowerCase() == normalized) {
+          movements.add(
+            transaction.copyWith(
+              raw: {...transaction.raw, 'wallet_direction': '-1'},
+            ),
+          );
+        }
+        if (transaction.destinationWalletId?.trim().toLowerCase() ==
+            normalized) {
+          movements.add(
+            transaction.copyWith(
+              paymentMethod: accountName,
+              raw: {
+                ...transaction.raw,
+                'wallet_id': accountName,
+                'wallet_direction': '1',
+              },
+            ),
+          );
+        }
+        continue;
+      }
+      if (transaction.walletId.trim().toLowerCase() == normalized) {
+        movements.add(transaction);
+      }
+    }
+    return WalletAccountSummary.fromTransactions(
+      movements,
+      openingUsd: account.openingUsd,
+      openingLbp: account.openingLbp,
+    );
   }
 
   bool get isSheetExportConfigured => _sheetExportService.isConfigured(
@@ -854,6 +935,7 @@ class DashboardController extends ChangeNotifier {
       await _loadBudgetPlanSettings(prefs);
       await _loadDashboardPins(prefs);
       await _loadDashboardComparison(prefs);
+      await _loadFinanceAccounts(prefs);
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
       await _runDailyAutoBackupIfDue();
@@ -1122,6 +1204,7 @@ class DashboardController extends ChangeNotifier {
       await _loadBudgetPlanSettings(prefs);
       await _loadDashboardPins(prefs);
       await _loadDashboardComparison(prefs);
+      await _loadFinanceAccounts(prefs);
       _loadAutoBackupState(prefs);
       // Sheet settings are optional. They must not block a successful login.
       try {
@@ -1207,6 +1290,7 @@ class DashboardController extends ChangeNotifier {
       await _loadBudgetPlanSettings(prefs);
       await _loadDashboardPins(prefs);
       await _loadDashboardComparison(prefs);
+      await _loadFinanceAccounts(prefs);
       _loadAutoBackupState(prefs);
       await _loadSheetIntegrationSettings();
       await _loadWalletSettings();
@@ -1255,6 +1339,7 @@ class DashboardController extends ChangeNotifier {
     _budgetPlanSettings = BudgetPlanSettings.defaults();
     _dashboardPins = const [];
     _dashboardComparison = const DashboardComparisonSettings();
+    _financeAccounts = FinanceAccount.defaults;
     _adminUsers = const [];
     _errorMessage = null;
     _lastUpdated = DateTime.now();
@@ -1296,6 +1381,54 @@ class DashboardController extends ChangeNotifier {
       }
     }
     notifyListeners();
+  }
+
+  Future<void> saveFinanceAccounts(List<FinanceAccount> accounts) async {
+    final unique = <String, FinanceAccount>{
+      for (final account in FinanceAccount.defaults) account.id: account,
+    };
+    for (final account in accounts) {
+      final name = account.name.trim();
+      if (name.isEmpty) continue;
+      unique[account.id.trim().isEmpty
+          ? name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+          : account.id.trim()] = account.copyWith(
+        name: name,
+      );
+    }
+    _financeAccounts = unique.values.toList(growable: false);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _financeAccountsStorageKey(),
+      jsonEncode(_financeAccounts.map((item) => item.toJson()).toList()),
+    );
+    if (_isFirebaseConfigured && _firebase.currentUser != null) {
+      await _firebase.saveFinanceAccounts(
+        _financeAccounts.map((item) => item.toJson()).toList(growable: false),
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> deleteFinanceAccount(FinanceAccount account) async {
+    if (account.isSystem) return;
+    await saveFinanceAccounts(
+      _financeAccounts.where((item) => item.id != account.id).toList(),
+    );
+  }
+
+  Future<void> addFinanceAccount(FinanceAccount account) async {
+    if (account.scope == FinanceAccountScope.shared) {
+      await _firebase.createSharedFinanceAccount(account.toJson());
+    }
+    await saveFinanceAccounts([..._financeAccounts, account]);
+  }
+
+  Future<FinanceAccount> joinSharedFinanceAccount(String code) async {
+    final data = await _firebase.joinSharedFinanceAccount(code);
+    final account = FinanceAccount.fromJson(data);
+    await saveFinanceAccounts([..._financeAccounts, account]);
+    return account;
   }
 
   Future<void> saveBudgetPlanSettings(BudgetPlanSettings settings) async {
@@ -1549,6 +1682,13 @@ class DashboardController extends ChangeNotifier {
         : '${_dashboardComparisonKey}_$uid';
   }
 
+  String _financeAccountsStorageKey() {
+    final uid = _user?.uid.trim() ?? '';
+    return uid.isEmpty
+        ? '${_financeAccountsKey}_guest'
+        : '${_financeAccountsKey}_$uid';
+  }
+
   String _lastAutoBackupStorageKey() {
     final uid = _user?.uid.trim() ?? '';
     return uid.isEmpty
@@ -1616,6 +1756,61 @@ class DashboardController extends ChangeNotifier {
     } catch (_) {
       // The account keeps its local category preferences while offline.
     }
+  }
+
+  Future<void> _loadFinanceAccounts(SharedPreferences prefs) async {
+    final storageKey = _financeAccountsStorageKey();
+    final local = prefs.getString(storageKey);
+    var accounts = <FinanceAccount>[];
+    if (local != null && local.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(local);
+        if (decoded is List) {
+          accounts = decoded
+              .whereType<Map>()
+              .map(
+                (item) =>
+                    FinanceAccount.fromJson(Map<String, dynamic>.from(item)),
+              )
+              .where((item) => item.name.isNotEmpty)
+              .toList();
+        }
+      } catch (_) {}
+    }
+    _financeAccounts = accounts.isEmpty
+        ? FinanceAccount.defaults
+        : _mergeDefaultFinanceAccounts(accounts);
+    if (!_isFirebaseConfigured || _firebase.currentUser == null) return;
+    try {
+      final remote = await _firebase.fetchFinanceAccounts();
+      if (remote == null || remote.isEmpty) {
+        await _firebase.saveFinanceAccounts(
+          _financeAccounts.map((item) => item.toJson()).toList(),
+        );
+        return;
+      }
+      _financeAccounts = _mergeDefaultFinanceAccounts(
+        remote.map(FinanceAccount.fromJson).toList(),
+      );
+      await prefs.setString(
+        storageKey,
+        jsonEncode(_financeAccounts.map((item) => item.toJson()).toList()),
+      );
+    } catch (_) {
+      // Account definitions remain usable while Firebase is unavailable.
+    }
+  }
+
+  List<FinanceAccount> _mergeDefaultFinanceAccounts(
+    List<FinanceAccount> accounts,
+  ) {
+    final values = <String, FinanceAccount>{
+      for (final item in FinanceAccount.defaults) item.id: item,
+    };
+    for (final item in accounts) {
+      values[item.id] = item;
+    }
+    return values.values.toList(growable: false);
   }
 
   Future<void> _loadBudgetPlanSettings(SharedPreferences prefs) async {
@@ -3065,11 +3260,19 @@ class DashboardController extends ChangeNotifier {
   }) {
     final after = _walletSummaryFor(afterTransactions);
     for (final transaction in changedTransactions) {
-      if (transaction.walletDirection >= 0) {
+      if (transaction.walletDirection >= 0 && !transaction.isTransfer) {
         continue;
       }
-      final isWish = LabelNormalizer.isWishMoney(transaction.walletId);
-      final balance = isWish ? after.wish : after.cash;
+      final walletName = transaction.walletId.trim().isEmpty
+          ? 'My Wallet'
+          : transaction.walletId.trim();
+      final isWish = LabelNormalizer.isWishMoney(walletName);
+      final isCash = walletName.toLowerCase() == 'my wallet';
+      final balance = isWish
+          ? after.wish
+          : isCash
+          ? after.cash
+          : _accountSummaryForTransactions(walletName, afterTransactions);
       final hasUsdShortfall =
           transaction.amountUsd > 0 && balance.balanceUsd < -0.0001;
       final hasLbpShortfall =
@@ -3077,7 +3280,6 @@ class DashboardController extends ChangeNotifier {
       if (!hasUsdShortfall && !hasLbpShortfall) {
         continue;
       }
-      final walletName = isWish ? 'Whish Money' : 'My Wallet';
       final availableUsd = (balance.balanceUsd + transaction.amountUsd)
           .clamp(0.0, double.infinity)
           .toDouble();

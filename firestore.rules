@@ -18,5 +18,16 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid;
       allow create, update, delete: if isAdmin();
     }
+
+    match /shared_accounts/{joinCode} {
+      allow create: if request.auth != null &&
+        request.resource.data.ownerUid == request.auth.uid;
+      allow read: if request.auth != null;
+      allow update: if request.auth != null &&
+        (resource.data.ownerUid == request.auth.uid ||
+         request.auth.uid in resource.data.memberUids);
+      allow delete: if request.auth != null &&
+        resource.data.ownerUid == request.auth.uid;
+    }
   }
 }

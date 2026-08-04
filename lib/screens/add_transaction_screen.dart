@@ -453,10 +453,14 @@ class _QuickEntryFormState extends State<_QuickEntryForm> {
         PopupMenuButton<String>(
           initialValue: _wallet,
           onSelected: (value) => setState(() => _wallet = value),
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'My Wallet', child: Text('My Wallet')),
-            PopupMenuItem(value: 'Whish Money', child: Text('Whish Money')),
-          ],
+          itemBuilder: (context) => widget.controller.financeAccounts
+              .map(
+                (account) => PopupMenuItem(
+                  value: account.name,
+                  child: Text(account.name),
+                ),
+              )
+              .toList(),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -640,7 +644,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   DateTime _createdAt = DateTime.now();
   TransactionType _type = TransactionType.expense;
   _ManualStatus _status = _ManualStatus.expense;
-  bool _useWishMoney = false;
   TransactionSource _source = TransactionSource.application;
   FinancialTransaction? _settlementTarget;
   bool _allocateIncomeToBudget = true;
@@ -661,7 +664,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
         widget.initialWalletId?.trim().isNotEmpty == true
         ? widget.initialWalletId!.trim()
         : 'My Wallet';
-    _useWishMoney = LabelNormalizer.isWishMoney(_paymentMethodController.text);
     _destinationWalletController.text = 'Whish Money';
     if (_isCreditOrDebt) {
       _categoryController.text = _fixedCategory;
@@ -885,32 +887,37 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _WalletDestinationChoice(
-                          label: 'My Wallet',
-                          icon: Icons.account_balance_wallet_rounded,
-                          selected: !_useWishMoney && !_usesService,
-                          onTap: () => setState(() {
-                            _useWishMoney = false;
-                            _paymentMethodController.text = 'My Wallet';
-                          }),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _WalletDestinationChoice(
-                          label: 'Whish Money',
-                          selected: _useWishMoney,
-                          imageAsset: 'assets/branding/wish_money_logo.jpg',
-                          onTap: () => setState(() {
-                            _useWishMoney = true;
-                            _paymentMethodController.text = 'Whish Money';
-                          }),
-                        ),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) => Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: widget.controller.financeAccounts.map((
+                        account,
+                      ) {
+                        final width = constraints.maxWidth >= 520
+                            ? (constraints.maxWidth - 20) / 3
+                            : (constraints.maxWidth - 10) / 2;
+                        return SizedBox(
+                          width: width,
+                          child: _WalletDestinationChoice(
+                            label: account.name,
+                            icon: Icons.account_balance_wallet_rounded,
+                            imageAsset: account.id == 'wish_money'
+                                ? 'assets/branding/wish_money_logo.jpg'
+                                : null,
+                            selected:
+                                !_usesService &&
+                                _paymentMethodController.text
+                                        .trim()
+                                        .toLowerCase() ==
+                                    account.name.trim().toLowerCase(),
+                            onTap: () => setState(() {
+                              _paymentMethodController.text = account.name;
+                            }),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ),
                   if (_isCreditOrDebt) ...[
                     const SizedBox(height: 10),
@@ -922,7 +929,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                           icon: Icons.miscellaneous_services_rounded,
                           selected: _usesService,
                           onTap: () => setState(() {
-                            _useWishMoney = false;
                             _paymentMethodController.text =
                                 LabelNormalizer.service;
                           }),
@@ -939,36 +945,37 @@ class _ManualAddFormState extends State<_ManualAddForm> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _WalletDestinationChoice(
-                            label: 'My Wallet',
-                            icon: Icons.account_balance_wallet_rounded,
-                            selected: !LabelNormalizer.isWishMoney(
-                              _destinationWalletController.text,
+                    LayoutBuilder(
+                      builder: (context, constraints) => Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: widget.controller.financeAccounts.map((
+                          account,
+                        ) {
+                          final width = constraints.maxWidth >= 520
+                              ? (constraints.maxWidth - 20) / 3
+                              : (constraints.maxWidth - 10) / 2;
+                          return SizedBox(
+                            width: width,
+                            child: _WalletDestinationChoice(
+                              label: account.name,
+                              icon: Icons.account_balance_wallet_rounded,
+                              imageAsset: account.id == 'wish_money'
+                                  ? 'assets/branding/wish_money_logo.jpg'
+                                  : null,
+                              selected:
+                                  _destinationWalletController.text
+                                      .trim()
+                                      .toLowerCase() ==
+                                  account.name.trim().toLowerCase(),
+                              onTap: () => setState(
+                                () => _destinationWalletController.text =
+                                    account.name,
+                              ),
                             ),
-                            onTap: () => setState(
-                              () => _destinationWalletController.text =
-                                  'My Wallet',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _WalletDestinationChoice(
-                            label: 'Whish Money',
-                            selected: LabelNormalizer.isWishMoney(
-                              _destinationWalletController.text,
-                            ),
-                            imageAsset: 'assets/branding/wish_money_logo.jpg',
-                            onTap: () => setState(
-                              () => _destinationWalletController.text =
-                                  'Whish Money',
-                            ),
-                          ),
-                        ),
-                      ],
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ],
                   const SizedBox(height: 12),
@@ -1206,7 +1213,6 @@ class _ManualAddFormState extends State<_ManualAddForm> {
       _status = _ManualStatus.expense;
       _source = TransactionSource.application;
       _settlementTarget = null;
-      _useWishMoney = false;
       _allocateIncomeToBudget = true;
     });
   }
@@ -1249,9 +1255,7 @@ class _ManualAddFormState extends State<_ManualAddForm> {
   }
 
   WalletAccountSummary _selectedWalletBalance() {
-    return _useWishMoney
-        ? widget.controller.walletSummary.wish
-        : widget.controller.walletSummary.cash;
+    return widget.controller.accountSummary(_selectedWalletId);
   }
 
   String _selectedWalletName() {
@@ -1260,9 +1264,9 @@ class _ManualAddFormState extends State<_ManualAddForm> {
 
   String get _selectedWalletId => _usesService
       ? LabelNormalizer.service
-      : _useWishMoney
-      ? 'Whish Money'
-      : 'My Wallet';
+      : _paymentMethodController.text.trim().isEmpty
+      ? 'My Wallet'
+      : _paymentMethodController.text.trim();
 
   Color _typeColor(TransactionType type) {
     return switch (type) {

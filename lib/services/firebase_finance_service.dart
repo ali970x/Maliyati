@@ -810,6 +810,60 @@ class FirebaseFinanceService {
     }, SetOptions(merge: true));
   }
 
+  Future<List<Map<String, dynamic>>?> fetchFinanceAccounts() async {
+    final user = _requireUser();
+    final snapshot = await _settings(user.uid).get();
+    final raw = snapshot.data()?['financeAccounts'];
+    if (raw is! List) return null;
+    return raw
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+  }
+
+  Future<void> saveFinanceAccounts(List<Map<String, dynamic>> accounts) async {
+    final user = _requireUser();
+    await _settings(user.uid).set({
+      'financeAccounts': accounts,
+      'financeAccountsUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<void> createSharedFinanceAccount(Map<String, dynamic> account) async {
+    final user = _requireUser();
+    final code = '${account['joinCode'] ?? ''}'.trim().toUpperCase();
+    if (code.isEmpty) {
+      throw const FirebaseFinanceException(
+        'A shared account needs a join code.',
+      );
+    }
+    await _firestore.collection('shared_accounts').doc(code).set({
+      ...account,
+      'joinCode': code,
+      'ownerUid': user.uid,
+      'memberUids': FieldValue.arrayUnion([user.uid]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+
+  Future<Map<String, dynamic>> joinSharedFinanceAccount(String value) async {
+    final user = _requireUser();
+    final code = value.trim().toUpperCase();
+    final reference = _firestore.collection('shared_accounts').doc(code);
+    final snapshot = await reference.get();
+    final data = snapshot.data();
+    if (!snapshot.exists || data == null) {
+      throw const FirebaseFinanceException(
+        'Shared account code was not found.',
+      );
+    }
+    await reference.update({
+      'memberUids': FieldValue.arrayUnion([user.uid]),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    return {...data, 'joinCode': code, 'scope': 'shared'};
+  }
+
   Future<Map<String, dynamic>?> fetchBudgetPlanSettings() async {
     final user = _requireUser();
     final snapshot = await _settings(user.uid).get();

@@ -16,6 +16,9 @@ import '../services/firebase_finance_service.dart';
 import '../services/google_drive_backup_service.dart';
 import '../services/category_icon_catalog.dart';
 import '../services/smart_clipboard_service.dart';
+import '../screens/category_overview_screen.dart';
+import '../screens/export_data_screen.dart';
+import '../screens/finance_accounts_screen.dart';
 import 'smart_clipboard_settings_section.dart';
 
 class AppMenuScreen extends StatelessWidget {
@@ -74,6 +77,17 @@ class AppMenuScreen extends StatelessWidget {
           const SizedBox(height: 22),
           _SettingsSectionLabel(title: t('Finance & data', 'المال والبيانات')),
           _SettingsCard(
+            icon: Icons.account_balance_wallet_outlined,
+            title: t('Accounts', 'الحسابات'),
+            subtitle: t(
+              'Manage personal and shared accounts',
+              'إدارة الحسابات الشخصية والمشتركة',
+            ),
+            onTap: () =>
+                _open(context, FinanceAccountsScreen(controller: controller)),
+          ),
+          const SizedBox(height: 12),
+          _SettingsCard(
             icon: Icons.currency_exchange_rounded,
             title: t('Exchange rate', 'سعر الصرف'),
             subtitle: t(
@@ -93,6 +107,28 @@ class AppMenuScreen extends StatelessWidget {
             ),
             onTap: () =>
                 _open(context, CategorySettingsScreen(controller: controller)),
+          ),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.donut_large_rounded,
+            title: t('Category overview', 'نظرة الفئات'),
+            subtitle: t(
+              'Explore monthly spending with visual category totals',
+              'استكشف المصاريف الشهرية حسب الفئات بشكل مرئي',
+            ),
+            onTap: () =>
+                _open(context, CategoryOverviewScreen(controller: controller)),
+          ),
+          const SizedBox(height: 12),
+          _SettingsCard(
+            icon: Icons.file_download_outlined,
+            title: t('Export data', 'تصدير البيانات'),
+            subtitle: t(
+              'Create PDF, CSV, or Excel reports',
+              'إنشاء تقارير PDF أو CSV أو Excel',
+            ),
+            onTap: () =>
+                _open(context, ExportDataScreen(controller: controller)),
           ),
           const SizedBox(height: 12),
           _SettingsCard(

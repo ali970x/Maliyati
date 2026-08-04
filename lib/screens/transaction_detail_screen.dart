@@ -96,11 +96,13 @@ class _SettlementSheet extends StatefulWidget {
     required this.target,
     required this.initialWalletId,
     required this.exchangeRate,
+    required this.walletOptions,
   });
 
   final FinancialTransaction target;
   final String initialWalletId;
   final double exchangeRate;
+  final List<String> walletOptions;
 
   @override
   State<_SettlementSheet> createState() => _SettlementSheetState();
@@ -262,25 +264,20 @@ class _SettlementSheetState extends State<_SettlementSheet> {
               ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: widget.walletOptions.map((wallet) {
+                return SizedBox(
+                  width: 170,
                   child: _WalletSelectionButton(
-                    label: 'My Wallet',
-                    selected: _walletId == 'My Wallet',
-                    onTap: () => setState(() => _walletId = 'My Wallet'),
+                    label: wallet,
+                    isWish: LabelNormalizer.isWishMoney(wallet),
+                    selected: _walletId == wallet,
+                    onTap: () => setState(() => _walletId = wallet),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _WalletSelectionButton(
-                    label: 'Whish Money',
-                    isWish: true,
-                    selected: _walletId == 'Whish Money',
-                    onTap: () => setState(() => _walletId = 'Whish Money'),
-                  ),
-                ),
-              ],
+                );
+              }).toList(),
             ),
             const SizedBox(height: 8),
             Text(
@@ -408,6 +405,9 @@ class _SettlementWorkspaceScreenState extends State<SettlementWorkspaceScreen> {
         target: _transaction,
         initialWalletId: _transaction.walletId,
         exchangeRate: widget.controller.exchangeRate,
+        walletOptions: widget.controller.financeAccounts
+            .map((item) => item.name)
+            .toList(),
       ),
     );
     if (request == null || !mounted) return;
@@ -976,6 +976,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
           target: _transaction,
           initialWalletId: _paymentMethodController.text,
           exchangeRate: widget.controller.exchangeRate,
+          walletOptions: widget.controller.financeAccounts
+              .map((item) => item.name)
+              .toList(),
         ),
       );
 
@@ -1177,10 +1180,9 @@ class _TransactionDetailScreenState extends State<TransactionDetailScreen> {
   };
 
   WalletAccountSummary _editableWalletBalance() {
-    final usesWish = LabelNormalizer.isWishMoney(_paymentMethodController.text);
-    final base = usesWish
-        ? widget.controller.walletSummary.wish
-        : widget.controller.walletSummary.cash;
+    final base = widget.controller.accountSummary(
+      _paymentMethodController.text,
+    );
     var usd = base.balanceUsd;
     var lbp = base.balanceLbp;
     final sameWallet =
@@ -1728,31 +1730,28 @@ class _EditBody extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _WalletSelectionButton(
-                            label: 'My Wallet',
-                            selected:
-                                state._selectedPaymentMethodOption ==
-                                'My Wallet',
-                            onTap: () =>
-                                state._persistSettlementWallet('My Wallet'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _WalletSelectionButton(
-                            label: 'Whish Money',
-                            isWish: true,
-                            selected:
-                                state._selectedPaymentMethodOption ==
-                                'Whish Money',
-                            onTap: () =>
-                                state._persistSettlementWallet('Whish Money'),
-                          ),
-                        ),
-                      ],
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: state.widget.controller.financeAccounts
+                          .map(
+                            (account) => SizedBox(
+                              width: 170,
+                              child: _WalletSelectionButton(
+                                label: account.name,
+                                isWish: LabelNormalizer.isWishMoney(
+                                  account.name,
+                                ),
+                                selected:
+                                    state._selectedPaymentMethodOption ==
+                                    account.name,
+                                onTap: () => state._persistSettlementWallet(
+                                  account.name,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
                     ),
                     const SizedBox(height: 10),
                     Center(
@@ -1785,41 +1784,26 @@ class _EditBody extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ChoiceChip(
-                            avatar: const Icon(
-                              Icons.account_balance_wallet_rounded,
-                            ),
-                            label: const Text('My Wallet'),
-                            selected: !LabelNormalizer.isWishMoney(
-                              state._paymentMethodController.text,
-                            ),
-                            onSelected: (_) => state._updateWallet('My Wallet'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: ChoiceChip(
-                            avatar: ClipRRect(
-                              borderRadius: BorderRadius.circular(7),
-                              child: Image.asset(
-                                'assets/branding/wish_money_logo.jpg',
-                                width: 24,
-                                height: 24,
-                                fit: BoxFit.cover,
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: state.widget.controller.financeAccounts
+                          .map(
+                            (account) => ChoiceChip(
+                              avatar: const Icon(
+                                Icons.account_balance_wallet_rounded,
                               ),
+                              label: Text(account.name),
+                              selected:
+                                  state._paymentMethodController.text
+                                      .trim()
+                                      .toLowerCase() ==
+                                  account.name.trim().toLowerCase(),
+                              onSelected: (_) =>
+                                  state._updateWallet(account.name),
                             ),
-                            label: const Text('Whish Money'),
-                            selected: LabelNormalizer.isWishMoney(
-                              state._paymentMethodController.text,
-                            ),
-                            onSelected: (_) =>
-                                state._updateWallet('Whish Money'),
-                          ),
-                        ),
-                      ],
+                          )
+                          .toList(),
                     ),
                     if (state._selectedType == TransactionType.transfer) ...[
                       const SizedBox(height: 12),
@@ -1833,42 +1817,26 @@ class _EditBody extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ChoiceChip(
-                              avatar: const Icon(
-                                Icons.account_balance_wallet_rounded,
-                              ),
-                              label: const Text('My Wallet'),
-                              selected: !LabelNormalizer.isWishMoney(
-                                state._destinationWalletController.text,
-                              ),
-                              onSelected: (_) =>
-                                  state._updateDestinationWallet('My Wallet'),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ChoiceChip(
-                              avatar: ClipRRect(
-                                borderRadius: BorderRadius.circular(7),
-                                child: Image.asset(
-                                  'assets/branding/wish_money_logo.jpg',
-                                  width: 24,
-                                  height: 24,
-                                  fit: BoxFit.cover,
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: state.widget.controller.financeAccounts
+                            .map(
+                              (account) => ChoiceChip(
+                                avatar: const Icon(
+                                  Icons.account_balance_wallet_rounded,
                                 ),
+                                label: Text(account.name),
+                                selected:
+                                    state._destinationWalletController.text
+                                        .trim()
+                                        .toLowerCase() ==
+                                    account.name.trim().toLowerCase(),
+                                onSelected: (_) => state
+                                    ._updateDestinationWallet(account.name),
                               ),
-                              label: const Text('Whish Money'),
-                              selected: LabelNormalizer.isWishMoney(
-                                state._destinationWalletController.text,
-                              ),
-                              onSelected: (_) =>
-                                  state._updateDestinationWallet('Whish Money'),
-                            ),
-                          ),
-                        ],
+                            )
+                            .toList(),
                       ),
                     ],
                   ],
