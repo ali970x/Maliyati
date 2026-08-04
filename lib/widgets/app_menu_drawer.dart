@@ -1041,6 +1041,7 @@ class CategorySettingsScreen extends StatefulWidget {
 
 class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
   late List<_EditableCategoryRule> _rules;
+  bool _saving = false;
 
   static const _statusOptions = [
     TransactionType.expense,
@@ -1076,24 +1077,28 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
   }
 
   Future<void> _save() async {
-    await widget.controller.saveCategoryRules(
-      _rules
-          .map(
-            (rule) => CategoryRule(
-              name: rule.controller.text,
-              statuses: rule.statuses,
-              colorValue: rule.colorValue,
-              icon: rule.icon,
-              budgetBucket: rule.budgetBucket,
-              budgetExcluded: rule.budgetExcluded,
-            ),
-          )
-          .toList(),
-    );
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Categories saved.')));
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await widget.controller.saveCategoryRules(
+        _rules
+            .map(
+              (rule) => CategoryRule(
+                name: rule.controller.text,
+                statuses: rule.statuses,
+                colorValue: rule.colorValue,
+                icon: rule.icon,
+                budgetBucket: rule.budgetBucket,
+                budgetExcluded: rule.budgetExcluded,
+              ),
+            )
+            .toList(),
+      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _addCategory() {
@@ -1125,16 +1130,22 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
     final counts = widget.controller.categoryTransactionCounts;
     return _PlainSettingsScaffold(
       title: 'Categories',
+      actions: [
+        IconButton(
+          tooltip: 'Save changes',
+          onPressed: _saving ? null : _save,
+          icon: _saving
+              ? const SizedBox.square(
+                  dimension: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              : const Icon(Icons.check_rounded),
+        ),
+        const SizedBox(width: 6),
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Choose where every category appears and which 33/33/34 budget group it belongs to.',
-            style: TextStyle(color: Color(0xFF77717D)),
-          ),
-          const SizedBox(height: 10),
-          const _BudgetGroupLegend(),
-          const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: _addCategory,
             icon: const Icon(Icons.add_rounded),
@@ -1153,12 +1164,6 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
             ),
             const SizedBox(height: 12),
           ],
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.save_rounded),
-            label: const Text('Save categories'),
-          ),
         ],
       ),
     );
@@ -1200,210 +1205,212 @@ class _CategoryRuleEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6E0EC)),
+    return Material(
+      color: const Color(0xFFFFFFFF),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: Color(0xFFE6E0EC)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: rule.controller,
-                  onChanged: (_) => onChanged(),
-                  decoration: const InputDecoration(
-                    labelText: 'Category name',
-                    prefixIcon: Icon(Icons.category_rounded),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Remove',
-                onPressed: onRemove,
-                icon: const Icon(Icons.delete_outline_rounded),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          InkWell(
-            onTap: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              builder: (context) => CategoryIconPicker(
-                selected: rule.icon,
-                onSelected: (icon) {
-                  rule.icon = icon;
-                  onChanged();
-                  Navigator.pop(context);
-                },
-              ),
-            ),
-            borderRadius: BorderRadius.circular(12),
-            child: Ink(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F6FA),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Text(rule.icon, style: const TextStyle(fontSize: 25)),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Category icon (optional)',
-                      style: TextStyle(fontWeight: FontWeight.w800),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: rule.controller,
+                    onChanged: (_) => onChanged(),
+                    decoration: InputDecoration(
+                      labelText: 'Category name',
+                      prefixIcon: IconButton(
+                        tooltip: 'Change category icon',
+                        onPressed: () => _showIconPicker(context),
+                        icon: Text(
+                          rule.icon,
+                          style: const TextStyle(fontSize: 24),
+                        ),
+                      ),
                     ),
                   ),
-                  const Icon(Icons.grid_view_rounded),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF3F6FA),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.receipt_long_rounded,
-                  size: 18,
-                  color: Color(0xFF49657C),
                 ),
-                const SizedBox(width: 7),
-                Text(
-                  '$transactionCount ${transactionCount == 1 ? 'transaction' : 'transactions'}',
-                  style: const TextStyle(
-                    color: Color(0xFF49657C),
-                    fontWeight: FontWeight.w800,
-                  ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Remove',
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.delete_outline_rounded),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final status in statusOptions)
-                FilterChip(
-                  label: Text(status.label),
-                  selected: rule.statuses.contains(status),
-                  onSelected: (selected) {
-                    if (selected) {
-                      rule.statuses.add(status);
-                    } else {
-                      rule.statuses.remove(status);
-                    }
-                    onChanged();
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Budget group',
-            style: Theme.of(
-              context,
-            ).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final bucket in BudgetBucket.values)
-                FilterChip(
-                  avatar: Icon(
-                    _budgetBucketIcon(bucket),
-                    size: 17,
-                    color: Color(bucket.colorValue),
-                  ),
-                  label: Text('${bucket.label} ${bucket.percentage}%'),
-                  selected: !rule.budgetExcluded && rule.budgetBucket == bucket,
-                  selectedColor: Color(
-                    bucket.colorValue,
-                  ).withValues(alpha: .14),
-                  side: BorderSide(
-                    color: !rule.budgetExcluded && rule.budgetBucket == bucket
-                        ? Color(bucket.colorValue)
-                        : const Color(0xFFD7DCE3),
-                  ),
-                  onSelected: (_) {
-                    rule.budgetExcluded = false;
-                    rule.budgetBucket = bucket;
-                    onChanged();
-                  },
-                ),
-              FilterChip(
-                avatar: const Icon(
-                  Icons.remove_circle_outline_rounded,
-                  size: 17,
-                ),
-                label: const Text('Not in plan'),
-                selected: rule.budgetExcluded,
-                onSelected: (_) {
-                  rule.budgetExcluded = true;
-                  onChanged();
-                },
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F6FA),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
-          ),
-        ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.receipt_long_rounded,
+                    size: 18,
+                    color: Color(0xFF49657C),
+                  ),
+                  const SizedBox(width: 7),
+                  Text(
+                    '$transactionCount ${transactionCount == 1 ? 'transaction' : 'transactions'}',
+                    style: const TextStyle(
+                      color: Color(0xFF49657C),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 4),
+            Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
+              child: Column(
+                children: [
+                  ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                    childrenPadding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+                    leading: const Icon(Icons.swap_vert_rounded),
+                    title: const Text(
+                      'Transaction types',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(_statusSummary),
+                    children: [
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final status in statusOptions)
+                              FilterChip(
+                                label: Text(status.label),
+                                selected: rule.statuses.contains(status),
+                                onSelected: (selected) {
+                                  if (selected) {
+                                    rule.statuses.add(status);
+                                  } else {
+                                    rule.statuses.remove(status);
+                                  }
+                                  onChanged();
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                    childrenPadding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+                    leading: Icon(
+                      rule.budgetExcluded
+                          ? Icons.remove_circle_outline_rounded
+                          : _budgetBucketIcon(rule.budgetBucket),
+                      color: rule.budgetExcluded
+                          ? const Color(0xFF77717D)
+                          : Color(rule.budgetBucket.colorValue),
+                    ),
+                    title: const Text(
+                      'Budget group',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    subtitle: Text(_budgetSummary),
+                    children: [
+                      Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            for (final bucket in BudgetBucket.values)
+                              FilterChip(
+                                avatar: Icon(
+                                  _budgetBucketIcon(bucket),
+                                  size: 17,
+                                  color: Color(bucket.colorValue),
+                                ),
+                                label: Text(
+                                  '${bucket.label} ${bucket.percentage}%',
+                                ),
+                                selected:
+                                    !rule.budgetExcluded &&
+                                    rule.budgetBucket == bucket,
+                                selectedColor: Color(
+                                  bucket.colorValue,
+                                ).withValues(alpha: .14),
+                                side: BorderSide(
+                                  color:
+                                      !rule.budgetExcluded &&
+                                          rule.budgetBucket == bucket
+                                      ? Color(bucket.colorValue)
+                                      : const Color(0xFFD7DCE3),
+                                ),
+                                onSelected: (_) {
+                                  rule.budgetExcluded = false;
+                                  rule.budgetBucket = bucket;
+                                  onChanged();
+                                },
+                              ),
+                            FilterChip(
+                              avatar: const Icon(
+                                Icons.remove_circle_outline_rounded,
+                                size: 17,
+                              ),
+                              label: const Text('Not in plan'),
+                              selected: rule.budgetExcluded,
+                              onSelected: (_) {
+                                rule.budgetExcluded = true;
+                                onChanged();
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
-}
 
-class _BudgetGroupLegend extends StatelessWidget {
-  const _BudgetGroupLegend();
+  String get _statusSummary => rule.statuses.isEmpty
+      ? 'No transaction type selected'
+      : rule.statuses.map((status) => status.label).join(' · ');
 
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF7F9FC),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: const Color(0xFFE2E7EE)),
-    ),
-    child: Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      children: [
-        for (final bucket in BudgetBucket.values)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _budgetBucketIcon(bucket),
-                size: 18,
-                color: Color(bucket.colorValue),
-              ),
-              const SizedBox(width: 5),
-              Text(
-                '${bucket.label} ${bucket.percentage}%',
-                style: TextStyle(
-                  color: Color(bucket.colorValue),
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-      ],
-    ),
-  );
+  String get _budgetSummary => rule.budgetExcluded
+      ? 'Not included in the plan'
+      : '${rule.budgetBucket.label} ${rule.budgetBucket.percentage}%';
+
+  void _showIconPicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => CategoryIconPicker(
+        selected: rule.icon,
+        onSelected: (icon) {
+          rule.icon = icon;
+          onChanged();
+          Navigator.pop(context);
+        },
+      ),
+    );
+  }
 }
 
 IconData _budgetBucketIcon(BudgetBucket bucket) => switch (bucket) {
@@ -1503,9 +1510,14 @@ class AppearanceSettingsScreen extends StatelessWidget {
 }
 
 class _PlainSettingsScaffold extends StatelessWidget {
-  const _PlainSettingsScaffold({required this.title, required this.child});
+  const _PlainSettingsScaffold({
+    required this.title,
+    required this.child,
+    this.actions,
+  });
   final String title;
   final Widget child;
+  final List<Widget>? actions;
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -1514,6 +1526,7 @@ class _PlainSettingsScaffold extends StatelessWidget {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       foregroundColor: Theme.of(context).colorScheme.onSurface,
       surfaceTintColor: Colors.transparent,
+      actions: actions,
     ),
     body: ListView(padding: const EdgeInsets.all(16), children: [child]),
   );
