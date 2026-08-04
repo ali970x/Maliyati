@@ -62,145 +62,166 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    final transactions = _filteredTransactions(controller);
-    final strings = controller.strings;
-
-    return RefreshIndicator(
-      onRefresh: controller.refresh,
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          SafeArea(
-            top: true,
-            bottom: false,
-            child: _Filters(
-              controller: controller,
-              searchController: _searchController,
-              typeFilter: _typeFilter,
-              currencyFilter: _currencyFilter,
-              sourceFilter: _sourceFilter,
-              categoryFilter: _categoryFilter,
-              sort: _sort,
-              onChanged: () => setState(() {}),
-              onTypeChanged: (value) => setState(() => _typeFilter = value),
-              onCurrencyChanged: (value) =>
-                  setState(() => _currencyFilter = value),
-              onSourceChanged: (value) => setState(() => _sourceFilter = value),
-              onCategoryChanged: (value) =>
-                  setState(() => _categoryFilter = value),
-              onSortChanged: (value) => setState(() => _sort = value),
-              showAdvancedFilters: _showAdvancedFilters,
-              onToggleAdvancedFilters: () =>
-                  setState(() => _showAdvancedFilters = !_showAdvancedFilters),
-              onShowArchived: () => _showArchived(context),
-              onShowRecycled: () => _showRecycled(context),
-            ),
-          ),
-          if (controller.isLoading && !controller.hasData)
-            const Padding(
-              padding: EdgeInsets.only(top: 120),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (transactions.isEmpty)
-            SizedBox(
-              height: 360,
-              child: AppEmptyState(
-                icon: Icons.manage_search_rounded,
-                title: strings.noMatchingTransactions,
-                message: strings.tryChangingFilters,
-              ),
-            )
-          else if (_showAdvancedFilters) ...[
-            _ResultsSummary(
-              transactions: transactions,
-              exchangeRate: controller.exchangeRate,
-              strings: strings,
-            ),
-            const SizedBox(height: 4),
-          ],
-          if (!controller.isLoading || controller.hasData)
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = AppResponsive.isWideWeb(context);
-                final outerPadding = isWide ? 24.0 : 0.0;
-                final gap = isWide ? 16.0 : 0.0;
-                final available = constraints.maxWidth - outerPadding * 2;
-                final columns = isWide && available >= 1400 ? 3 : 2;
-                final cardWidth = isWide
-                    ? (available - gap * (columns - 1)) / columns
-                    : constraints.maxWidth;
-                return Padding(
-                  padding: EdgeInsets.symmetric(horizontal: outerPadding),
-                  child: Wrap(
-                    spacing: gap,
-                    runSpacing: 0,
-                    children: [
-                      for (final transaction in transactions)
-                        SizedBox(
-                          width: cardWidth,
-                          child: Dismissible(
-                            key: ValueKey(
-                              transaction.id ??
-                                  '${transaction.date}-${transaction.description}',
-                            ),
-                            background: _SwipeAction(
-                              color: const Color(0xFFC74949),
-                              icon: Icons.delete_outline_rounded,
-                              label: 'Delete',
-                              alignment: Alignment.centerLeft,
-                            ),
-                            secondaryBackground: _SwipeAction(
-                              color: const Color(0xFFD97706),
-                              icon: Icons.archive_outlined,
-                              label: 'Archive',
-                              alignment: Alignment.centerRight,
-                            ),
-                            confirmDismiss: (direction) => _confirmSwipe(
-                              context,
-                              direction == DismissDirection.startToEnd,
-                            ),
-                            onDismissed: (direction) {
-                              if (direction == DismissDirection.startToEnd) {
-                                controller.deleteTransaction(transaction);
-                              } else {
-                                controller.archiveTransaction(transaction);
-                              }
-                            },
-                            child: TransactionCard(
-                              transaction: transaction,
-                              exchangeRate: controller.exchangeRate,
-                              strings: controller.strings,
-                              categoryColor: controller.categoryColorFor(
-                                transaction.category,
-                              ),
-                              categoryIcon: controller.categoryIconFor(
-                                transaction.category,
-                              ),
-                              margin: isWide
-                                  ? const EdgeInsets.symmetric(vertical: 6)
-                                  : const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 6,
-                                    ),
-                              onTap: () => _openDetail(context, transaction),
-                              onLongPress: () => _openDetail(
-                                context,
-                                transaction,
-                                startEditing: true,
-                              ),
-                              trailingAction: _transactionMenu(
-                                context,
-                                transaction,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final transactions = _filteredTransactions(controller);
+        final strings = controller.strings;
+        final loading = controller.isLoading && !controller.hasData;
+        return RefreshIndicator(
+          onRefresh: controller.refresh,
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: SafeArea(
+                  top: true,
+                  bottom: false,
+                  child: _Filters(
+                    controller: controller,
+                    searchController: _searchController,
+                    typeFilter: _typeFilter,
+                    currencyFilter: _currencyFilter,
+                    sourceFilter: _sourceFilter,
+                    categoryFilter: _categoryFilter,
+                    sort: _sort,
+                    onChanged: () => setState(() {}),
+                    onTypeChanged: (value) =>
+                        setState(() => _typeFilter = value),
+                    onCurrencyChanged: (value) =>
+                        setState(() => _currencyFilter = value),
+                    onSourceChanged: (value) =>
+                        setState(() => _sourceFilter = value),
+                    onCategoryChanged: (value) =>
+                        setState(() => _categoryFilter = value),
+                    onSortChanged: (value) => setState(() => _sort = value),
+                    showAdvancedFilters: _showAdvancedFilters,
+                    onToggleAdvancedFilters: () => setState(
+                      () => _showAdvancedFilters = !_showAdvancedFilters,
+                    ),
+                    onShowArchived: () => _showArchived(context),
+                    onShowRecycled: () => _showRecycled(context),
                   ),
-                );
-              },
-            ),
-        ],
+                ),
+              ),
+              if (loading)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (transactions.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: AppEmptyState(
+                    icon: Icons.manage_search_rounded,
+                    title: strings.noMatchingTransactions,
+                    message: strings.tryChangingFilters,
+                  ),
+                )
+              else ...[
+                if (_showAdvancedFilters)
+                  SliverToBoxAdapter(
+                    child: _ResultsSummary(
+                      transactions: transactions,
+                      exchangeRate: controller.exchangeRate,
+                      strings: strings,
+                    ),
+                  ),
+                SliverLayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = AppResponsive.isWideWeb(context);
+                    if (!isWide) {
+                      return SliverList.builder(
+                        itemCount: transactions.length,
+                        itemBuilder: (context, index) => _transactionItem(
+                          context,
+                          controller,
+                          transactions[index],
+                          isWide: false,
+                        ),
+                      );
+                    }
+                    final width = constraints.crossAxisExtent;
+                    final outerPadding = 24.0;
+                    final gap = 16.0;
+                    final available = width - outerPadding * 2;
+                    final columns = available >= 1400 ? 3 : 2;
+                    final cardWidth =
+                        (available - gap * (columns - 1)) / columns;
+                    return SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Wrap(
+                          spacing: gap,
+                          children: [
+                            for (final transaction in transactions)
+                              SizedBox(
+                                width: cardWidth,
+                                child: _transactionItem(
+                                  context,
+                                  controller,
+                                  transaction,
+                                  isWide: true,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _transactionItem(
+    BuildContext context,
+    DashboardController controller,
+    FinancialTransaction transaction, {
+    required bool isWide,
+  }) {
+    return Dismissible(
+      key: ValueKey(
+        transaction.id ?? '${transaction.date}-${transaction.description}',
+      ),
+      background: const _SwipeAction(
+        color: Color(0xFFC74949),
+        icon: Icons.delete_outline_rounded,
+        label: 'Delete',
+        alignment: Alignment.centerLeft,
+      ),
+      secondaryBackground: const _SwipeAction(
+        color: Color(0xFFD97706),
+        icon: Icons.archive_outlined,
+        label: 'Archive',
+        alignment: Alignment.centerRight,
+      ),
+      confirmDismiss: (direction) =>
+          _confirmSwipe(context, direction == DismissDirection.startToEnd),
+      onDismissed: (direction) {
+        if (direction == DismissDirection.startToEnd) {
+          controller.deleteTransaction(transaction);
+        } else {
+          controller.archiveTransaction(transaction);
+        }
+      },
+      child: TransactionCard(
+        transaction: transaction,
+        exchangeRate: controller.exchangeRate,
+        strings: controller.strings,
+        categoryColor: controller.categoryColorFor(transaction.category),
+        categoryIcon: controller.categoryIconFor(transaction.category),
+        margin: isWide
+            ? const EdgeInsets.symmetric(vertical: 6)
+            : const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        onTap: () => _openDetail(context, transaction),
+        onLongPress: () =>
+            _openDetail(context, transaction, startEditing: true),
+        trailingAction: _transactionMenu(context, transaction),
       ),
     );
   }

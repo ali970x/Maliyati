@@ -122,47 +122,50 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: AppResponsive.pagePadding(
-            context,
-          ).copyWith(top: 8, bottom: 6),
-          child: SegmentedButton<_AnalyticsView>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                value: _AnalyticsView.categories,
-                icon: Icon(Icons.donut_large_rounded),
-                label: Text('Categories'),
-              ),
-              ButtonSegment(
-                value: _AnalyticsView.reports,
-                icon: Icon(Icons.query_stats_rounded),
-                label: Text('Reports'),
-              ),
-            ],
-            selected: {_view},
-            onSelectionChanged: (selection) {
-              setState(() => _view = selection.first);
-            },
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) => Column(
+        children: [
+          Padding(
+            padding: AppResponsive.pagePadding(
+              context,
+            ).copyWith(top: 8, bottom: 6),
+            child: SegmentedButton<_AnalyticsView>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: _AnalyticsView.categories,
+                  icon: Icon(Icons.donut_large_rounded),
+                  label: Text('Categories'),
+                ),
+                ButtonSegment(
+                  value: _AnalyticsView.reports,
+                  icon: Icon(Icons.query_stats_rounded),
+                  label: Text('Reports'),
+                ),
+              ],
+              selected: {_view},
+              onSelectionChanged: (selection) {
+                setState(() => _view = selection.first);
+              },
+            ),
           ),
-        ),
-        Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 240),
-            child: _view == _AnalyticsView.categories
-                ? _AnalyticsCategoryLanding(
-                    key: const ValueKey('categories'),
-                    controller: widget.controller,
-                  )
-                : _AnalyticsReportsScreen(
-                    key: const ValueKey('reports'),
-                    controller: widget.controller,
-                  ),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: _view == _AnalyticsView.categories
+                  ? _AnalyticsCategoryLanding(
+                      key: const ValueKey('categories'),
+                      controller: widget.controller,
+                    )
+                  : _AnalyticsReportsScreen(
+                      key: const ValueKey('reports'),
+                      controller: widget.controller,
+                    ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

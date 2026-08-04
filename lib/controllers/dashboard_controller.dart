@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -938,7 +939,9 @@ class DashboardController extends ChangeNotifier {
       await _loadFinanceAccounts(prefs);
       await _loadWalletSettings();
       await refresh(silentWhenSignedOut: true);
-      await _runDailyAutoBackupIfDue();
+      // Backup is maintenance work and should never delay the first usable
+      // frame after sign-in. It continues safely after the dashboard appears.
+      unawaited(_runDailyAutoBackupIfDue());
     } catch (_) {
       _isFirebaseConfigured = FirebaseBootstrap.isInitialized;
       _useFirestore = false;

@@ -57,43 +57,70 @@ class FinanceTrackerApp extends StatefulWidget {
 
 class _FinanceTrackerAppState extends State<FinanceTrackerApp> {
   late final DashboardController _controller;
+  late AppLanguage _language;
+  late ThemeMode _themeMode;
+  late bool _isInitialized;
+  late bool _isSignedIn;
 
   @override
   void initState() {
     super.initState();
     _controller = DashboardController();
+    _language = _controller.language;
+    _themeMode = _controller.themeMode;
+    _isInitialized = _controller.isInitialized;
+    _isSignedIn = _controller.isSignedIn;
+    _controller.addListener(_handleShellStateChanged);
     _controller.initialize();
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_handleShellStateChanged);
     _controller.dispose();
     super.dispose();
   }
 
+  void _handleShellStateChanged() {
+    final language = _controller.language;
+    final themeMode = _controller.themeMode;
+    final isInitialized = _controller.isInitialized;
+    final isSignedIn = _controller.isSignedIn;
+    if (language == _language &&
+        themeMode == _themeMode &&
+        isInitialized == _isInitialized &&
+        isSignedIn == _isSignedIn) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _language = language;
+      _themeMode = themeMode;
+      _isInitialized = isInitialized;
+      _isSignedIn = isSignedIn;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) => MaterialApp(
-        title: AppConfig.appName,
-        debugShowCheckedModeBanner: false,
-        supportedLocales: const [Locale('en'), Locale('ar')],
-        locale: Locale(_controller.language.code),
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        themeMode: _controller.themeMode,
-        theme: _buildTheme(Brightness.light),
-        darkTheme: _buildTheme(Brightness.dark),
-        home: !_controller.isInitialized
-            ? const _SessionLoadingScreen()
-            : _controller.isSignedIn
-            ? FinanceHome(controller: _controller)
-            : LoginScreen(controller: _controller),
-      ),
+    return MaterialApp(
+      title: AppConfig.appName,
+      debugShowCheckedModeBanner: false,
+      supportedLocales: const [Locale('en'), Locale('ar')],
+      locale: Locale(_language.code),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      themeMode: _themeMode,
+      theme: _buildTheme(Brightness.light),
+      darkTheme: _buildTheme(Brightness.dark),
+      home: !_isInitialized
+          ? const _SessionLoadingScreen()
+          : _isSignedIn
+          ? FinanceHome(controller: _controller)
+          : LoginScreen(controller: _controller),
     );
   }
 
@@ -249,6 +276,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   bool _lockOnNextResume = false;
   AddEntryMode _addEntryMode = AddEntryMode.manual;
   int _addScreenRevision = 0;
+  final Map<int, Widget> _screenCache = {};
 
   @override
   void initState() {
@@ -467,155 +495,156 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        final screens = [
-          DashboardScreen(controller: controller, onOpenMenu: _openMenu),
-          TransactionsScreen(controller: controller),
-          AddTransactionScreen(
-            key: ValueKey(_addScreenRevision),
-            controller: controller,
-            initialMode: _addEntryMode,
+    final screenCount = controller.isAdmin ? 6 : 5;
+    final activeIndex = _selectedIndex >= screenCount
+        ? screenCount - 1
+        : _selectedIndex;
+    _screenCache.removeWhere((index, _) => index >= screenCount);
+    _screenCache.putIfAbsent(activeIndex, () => _buildScreen(activeIndex));
+    final strings = controller.strings;
+    FinanceFormatters.localeCode = controller.language.code;
+    final indexedScreens = IndexedStack(
+      index: activeIndex,
+      children: List.generate(
+        screenCount,
+        (index) => _screenCache[index] ?? const SizedBox.shrink(),
+      ),
+    );
+    final navigationBar = _CyberNavigationBar(
+      selectedIndex: activeIndex,
+      onDestinationSelected: (index) {
+        if (index == 2) {
+          _showAddOptions();
+          return;
+        }
+        setState(() => _selectedIndex = index);
+      },
+      items: [
+        _CyberNavData(
+          icon: Icons.dashboard_outlined,
+          selectedIcon: Icons.dashboard_rounded,
+          label: strings.dashboard,
+        ),
+        _CyberNavData(
+          icon: Icons.receipt_long_outlined,
+          selectedIcon: Icons.receipt_long_rounded,
+          label: strings.transactions,
+        ),
+        _CyberNavData(
+          icon: Icons.add_rounded,
+          selectedIcon: Icons.add_rounded,
+          label: strings.add,
+          isAdd: true,
+        ),
+        _CyberNavData(
+          icon: Icons.insights_outlined,
+          selectedIcon: Icons.insights_rounded,
+          label: strings.analytics,
+        ),
+        _CyberNavData(
+          icon: Icons.notifications_active_outlined,
+          selectedIcon: Icons.notifications_active_rounded,
+          label: strings.alerts,
+        ),
+        if (controller.isAdmin)
+          const _CyberNavData(
+            icon: Icons.admin_panel_settings_outlined,
+            selectedIcon: Icons.admin_panel_settings_rounded,
+            label: 'Admin',
           ),
-          AnalyticsScreen(controller: controller),
-          SpendingAlertsScreen(controller: controller),
-          if (controller.isAdmin) AdminScreen(controller: controller),
-        ];
-        final activeIndex = _selectedIndex >= screens.length
-            ? screens.length - 1
-            : _selectedIndex;
-        final strings = controller.strings;
-        FinanceFormatters.localeCode = controller.language.code;
-        final indexedScreens = IndexedStack(
-          index: activeIndex,
-          children: screens,
-        );
-        final navigationBar = _CyberNavigationBar(
-          selectedIndex: activeIndex,
-          onDestinationSelected: (index) {
-            if (index == 2) {
-              _showAddOptions();
-              return;
-            }
-            setState(() => _selectedIndex = index);
-          },
-          items: [
-            _CyberNavData(
-              icon: Icons.dashboard_outlined,
-              selectedIcon: Icons.dashboard_rounded,
-              label: strings.dashboard,
-            ),
-            _CyberNavData(
-              icon: Icons.receipt_long_outlined,
-              selectedIcon: Icons.receipt_long_rounded,
-              label: strings.transactions,
-            ),
-            _CyberNavData(
-              icon: Icons.add_rounded,
-              selectedIcon: Icons.add_rounded,
-              label: strings.add,
-              isAdd: true,
-            ),
-            _CyberNavData(
-              icon: Icons.insights_outlined,
-              selectedIcon: Icons.insights_rounded,
-              label: strings.analytics,
-            ),
-            _CyberNavData(
-              icon: Icons.notifications_active_outlined,
-              selectedIcon: Icons.notifications_active_rounded,
-              label: strings.alerts,
-            ),
-            if (controller.isAdmin)
-              const _CyberNavData(
-                icon: Icons.admin_panel_settings_outlined,
-                selectedIcon: Icons.admin_panel_settings_rounded,
-                label: 'Admin',
-              ),
-          ],
-        );
+      ],
+    );
 
-        final isDark = Theme.of(context).brightness == Brightness.dark;
-        final overlayStyle = isDark
-            ? SystemUiOverlayStyle.light.copyWith(
-                statusBarColor: Colors.transparent,
-                systemNavigationBarColor: const Color(0xFF0E1215),
-                systemNavigationBarIconBrightness: Brightness.light,
-              )
-            : SystemUiOverlayStyle.dark.copyWith(
-                statusBarColor: Colors.transparent,
-                systemNavigationBarColor: Colors.white,
-                systemNavigationBarIconBrightness: Brightness.dark,
-              );
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: overlayStyle,
-          child: Directionality(
-            textDirection: controller.language == AppLanguage.arabic
-                ? TextDirection.rtl
-                : TextDirection.ltr,
-            child: Scaffold(
-              body: SafeArea(
-                child: Stack(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final overlayStyle = isDark
+        ? SystemUiOverlayStyle.light.copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: const Color(0xFF0E1215),
+            systemNavigationBarIconBrightness: Brightness.light,
+          )
+        : SystemUiOverlayStyle.dark.copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.white,
+            systemNavigationBarIconBrightness: Brightness.dark,
+          );
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlayStyle,
+      child: Directionality(
+        textDirection: controller.language == AppLanguage.arabic
+            ? TextDirection.rtl
+            : TextDirection.ltr,
+        child: Scaffold(
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Column(
                   children: [
-                    Column(
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxWidth: AppResponsive.contentMaxWidth(
-                                  context,
-                                ),
-                              ),
-                              child: indexedScreens,
-                            ),
+                    Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: AppResponsive.contentMaxWidth(context),
                           ),
+                          child: indexedScreens,
                         ),
-                      ],
+                      ),
                     ),
-                    if (_isAppLocked)
-                      Positioned.fill(
-                        child: _AppLockGate(
-                          isUnlocking: _isUnlocking,
-                          onUnlock: _unlock,
-                        ),
-                      ),
-                    if (!_isAppLocked &&
-                        Theme.of(context).brightness == Brightness.dark)
-                      Positioned(
-                        top: 8,
-                        right: 12,
-                        child: Material(
-                          color: const Color(0xFF1E1E1E),
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            tooltip: 'Settings',
-                            onPressed: _openMenu,
-                            icon: const Icon(Icons.settings_rounded),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
-              ),
-              bottomNavigationBar: _isAppLocked
-                  ? null
-                  : Center(
-                      heightFactor: 1,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: AppResponsive.contentMaxWidth(context),
-                        ),
-                        child: navigationBar,
+                if (_isAppLocked)
+                  Positioned.fill(
+                    child: _AppLockGate(
+                      isUnlocking: _isUnlocking,
+                      onUnlock: _unlock,
+                    ),
+                  ),
+                if (!_isAppLocked &&
+                    Theme.of(context).brightness == Brightness.dark)
+                  Positioned(
+                    top: 8,
+                    right: 12,
+                    child: Material(
+                      color: const Color(0xFF1E1E1E),
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: 'Settings',
+                        onPressed: _openMenu,
+                        icon: const Icon(Icons.settings_rounded),
                       ),
                     ),
+                  ),
+              ],
             ),
           ),
-        );
-      },
+          bottomNavigationBar: _isAppLocked
+              ? null
+              : Center(
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: AppResponsive.contentMaxWidth(context),
+                    ),
+                    child: navigationBar,
+                  ),
+                ),
+        ),
+      ),
     );
   }
+
+  Widget _buildScreen(int index) => switch (index) {
+    0 => DashboardScreen(controller: widget.controller, onOpenMenu: _openMenu),
+    1 => TransactionsScreen(controller: widget.controller),
+    2 => AddTransactionScreen(
+      key: ValueKey(_addScreenRevision),
+      controller: widget.controller,
+      initialMode: _addEntryMode,
+    ),
+    3 => AnalyticsScreen(controller: widget.controller),
+    4 => SpendingAlertsScreen(controller: widget.controller),
+    5 => AdminScreen(controller: widget.controller),
+    _ => const SizedBox.shrink(),
+  };
 
   void _showAddOptions() {
     showModalBottomSheet<void>(
@@ -682,6 +711,7 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
     setState(() {
       _addEntryMode = mode;
       _addScreenRevision++;
+      _screenCache.remove(2);
       _selectedIndex = 2;
     });
   }

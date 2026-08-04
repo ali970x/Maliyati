@@ -1,5 +1,4 @@
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -5845,39 +5844,25 @@ class _GlassPanel extends StatelessWidget {
   final Color accent;
   @override
   Widget build(BuildContext context) => Container(
+    padding: padding,
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(19),
+      color: const Color(0xFF081B2C),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: accent.withValues(alpha: .58)),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: .28),
-          blurRadius: 24,
-          offset: const Offset(0, 13),
+          color: Colors.black.withValues(alpha: .18),
+          blurRadius: 10,
+          offset: const Offset(0, 5),
         ),
       ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(19),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 11, sigmaY: 11),
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: const Color(0xFF081B2C).withValues(alpha: .83),
-            borderRadius: BorderRadius.circular(19),
-            border: Border.all(color: accent.withValues(alpha: .58)),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Colors.white.withValues(alpha: .055),
-                Colors.transparent,
-              ],
-            ),
-          ),
-          child: child,
-        ),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [accent.withValues(alpha: .09), const Color(0xFF081B2C)],
       ),
     ),
+    child: child,
   );
 }
 
