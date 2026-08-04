@@ -2526,7 +2526,10 @@ class _DashboardMetricFocusScreenState
                             kind,
                           ).withValues(alpha: .15),
                           foregroundColor: _kindColor(kind),
-                          child: Icon(_kindIcon(kind)),
+                          child: Text(
+                            controller.categoryIconFor(transaction.category),
+                            style: const TextStyle(fontSize: 20),
+                          ),
                         ),
                         title: Text(
                           transaction.description.isEmpty
@@ -3692,9 +3695,13 @@ class _CategoryFocusList extends StatelessWidget {
           child: ListTile(
             isThreeLine: true,
             leading: CircleAvatar(
-              backgroundColor: _kindColor(kind).withValues(alpha: .12),
-              foregroundColor: _kindColor(kind),
-              child: Icon(_kindIcon(kind)),
+              backgroundColor: controller
+                  .categoryColorFor(entry.name, fallback: _kindColor(kind))
+                  .withValues(alpha: .12),
+              child: Text(
+                controller.categoryIconFor(entry.name),
+                style: const TextStyle(fontSize: 21),
+              ),
             ),
             title: Text(
               entry.name,
@@ -5625,9 +5632,6 @@ class _TransactionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final income = transaction.isIncome;
     final color = income ? const Color(0xFF12D9F4) : const Color(0xFF9358FF);
-    final icon = transaction.isIncome
-        ? Icons.account_balance_wallet_outlined
-        : _categoryIcon(transaction.category);
     // Keep gestures physical in both English and Arabic: swipe right deletes,
     // swipe left archives. Dismissible directions are logical in RTL layouts.
     final isRtl = Directionality.of(context) == TextDirection.rtl;
@@ -5685,7 +5689,10 @@ class _TransactionRow extends StatelessWidget {
                     borderRadius: BorderRadius.circular(11),
                     border: Border.all(color: color.withValues(alpha: .34)),
                   ),
-                  child: Icon(icon, color: color, size: 20),
+                  child: Text(
+                    controller.categoryIconFor(transaction.category),
+                    style: const TextStyle(fontSize: 20),
+                  ),
                 ),
                 const SizedBox(width: 11),
                 Expanded(

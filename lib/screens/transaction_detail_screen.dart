@@ -1461,7 +1461,8 @@ class _ReadOnlyBody extends StatelessWidget {
                   ),
                   _HeaderChip(
                     label: strings.category,
-                    value: transaction.category,
+                    value:
+                        '${state.widget.controller.categoryIconFor(transaction.category)} ${transaction.category}',
                   ),
                   _HeaderChip(
                     label: 'Wallet',
@@ -1481,7 +1482,11 @@ class _ReadOnlyBody extends StatelessWidget {
               value: state._typeLabel(transaction.type),
             ),
             _DetailRow(label: strings.description, value: description),
-            _DetailRow(label: strings.category, value: transaction.category),
+            _DetailRow(
+              label: strings.category,
+              value:
+                  '${state.widget.controller.categoryIconFor(transaction.category)} ${transaction.category}',
+            ),
             _DetailRow(
               label: strings.date,
               value: transaction.hasDate

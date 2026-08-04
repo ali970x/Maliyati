@@ -247,6 +247,8 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
   bool _isAppLocked = false;
   bool _isUnlocking = false;
   bool _lockOnNextResume = false;
+  AddEntryMode _addEntryMode = AddEntryMode.manual;
+  int _addScreenRevision = 0;
 
   @override
   void initState() {
@@ -471,7 +473,11 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
         final screens = [
           DashboardScreen(controller: controller, onOpenMenu: _openMenu),
           TransactionsScreen(controller: controller),
-          AddTransactionScreen(controller: controller),
+          AddTransactionScreen(
+            key: ValueKey(_addScreenRevision),
+            controller: controller,
+            initialMode: _addEntryMode,
+          ),
           AnalyticsScreen(controller: controller),
           SpendingAlertsScreen(controller: controller),
           if (controller.isAdmin) AdminScreen(controller: controller),
@@ -616,33 +622,138 @@ class _FinanceHomeState extends State<FinanceHome> with WidgetsBindingObserver {
       context: context,
       showDragHandle: true,
       builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ListTile(
-                  leading: const Icon(Icons.edit_note_rounded),
-                  title: const Text('Manual transaction'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    setState(() => _selectedIndex = 2);
-                  },
+                Text(
+                  'Add transaction',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.data_object_rounded),
-                  title: const Text('Input by script'),
-                  onTap: () {
-                    Navigator.pop(sheetContext);
-                    _openSmartInput('', autoRun: false);
-                  },
+                const SizedBox(height: 4),
+                Text(
+                  'Choose the fastest entry method for this transaction.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _AddModeTile(
+                  icon: Icons.dialpad_rounded,
+                  color: const Color(0xFF0B73D9),
+                  title: 'Quick Entry',
+                  subtitle: 'Amount, wallet and category in a few taps',
+                  onTap: () => _selectAddMode(sheetContext, AddEntryMode.quick),
+                ),
+                const SizedBox(height: 10),
+                _AddModeTile(
+                  icon: Icons.edit_note_rounded,
+                  color: const Color(0xFF168A5B),
+                  title: 'Manual List',
+                  subtitle: 'Complete form with every transaction detail',
+                  onTap: () =>
+                      _selectAddMode(sheetContext, AddEntryMode.manual),
+                ),
+                const SizedBox(height: 10),
+                _AddModeTile(
+                  icon: Icons.shopping_basket_rounded,
+                  color: const Color(0xFF7C3AED),
+                  title: 'Basket',
+                  subtitle: 'Paste one action or process a full script batch',
+                  onTap: () =>
+                      _selectAddMode(sheetContext, AddEntryMode.basket),
                 ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  void _selectAddMode(BuildContext sheetContext, AddEntryMode mode) {
+    Navigator.pop(sheetContext);
+    setState(() {
+      _addEntryMode = mode;
+      _addScreenRevision++;
+      _selectedIndex = 2;
+    });
+  }
+}
+
+class _AddModeTile extends StatelessWidget {
+  const _AddModeTile({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: color.withValues(alpha: .08),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: color.withValues(alpha: .22)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: Colors.white),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: color),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

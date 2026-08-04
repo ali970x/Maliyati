@@ -16,6 +16,7 @@ class TransactionCard extends StatelessWidget {
     this.onLongPress,
     this.trailingAction,
     this.categoryColor,
+    this.categoryIcon,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
   });
 
@@ -26,6 +27,7 @@ class TransactionCard extends StatelessWidget {
   final VoidCallback? onLongPress;
   final Widget? trailingAction;
   final Color? categoryColor;
+  final String? categoryIcon;
   final EdgeInsetsGeometry margin;
 
   @override
@@ -81,7 +83,13 @@ class TransactionCard extends StatelessWidget {
                   radius: 21,
                   backgroundColor: markerColor.withValues(alpha: .12),
                   foregroundColor: markerColor,
-                  child: Icon(icon, size: 21),
+                  child:
+                      categoryIcon?.trim().isNotEmpty == true && !isSettlement
+                      ? Text(
+                          categoryIcon!,
+                          style: const TextStyle(fontSize: 21),
+                        )
+                      : Icon(icon, size: 21),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

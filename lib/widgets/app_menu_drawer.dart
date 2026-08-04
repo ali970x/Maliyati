@@ -14,6 +14,7 @@ import '../models/transaction.dart';
 import '../services/app_lock_service.dart';
 import '../services/firebase_finance_service.dart';
 import '../services/google_drive_backup_service.dart';
+import '../services/category_icon_catalog.dart';
 import '../services/smart_clipboard_service.dart';
 import 'smart_clipboard_settings_section.dart';
 
@@ -1022,6 +1023,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
             controller: TextEditingController(text: rule.name),
             statuses: {...rule.statuses},
             colorValue: rule.effectiveColorValue,
+            icon: CategoryIconCatalog.iconFor(rule.name, savedIcon: rule.icon),
             budgetBucket: rule.effectiveBudgetBucket,
             budgetExcluded: rule.budgetExcluded,
           ),
@@ -1045,6 +1047,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
               name: rule.controller.text,
               statuses: rule.statuses,
               colorValue: rule.colorValue,
+              icon: rule.icon,
               budgetBucket: rule.budgetBucket,
               budgetExcluded: rule.budgetExcluded,
             ),
@@ -1068,6 +1071,7 @@ class _CategorySettingsScreenState extends State<CategorySettingsScreen> {
               .colorPalette[_rules.length % CategoryRule.colorPalette.length],
           budgetBucket: BudgetBucket.expenses,
           budgetExcluded: false,
+          icon: '🏷️',
         ),
       );
     });
@@ -1132,6 +1136,7 @@ class _EditableCategoryRule {
     required this.colorValue,
     required this.budgetBucket,
     required this.budgetExcluded,
+    required this.icon,
   });
 
   final TextEditingController controller;
@@ -1139,6 +1144,7 @@ class _EditableCategoryRule {
   final int colorValue;
   BudgetBucket budgetBucket;
   bool budgetExcluded;
+  String icon;
 }
 
 class _CategoryRuleEditor extends StatelessWidget {
@@ -1187,6 +1193,42 @@ class _CategoryRuleEditor extends StatelessWidget {
                 icon: const Icon(Icons.delete_outline_rounded),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              builder: (context) => CategoryIconPicker(
+                selected: rule.icon,
+                onSelected: (icon) {
+                  rule.icon = icon;
+                  onChanged();
+                  Navigator.pop(context);
+                },
+              ),
+            ),
+            borderRadius: BorderRadius.circular(12),
+            child: Ink(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3F6FA),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Text(rule.icon, style: const TextStyle(fontSize: 25)),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Category icon (optional)',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const Icon(Icons.grid_view_rounded),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 10),
           Container(

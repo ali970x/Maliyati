@@ -175,6 +175,7 @@ class AnalyticsScreen extends StatelessWidget {
                 data: summary.categoryExpenseTotals,
                 color: const Color(0xFFC74949),
                 icon: Icons.payments_rounded,
+                showCategoryIcons: true,
                 transactionsForKey: (category) => _transactionsForCategory(
                   controller,
                   category,
@@ -188,6 +189,7 @@ class AnalyticsScreen extends StatelessWidget {
                 data: summary.categoryIncomeTotals,
                 color: const Color(0xFF168A5B),
                 icon: Icons.savings_rounded,
+                showCategoryIcons: true,
                 transactionsForKey: (category) => _transactionsForCategory(
                   controller,
                   category,
@@ -598,6 +600,7 @@ class _CategoryRankingCard extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.transactionsForKey,
+    this.showCategoryIcons = false,
   });
 
   final DashboardController controller;
@@ -607,6 +610,7 @@ class _CategoryRankingCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final List<FinancialTransaction> Function(String key) transactionsForKey;
+  final bool showCategoryIcons;
 
   @override
   Widget build(BuildContext context) {
@@ -637,7 +641,13 @@ class _CategoryRankingCard extends StatelessWidget {
                         children: [
                           Row(
                             children: [
-                              Icon(icon, size: 18, color: color),
+                              if (showCategoryIcons)
+                                Text(
+                                  controller.categoryIconFor(entry.key),
+                                  style: const TextStyle(fontSize: 20),
+                                )
+                              else
+                                Icon(icon, size: 18, color: color),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
@@ -742,6 +752,9 @@ class _CategoryRankingCard extends StatelessWidget {
                       exchangeRate: controller.exchangeRate,
                       strings: strings,
                       categoryColor: controller.categoryColorFor(
+                        transaction.category,
+                      ),
+                      categoryIcon: controller.categoryIconFor(
                         transaction.category,
                       ),
                       margin: const EdgeInsets.symmetric(vertical: 6),

@@ -12,6 +12,7 @@ import '../models/dashboard_pin.dart';
 import '../models/transaction.dart';
 import '../services/accounting_rules.dart';
 import '../services/category_taxonomy.dart';
+import '../services/category_icon_catalog.dart';
 import '../services/firebase_finance_service.dart';
 import '../services/firebase_bootstrap.dart';
 import '../services/gemini_transaction_parser.dart';
@@ -50,6 +51,7 @@ class CategoryRule {
     required this.name,
     required this.statuses,
     this.colorValue,
+    this.icon,
     this.budgetBucket,
     this.budgetExcluded = false,
   });
@@ -84,6 +86,7 @@ class CategoryRule {
   final String name;
   final Set<TransactionType> statuses;
   final int? colorValue;
+  final String? icon;
   final BudgetBucket? budgetBucket;
   final bool budgetExcluded;
 
@@ -107,6 +110,7 @@ class CategoryRule {
     'name': name,
     'statuses': statuses.map((status) => status.name).toList(),
     'color': effectiveColorValue,
+    if (icon?.trim().isNotEmpty == true) 'icon': icon,
     'budgetBucket': effectiveBudgetBucket.name,
     'budgetExcluded': budgetExcluded,
   };
@@ -125,6 +129,9 @@ class CategoryRule {
       colorValue: rawColor is num
           ? rawColor.toInt()
           : int.tryParse('$rawColor'),
+      icon: '${json['icon'] ?? ''}'.trim().isEmpty
+          ? null
+          : '${json['icon']}'.trim(),
       budgetBucket: json['budgetBucket'] == null
           ? null
           : BudgetBucketDetails.fromName('${json['budgetBucket']}'),
@@ -558,6 +565,16 @@ class DashboardController extends ChangeNotifier {
       }
     }
     return fallback ?? const Color(0xFF475569);
+  }
+
+  String categoryIconFor(String category) {
+    final normalized = category.trim().toLowerCase();
+    for (final rule in _categoryRules) {
+      if (rule.name.trim().toLowerCase() == normalized) {
+        return CategoryIconCatalog.iconFor(category, savedIcon: rule.icon);
+      }
+    }
+    return CategoryIconCatalog.iconFor(category);
   }
 
   List<String> categoryOptionsFor(TransactionType type) {
@@ -1257,6 +1274,7 @@ class DashboardController extends ChangeNotifier {
         name: name,
         statuses: {...rule.statuses}..remove(TransactionType.unknown),
         colorValue: rule.effectiveColorValue,
+        icon: rule.icon,
         budgetBucket: rule.effectiveBudgetBucket,
         budgetExcluded: rule.budgetExcluded,
       );
@@ -1437,6 +1455,7 @@ class DashboardController extends ChangeNotifier {
         name: name,
         statuses: {...?current?.statuses, type},
         colorValue: current?.effectiveColorValue,
+        icon: current?.icon,
         budgetBucket: current?.effectiveBudgetBucket,
         budgetExcluded: current?.budgetExcluded ?? false,
       );
@@ -1488,6 +1507,7 @@ class DashboardController extends ChangeNotifier {
           name: updated[index].name,
           statuses: {...updated[index].statuses, type},
           colorValue: updated[index].effectiveColorValue,
+          icon: updated[index].icon,
           budgetBucket: updated[index].effectiveBudgetBucket,
           budgetExcluded: updated[index].budgetExcluded,
         );

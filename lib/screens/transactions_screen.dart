@@ -173,6 +173,9 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                               categoryColor: controller.categoryColorFor(
                                 transaction.category,
                               ),
+                              categoryIcon: controller.categoryIconFor(
+                                transaction.category,
+                              ),
                               margin: isWide
                                   ? const EdgeInsets.symmetric(vertical: 6)
                                   : const EdgeInsets.symmetric(
@@ -502,6 +505,9 @@ class _ArchivedTransactionsSheet extends StatelessWidget {
                                 categoryColor: controller.categoryColorFor(
                                   transaction.category,
                                 ),
+                                categoryIcon: controller.categoryIconFor(
+                                  transaction.category,
+                                ),
                               ),
                             ),
                             IconButton(
@@ -606,6 +612,9 @@ class _RecycleBinSheet extends StatelessWidget {
                                   exchangeRate: controller.exchangeRate,
                                   strings: controller.strings,
                                   categoryColor: controller.categoryColorFor(
+                                    transaction.category,
+                                  ),
+                                  categoryIcon: controller.categoryIconFor(
                                     transaction.category,
                                   ),
                                 ),
